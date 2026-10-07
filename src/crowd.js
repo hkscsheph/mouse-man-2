@@ -164,8 +164,9 @@ export function createCrowd(scene) {
         const phase = actor.mesh.userData.phase;
         const isLive = actor.mesh.userData.live;
         const bob = actor.mesh.userData.bob;
-        bob.position.y = Math.sin(time * (isLive ? 2.1 : 1.45) + phase) * (isLive ? 0.012 : 0.022);
-        bob.rotation.z = Math.sin(time * 1.25 + phase) * (isLive ? 0.008 : 0.018);
+        // Head-only sway — body and feet stay planted.
+        bob.position.y = Math.sin(time * (isLive ? 1.8 : 1.2) + phase) * (isLive ? 0.006 : 0.01);
+        bob.rotation.z = Math.sin(time * 1.1 + phase) * (isLive ? 0.004 : 0.008);
         const head = actor.mesh.userData.head;
         if (isLive) {
           head.rotation.y = THREE.MathUtils.damp(head.rotation.y, actor.mesh.userData.targetYaw || 0, 5, dt);

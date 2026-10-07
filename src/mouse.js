@@ -43,14 +43,17 @@ function feltNormal() {
   return tex;
 }
 
-function taperedTube(curve, segments, radiusStart, radiusEnd, radial) {
+function taperedTube(curve, segments, radiusAt, radial) {
   const frames = curve.computeFrenetFrames(segments, false);
   const points = curve.getSpacedPoints(segments);
   const positions = [];
   const uvs = [];
   const indices = [];
   for (let i = 0; i <= segments; i += 1) {
-    const radius = radiusStart + (radiusEnd - radiusStart) * (i / segments);
+    const t = i / segments;
+    const radius = typeof radiusAt === 'function'
+      ? radiusAt(t)
+      : radiusAt[0] + (radiusAt[1] - radiusAt[0]) * t;
     const center = points[i];
     const normal = frames.normals[i];
     const binormal = frames.binormals[i];
@@ -63,7 +66,7 @@ function taperedTube(curve, segments, radiusStart, radiusEnd, radial) {
         center.y + (normal.y * x + binormal.y * y) * radius,
         center.z + (normal.z * x + binormal.z * y) * radius,
       );
-      uvs.push(j / radial, i / segments);
+      uvs.push(j / radial, t);
     }
   }
   for (let i = 0; i < segments; i += 1) {
@@ -81,15 +84,24 @@ function taperedTube(curve, segments, radiusStart, radiusEnd, radial) {
   return geo;
 }
 
+/** Soft mid-limb swell without a separate joint mesh. */
+function limbRadius(start, end, bulgeT, bulge) {
+  return (t) => {
+    const base = start + (end - start) * t;
+    const swell = Math.exp(-((t - bulgeT) ** 2) / (2 * 0.035));
+    return base + bulge * swell;
+  };
+}
+
 function buildShared() {
   if (shared.ready) return shared;
   const normalMap = feltNormal();
   shared.fur = new THREE.MeshStandardMaterial({
     color: 0xe3944a,
-    roughness: 0.74,
+    roughness: 0.78,
     metalness: 0,
     normalMap,
-    normalScale: new THREE.Vector2(0.32, 0.32),
+    normalScale: new THREE.Vector2(0.14, 0.14),
   });
   shared.belly = new THREE.MeshStandardMaterial({
     color: 0xf3d2b8,
@@ -113,33 +125,101 @@ function buildShared() {
   shared.shadow = new THREE.MeshBasicMaterial({
     color: 0x000000,
     transparent: true,
-    opacity: 0.2,
+    opacity: 0.1,
     depthWrite: false,
   });
   shared.head = new THREE.SphereGeometry(0.46, 40, 28);
-  shared.torso = new THREE.SphereGeometry(0.42, 36, 26);
-  shared.bellyGeo = new THREE.SphereGeometry(0.3, 28, 20);
+  // Pear from the turnaround: wide base, soft shoulder shelf, tapering to the neck.
+  shared.body = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.02, 0.0),
+      new THREE.Vector2(0.32, 0.03),
+      new THREE.Vector2(0.46, 0.14),
+      new THREE.Vector2(0.52, 0.34),
+      new THREE.Vector2(0.5, 0.55),
+      new THREE.Vector2(0.44, 0.78),
+      new THREE.Vector2(0.4, 0.95),
+      new THREE.Vector2(0.36, 1.08),
+      new THREE.Vector2(0.24, 1.18),
+      new THREE.Vector2(0.1, 1.24),
+      new THREE.Vector2(0.02, 1.26),
+    ],
+    36,
+  );
+  // Flat belly patch — sits on the pear face instead of a sphere that escapes the silhouette.
+  shared.bellyGeo = new THREE.SphereGeometry(0.33, 28, 18);
   shared.snout = new THREE.SphereGeometry(0.2, 28, 20);
   shared.earGeo = new THREE.SphereGeometry(0.3, 28, 18);
   shared.noseGeo = new THREE.SphereGeometry(0.055, 16, 12);
-  shared.hand = new THREE.SphereGeometry(0.085, 16, 12);
-  shared.foot = new THREE.SphereGeometry(0.13, 16, 12);
-  shared.arm = new THREE.CapsuleGeometry(0.078, 0.3, 6, 12);
-  shared.leg = new THREE.CapsuleGeometry(0.105, 0.26, 6, 12);
+  shared.palm = new THREE.SphereGeometry(0.085, 16, 12);
+  shared.finger = new THREE.CapsuleGeometry(0.016, 0.07, 4, 8);
+  shared.foot = new THREE.SphereGeometry(0.135, 16, 12);
+  shared.toe = new THREE.CapsuleGeometry(0.022, 0.08, 4, 8);
+  // Arms hang down/forward in front of the pear.
+  const armRadius = limbRadius(0.1, 0.055, 0.4, 0.01);
+  shared.armL = taperedTube(
+    new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.08, 0.02, 0.0),
+      new THREE.Vector3(-0.02, -0.08, 0.03),
+      new THREE.Vector3(-0.08, -0.2, 0.04),
+      new THREE.Vector3(-0.08, -0.34, 0.05),
+      new THREE.Vector3(-0.05, -0.46, 0.05),
+    ]),
+    20,
+    armRadius,
+    12,
+  );
+  shared.armR = taperedTube(
+    new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-0.08, 0.02, 0.0),
+      new THREE.Vector3(0.02, -0.08, 0.03),
+      new THREE.Vector3(0.08, -0.2, 0.04),
+      new THREE.Vector3(0.08, -0.34, 0.05),
+      new THREE.Vector3(0.05, -0.46, 0.05),
+    ]),
+    20,
+    armRadius,
+    12,
+  );
+  // Short legs that emerge from the pear base rather than propping it up.
+  const legRadius = limbRadius(0.13, 0.07, 0.4, 0.01);
+  shared.legL = taperedTube(
+    new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.05, 0.12, 0.02),
+      new THREE.Vector3(0.03, 0.02, 0.03),
+      new THREE.Vector3(0.02, -0.1, 0.04),
+      new THREE.Vector3(0.01, -0.2, 0.04),
+      new THREE.Vector3(0, -0.28, 0.05),
+    ]),
+    14,
+    legRadius,
+    12,
+  );
+  shared.legR = taperedTube(
+    new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-0.05, 0.12, 0.02),
+      new THREE.Vector3(-0.03, 0.02, 0.03),
+      new THREE.Vector3(-0.02, -0.1, 0.04),
+      new THREE.Vector3(-0.01, -0.2, 0.04),
+      new THREE.Vector3(0, -0.28, 0.05),
+    ]),
+    14,
+    legRadius,
+    12,
+  );
   shared.whiskerGeo = new THREE.CylinderGeometry(0.008, 0.003, 0.4, 5);
   shared.plane = new THREE.PlaneGeometry(1, 1);
   shared.tail = taperedTube(
     new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0.02, 0.58, -0.28),
-      new THREE.Vector3(0.2, 0.4, -0.55),
-      new THREE.Vector3(0.48, 0.36, -0.82),
-      new THREE.Vector3(0.4, 0.62, -1.02),
-      new THREE.Vector3(0.1, 0.84, -0.88),
-      new THREE.Vector3(0.02, 0.7, -0.72),
+      new THREE.Vector3(0.02, 0.48, -0.32),
+      new THREE.Vector3(0.18, 0.32, -0.55),
+      new THREE.Vector3(0.45, 0.3, -0.82),
+      new THREE.Vector3(0.38, 0.55, -1.0),
+      new THREE.Vector3(0.08, 0.78, -0.86),
+      new THREE.Vector3(0.0, 0.64, -0.7),
     ]),
     28,
-    0.055,
-    0.018,
+    [0.055, 0.018],
     8,
   );
   shared.ready = true;
@@ -190,12 +270,93 @@ function addEar(head, side) {
   head.add(inner);
 }
 
-function addLimb(parent, geometry, position, rotation) {
-  const limb = new THREE.Mesh(geometry, shared.fur);
-  limb.position.copy(position);
-  limb.rotation.set(rotation.x, rotation.y, rotation.z);
-  parent.add(limb);
-  return limb;
+function mesh(geometry, material, position, scale, rotation) {
+  const part = new THREE.Mesh(geometry, material);
+  if (position) part.position.set(position.x, position.y, position.z);
+  if (scale) part.scale.set(scale.x, scale.y, scale.z);
+  if (rotation) part.rotation.set(rotation.x, rotation.y, rotation.z);
+  return part;
+}
+
+function addArm(parent, side) {
+  const root = new THREE.Group();
+  // Attach on the pear’s side surface so the body hides only the stub, not half the arm.
+  root.position.set(0.4 * side, 1.08, .24);
+  root.rotation.set(0.2, -0.02 * side, 0.2 * side);
+  parent.add(root);
+
+  const armMesh = new THREE.Mesh(side < 0 ? shared.armL : shared.armR, shared.fur);
+  armMesh.renderOrder = 1;
+  root.add(armMesh);
+
+  const hand = new THREE.Group();
+  hand.position.set(0.04 * side, -0.5, 0.08);
+  hand.rotation.set(0.4, 0.1 * side, -0.04 * side);
+  root.add(hand);
+
+  hand.add(
+    mesh(shared.palm, shared.fur, null, { x: 1.1, y: 0.5, z: 0.95 }),
+    mesh(shared.palm, shared.belly, { x: 0, y: -0.002, z: 0.04 }, { x: 0.92, y: 0.38, z: 0.52 }),
+  );
+
+  const fingerLayout = [
+    { x: -0.048, z: 0.006, yaw: 0.38, len: 0.95 },
+    { x: -0.016, z: 0.032, yaw: 0.1, len: 1.05 },
+    { x: 0.016, z: 0.032, yaw: -0.1, len: 1.05 },
+    { x: 0.048, z: 0.006, yaw: -0.38, len: 0.95 },
+  ];
+  for (const finger of fingerLayout) {
+    hand.add(
+      mesh(
+        shared.finger,
+        shared.belly,
+        { x: finger.x * side, y: -0.06, z: finger.z },
+        { x: 0.95, y: finger.len, z: 0.95 },
+        { x: 1.0, y: finger.yaw * side, z: 0 },
+      ),
+    );
+  }
+
+  return root;
+}
+
+function addLeg(parent, side) {
+  const root = new THREE.Group();
+  // Short stubs under the pear base — body sits on the feet, not above them.
+  root.position.set(0.18 * side, 0.3, 0.03);
+  root.rotation.set(0.02, 0.02 * side, -0.01 * side);
+  parent.add(root);
+
+  root.add(new THREE.Mesh(side < 0 ? shared.legL : shared.legR, shared.fur));
+
+  const foot = new THREE.Group();
+  foot.position.set(0, -0.3, 0.08);
+  foot.rotation.set(0.06, 0.04 * side, 0);
+  root.add(foot);
+
+  foot.add(
+    mesh(shared.foot, shared.fur, null, { x: 1.22, y: 0.3, z: 1.5 }),
+    mesh(shared.foot, shared.belly, { x: 0, y: -0.01, z: 0.035 }, { x: 1.02, y: 0.16, z: 1.2 }),
+  );
+
+  const toes = [
+    { x: -0.062, z: 0.115, yaw: 0.28, len: 1 },
+    { x: 0, z: 0.138, yaw: 0, len: 1.1 },
+    { x: 0.062, z: 0.115, yaw: -0.28, len: 1 },
+  ];
+  for (const toe of toes) {
+    foot.add(
+      mesh(
+        shared.toe,
+        shared.belly,
+        { x: toe.x, y: -0.004, z: toe.z },
+        { x: 1, y: 0.5, z: toe.len },
+        { x: 1.4, y: toe.yaw, z: 0 },
+      ),
+    );
+  }
+
+  return root;
 }
 
 function addWhiskers(head) {
@@ -224,47 +385,43 @@ export function createMouse(canvases) {
   root.userData.targetPitch = 0;
   root.userData.live = false;
 
-  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.62, 24), shared.shadow);
+  // Soft contact patch under the feet (forward of center), not a hover blob.
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), shared.shadow);
   shadow.rotation.x = -Math.PI / 2;
-  shadow.position.y = 0.02;
+  shadow.scale.set(1.15, 0.7, 1);
+  shadow.position.set(0, 0.008, 0.08);
   root.add(shadow);
+
+  // Planted mass: pear sits low; short legs tuck into its base.
+  addLeg(root, -1);
+  addLeg(root, 1);
+
+  const body = new THREE.Mesh(shared.body, shared.fur);
+  body.scale.set(1.05, 1, 0.95);
+  body.position.set(0, 0.08, 0.02);
+  // Body writes depth first so buried arm stubs and belly rim stay inside the silhouette.
+  body.renderOrder = 0;
+  root.add(body);
+
+  // Cream patch flush on the pear front — mostly inside the body outline.
+  const belly = new THREE.Mesh(shared.bellyGeo, shared.belly);
+  belly.scale.set(0.95, 1.15, 0.18);
+  belly.position.set(0, 0.68, 0.38);
+  belly.renderOrder = 1;
+  root.add(belly);
+
+  root.add(new THREE.Mesh(shared.tail, shared.fur));
+
+  // Arms after the body so only the outer sleeve shows past the pear.
+  addArm(root, -1);
+  addArm(root, 1);
 
   const bob = new THREE.Group();
   root.add(bob);
   root.userData.bob = bob;
 
-  const torso = new THREE.Mesh(shared.torso, shared.fur);
-  torso.scale.set(1.06, 1.24, 0.86);
-  torso.position.set(0, 0.9, 0.02);
-  bob.add(torso);
-
-  const belly = new THREE.Mesh(shared.bellyGeo, shared.belly);
-  belly.scale.set(1.05, 1.28, 0.48);
-  belly.position.set(0, 0.8, 0.3);
-  bob.add(belly);
-
-  const armL = addLimb(bob, shared.arm, new THREE.Vector3(-0.5, 0.98, 0.06), { x: 0.18, y: 0, z: -0.22 });
-  const armR = addLimb(bob, shared.arm, new THREE.Vector3(0.5, 0.98, 0.06), { x: 0.18, y: 0, z: 0.22 });
-  const handL = new THREE.Mesh(shared.hand, shared.fur);
-  handL.position.set(0, -0.24, 0.02);
-  armL.add(handL);
-  const handR = new THREE.Mesh(shared.hand, shared.fur);
-  handR.position.set(0, -0.24, 0.02);
-  armR.add(handR);
-
-  const legL = addLimb(bob, shared.leg, new THREE.Vector3(-0.17, 0.32, 0.04), { x: 0.04, y: 0, z: -0.03 });
-  const legR = addLimb(bob, shared.leg, new THREE.Vector3(0.17, 0.32, 0.04), { x: 0.04, y: 0, z: 0.03 });
-  for (const leg of [legL, legR]) {
-    const foot = new THREE.Mesh(shared.foot, shared.fur);
-    foot.scale.set(1.12, 0.48, 1.4);
-    foot.position.set(0, -0.22, 0.08);
-    leg.add(foot);
-  }
-
-  bob.add(new THREE.Mesh(shared.tail, shared.fur));
-
   const head = new THREE.Group();
-  head.position.set(0, 1.58, 0.04);
+  head.position.set(0, 1.42, 0.05);
   bob.add(head);
   root.userData.head = head;
 
