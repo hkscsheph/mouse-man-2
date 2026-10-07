@@ -124,6 +124,7 @@ export function createCrowd(scene) {
       if (!live) return;
       live.mesh.userData.targetYaw = face.yaw;
       live.mesh.userData.targetPitch = face.pitch;
+      live.mesh.userData.targetRoll = face.roll;
       if (face.patchesDirty) refreshLiveFace(live.mesh);
     },
     freeze() {
@@ -171,9 +172,11 @@ export function createCrowd(scene) {
         if (isLive) {
           head.rotation.y = THREE.MathUtils.damp(head.rotation.y, actor.mesh.userData.targetYaw || 0, 5, dt);
           head.rotation.x = THREE.MathUtils.damp(head.rotation.x, actor.mesh.userData.targetPitch || 0, 5, dt);
+          head.rotation.z = THREE.MathUtils.damp(head.rotation.z, actor.mesh.userData.targetRoll || 0, 5, dt);
         } else {
           head.rotation.y = Math.sin(time * 0.45 + phase) * 0.06;
           head.rotation.x = Math.sin(time * 0.32 + phase * 1.3) * 0.03;
+          head.rotation.z = Math.sin(time * 0.28 + phase * 0.7) * 0.04;
         }
         const orderBias = Math.round(actor.mesh.position.z * 20);
         for (const plane of Object.values(actor.mesh.userData.planes)) {

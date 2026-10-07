@@ -383,6 +383,7 @@ export function createMouse(canvases) {
   root.userData.phase = Math.random() * Math.PI * 2;
   root.userData.targetYaw = 0;
   root.userData.targetPitch = 0;
+  root.userData.targetRoll = 0;
   root.userData.live = false;
 
   // Soft contact patch under the feet (forward of center), not a hover blob.

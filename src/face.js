@@ -103,11 +103,13 @@ function poseFromMatrix(matrix) {
   _mat.fromArray(matrix.data);
   _mat.decompose(_pos, _quat, _scl);
   _euler.setFromQuaternion(_quat, 'YXZ');
-  if (!Number.isFinite(_euler.x) || !Number.isFinite(_euler.y)) return null;
-  if (Math.abs(_euler.y) > 1.4 || Math.abs(_euler.x) > 1.4) return null;
+  if (!Number.isFinite(_euler.x) || !Number.isFinite(_euler.y) || !Number.isFinite(_euler.z)) return null;
+  if (Math.abs(_euler.y) > 1.4 || Math.abs(_euler.x) > 1.4 || Math.abs(_euler.z) > 1.4) return null;
   return {
+    // Negate yaw/roll so the puppet matches the mirrored webcam view.
     yaw: THREE.MathUtils.clamp(-_euler.y, -0.38, 0.38),
     pitch: THREE.MathUtils.clamp(_euler.x, -0.26, 0.26),
+    roll: THREE.MathUtils.clamp(-_euler.z, -0.5, 0.5),
   };
 }
 
@@ -117,14 +119,15 @@ function poseFromLandmarks(lm) {
   const nose = lm[1];
   const forehead = lm[10];
   const chin = lm[152];
-  if (!left || !right || !nose || !forehead || !chin) return { yaw: 0, pitch: 0 };
+  if (!left || !right || !nose || !forehead || !chin) return { yaw: 0, pitch: 0, roll: 0 };
   const midX = (left.x + right.x) * 0.5;
   const eyeDist = Math.max(0.0001, Math.abs(right.x - left.x));
   const yaw = THREE.MathUtils.clamp(-((nose.x - midX) / eyeDist) * 0.85, -0.38, 0.38);
   const midY = (left.y + right.y) * 0.5;
   const faceH = Math.max(0.0001, chin.y - forehead.y);
   const pitch = THREE.MathUtils.clamp((((nose.y - midY) / faceH) - 0.16) * 1.4, -0.26, 0.26);
-  return { yaw, pitch };
+  const roll = THREE.MathUtils.clamp(Math.atan2(right.y - left.y, right.x - left.x), -0.5, 0.5);
+  return { yaw, pitch, roll };
 }
 
 function gather(lm, ids, lift = 0) {
@@ -294,6 +297,7 @@ export function readFace(video, now) {
       eyeSpan,
       yaw: pose.yaw,
       pitch: pose.pitch,
+      roll: pose.roll,
       patches,
       patchesDirty: false,
     };
@@ -315,6 +319,7 @@ export function readFace(video, now) {
     eyeSpan,
     yaw: pose.yaw,
     pitch: pose.pitch,
+    roll: pose.roll,
     patches,
     patchesDirty,
   };
