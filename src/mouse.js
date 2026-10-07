@@ -393,32 +393,36 @@ export function createMouse(canvases) {
   shadow.position.set(0, 0.008, 0.08);
   root.add(shadow);
 
-  // Planted mass: pear sits low; short legs tuck into its base.
+  // Planted mass: feet stay on the root while the torso can twist with the head.
   addLeg(root, -1);
   addLeg(root, 1);
+
+  const torso = new THREE.Group();
+  root.add(torso);
+  root.userData.torso = torso;
 
   const body = new THREE.Mesh(shared.body, shared.fur);
   body.scale.set(1.05, 1, 0.95);
   body.position.set(0, 0.08, 0.02);
   // Body writes depth first so buried arm stubs and belly rim stay inside the silhouette.
   body.renderOrder = 0;
-  root.add(body);
+  torso.add(body);
 
   // Cream patch flush on the pear front — mostly inside the body outline.
   const belly = new THREE.Mesh(shared.bellyGeo, shared.belly);
   belly.scale.set(0.95, 1.15, 0.18);
   belly.position.set(0, 0.68, 0.38);
   belly.renderOrder = 1;
-  root.add(belly);
+  torso.add(belly);
 
-  root.add(new THREE.Mesh(shared.tail, shared.fur));
+  torso.add(new THREE.Mesh(shared.tail, shared.fur));
 
   // Arms after the body so only the outer sleeve shows past the pear.
-  addArm(root, -1);
-  addArm(root, 1);
+  addArm(torso, -1);
+  addArm(torso, 1);
 
   const bob = new THREE.Group();
-  root.add(bob);
+  torso.add(bob);
   root.userData.bob = bob;
 
   const head = new THREE.Group();

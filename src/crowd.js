@@ -165,15 +165,24 @@ export function createCrowd(scene) {
         const phase = actor.mesh.userData.phase;
         const isLive = actor.mesh.userData.live;
         const bob = actor.mesh.userData.bob;
-        // Head-only sway — body and feet stay planted.
+        const torso = actor.mesh.userData.torso;
+        const head = actor.mesh.userData.head;
+        // Light head bob — feet stay planted on the root.
         bob.position.y = Math.sin(time * (isLive ? 1.8 : 1.2) + phase) * (isLive ? 0.006 : 0.01);
         bob.rotation.z = Math.sin(time * 1.1 + phase) * (isLive ? 0.004 : 0.008);
-        const head = actor.mesh.userData.head;
         if (isLive) {
-          head.rotation.y = THREE.MathUtils.damp(head.rotation.y, actor.mesh.userData.targetYaw || 0, 5, dt);
-          head.rotation.x = THREE.MathUtils.damp(head.rotation.x, actor.mesh.userData.targetPitch || 0, 5, dt);
-          head.rotation.z = THREE.MathUtils.damp(head.rotation.z, actor.mesh.userData.targetRoll || 0, 5, dt);
+          const yaw = actor.mesh.userData.targetYaw || 0;
+          const pitch = actor.mesh.userData.targetPitch || 0;
+          const roll = actor.mesh.userData.targetRoll || 0;
+          // Body follows a fraction of the turn; head adds the rest on top.
+          torso.rotation.y = THREE.MathUtils.damp(torso.rotation.y, yaw * 0.32, 4, dt);
+          torso.rotation.z = THREE.MathUtils.damp(torso.rotation.z, roll * 0.18, 4, dt);
+          head.rotation.y = THREE.MathUtils.damp(head.rotation.y, yaw * 0.68, 5, dt);
+          head.rotation.x = THREE.MathUtils.damp(head.rotation.x, pitch, 5, dt);
+          head.rotation.z = THREE.MathUtils.damp(head.rotation.z, roll * 0.82, 5, dt);
         } else {
+          torso.rotation.y = THREE.MathUtils.damp(torso.rotation.y, Math.sin(time * 0.35 + phase) * 0.04, 2, dt);
+          torso.rotation.z = THREE.MathUtils.damp(torso.rotation.z, Math.sin(time * 0.22 + phase) * 0.02, 2, dt);
           head.rotation.y = Math.sin(time * 0.45 + phase) * 0.06;
           head.rotation.x = Math.sin(time * 0.32 + phase * 1.3) * 0.03;
           head.rotation.z = Math.sin(time * 0.28 + phase * 0.7) * 0.04;
