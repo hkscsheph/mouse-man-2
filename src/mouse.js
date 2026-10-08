@@ -241,6 +241,59 @@ function faceMaterial(canvas) {
   });
 }
 
+function rand(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function hsl(h, s, l) {
+  return new THREE.Color().setHSL(((h % 360) + 360) % 360 / 360, s, l);
+}
+
+/** One-off look for each visitor mouse. */
+function makeTraits() {
+  return {
+    fur: hsl(rand(16, 42), rand(0.42, 0.78), rand(0.42, 0.62)),
+    belly: hsl(rand(22, 48), rand(0.22, 0.48), rand(0.7, 0.88)),
+    earInner: hsl(rand(340, 380), rand(0.28, 0.55), rand(0.62, 0.8)),
+    nose: hsl(rand(265, 320), rand(0.22, 0.58), rand(0.32, 0.58)),
+    whisker: hsl(rand(15, 40), rand(0.15, 0.4), rand(0.12, 0.28)),
+    earSize: rand(0.78, 1.32),
+    earWide: rand(0.88, 1.2),
+    earThick: rand(0.75, 1.25),
+    earFlare: rand(0.75, 1.28),
+    earTilt: rand(-0.18, 0.22),
+    noseRound: rand(0.72, 1.4),
+    noseFlat: rand(0.7, 1.25),
+    noseSize: rand(0.85, 1.3),
+    headScale: 1.05,//rand(0.9, 1.12),
+    bodyWide: 1.1,//rand(0.93, 1.14),
+    bodyTall: .9,//rand(0.92, 1.1),
+    bodyDeep: 1,//rand(0.9, 1.08),
+    bellySize: rand(0.9, 1.25),
+    snoutLen: rand(0.88, 1.22),
+    snoutRound: rand(0.85, 1),
+    whiskerCount: Math.random() < 0.3 ? 4 :3,
+    whiskerLen: rand(0.72, 1.3),
+    whiskerSpread: rand(.45, .65),
+    whiskerLift: rand(-0.5, -.35),
+    whiskerCurl: rand(-0.45, 0.1),
+  };
+}
+
+function clonePalette(traits) {
+  const fur = shared.fur.clone();
+  fur.color.copy(traits.fur);
+  const belly = shared.belly.clone();
+  belly.color.copy(traits.belly);
+  const ear = shared.ear.clone();
+  ear.color.copy(traits.earInner);
+  const nose = shared.nose.clone();
+  nose.color.copy(traits.nose);
+  const whisker = shared.whisker.clone();
+  whisker.color.copy(traits.whisker);
+  return { fur, belly, ear, nose, whisker };
+}
+
 function addFacePlane(parent, canvas, position, height, maxWidth, order) {
   const mesh = new THREE.Mesh(shared.plane, faceMaterial(canvas));
   mesh.position.copy(position);
@@ -256,16 +309,17 @@ function addFacePlane(parent, canvas, position, height, maxWidth, order) {
   return mesh;
 }
 
-function addEar(head, side) {
-  const ear = new THREE.Mesh(shared.earGeo, shared.fur);
-  ear.scale.set(0.95, 1.08, 0.28);
-  ear.position.set(0.4 * side, 0.36, -0.02);
-  ear.rotation.set(0.12, -0.35 * side, -0.55 * side);
+function addEar(head, side, mats, traits) {
+  const size = traits.earSize;
+  const ear = new THREE.Mesh(shared.earGeo, mats.fur);
+  ear.scale.set(0.95 * traits.earWide * size, 1.08 * size, 0.28 * traits.earThick);
+  ear.position.set(0.38 * side * traits.earFlare, 0.34 + traits.earTilt * 0.08, -0.02);
+  ear.rotation.set(0.12 + traits.earTilt * 0.4, -0.35 * side * traits.earFlare, (-0.55 - traits.earTilt * 0.3) * side);
   head.add(ear);
 
-  const inner = new THREE.Mesh(shared.earGeo, shared.ear);
-  inner.scale.set(0.62, 0.72, 0.16);
-  inner.position.set(0.39 * side, 0.36, 0.07);
+  const inner = new THREE.Mesh(shared.earGeo, mats.ear);
+  inner.scale.set(0.62 * traits.earWide * size, 0.72 * size, 0.16 * traits.earThick);
+  inner.position.set(0.37 * side * traits.earFlare, 0.34 + traits.earTilt * 0.08, 0.07);
   inner.rotation.copy(ear.rotation);
   head.add(inner);
 }
@@ -278,14 +332,14 @@ function mesh(geometry, material, position, scale, rotation) {
   return part;
 }
 
-function addArm(parent, side) {
+function addArm(parent, side, mats) {
   const root = new THREE.Group();
   // Attach on the pear’s side surface so the body hides only the stub, not half the arm.
-  root.position.set(0.4 * side, 1.08, .24);
+  root.position.set(0.4 * side, 1.08, 0.24);
   root.rotation.set(0.2, -0.02 * side, 0.2 * side);
   parent.add(root);
 
-  const armMesh = new THREE.Mesh(side < 0 ? shared.armL : shared.armR, shared.fur);
+  const armMesh = new THREE.Mesh(side < 0 ? shared.armL : shared.armR, mats.fur);
   armMesh.renderOrder = 1;
   root.add(armMesh);
 
@@ -295,8 +349,8 @@ function addArm(parent, side) {
   root.add(hand);
 
   hand.add(
-    mesh(shared.palm, shared.fur, null, { x: 1.1, y: 0.5, z: 0.95 }),
-    mesh(shared.palm, shared.belly, { x: 0, y: -0.002, z: 0.04 }, { x: 0.92, y: 0.38, z: 0.52 }),
+    mesh(shared.palm, mats.fur, null, { x: 1.1, y: 0.5, z: 0.95 }),
+    mesh(shared.palm, mats.belly, { x: 0, y: -0.002, z: 0.04 }, { x: 0.92, y: 0.38, z: 0.52 }),
   );
 
   const fingerLayout = [
@@ -309,7 +363,7 @@ function addArm(parent, side) {
     hand.add(
       mesh(
         shared.finger,
-        shared.belly,
+        mats.belly,
         { x: finger.x * side, y: -0.06, z: finger.z },
         { x: 0.95, y: finger.len, z: 0.95 },
         { x: 1.0, y: finger.yaw * side, z: 0 },
@@ -320,14 +374,14 @@ function addArm(parent, side) {
   return root;
 }
 
-function addLeg(parent, side) {
+function addLeg(parent, side, mats) {
   const root = new THREE.Group();
   // Short stubs under the pear base — body sits on the feet, not above them.
   root.position.set(0.18 * side, 0.3, 0.03);
   root.rotation.set(0.02, 0.02 * side, -0.01 * side);
   parent.add(root);
 
-  root.add(new THREE.Mesh(side < 0 ? shared.legL : shared.legR, shared.fur));
+  root.add(new THREE.Mesh(side < 0 ? shared.legL : shared.legR, mats.fur));
 
   const foot = new THREE.Group();
   foot.position.set(0, -0.3, 0.08);
@@ -335,8 +389,8 @@ function addLeg(parent, side) {
   root.add(foot);
 
   foot.add(
-    mesh(shared.foot, shared.fur, null, { x: 1.22, y: 0.3, z: 1.5 }),
-    mesh(shared.foot, shared.belly, { x: 0, y: -0.01, z: 0.035 }, { x: 1.02, y: 0.16, z: 1.2 }),
+    mesh(shared.foot, mats.fur, null, { x: 1.22, y: 0.3, z: 1.5 }),
+    mesh(shared.foot, mats.belly, { x: 0, y: -0.01, z: 0.035 }, { x: 1.02, y: 0.16, z: 1.2 }),
   );
 
   const toes = [
@@ -348,7 +402,7 @@ function addLeg(parent, side) {
     foot.add(
       mesh(
         shared.toe,
-        shared.belly,
+        mats.belly,
         { x: toe.x, y: -0.004, z: toe.z },
         { x: 1, y: 0.5, z: toe.len },
         { x: 1.4, y: toe.yaw, z: 0 },
@@ -359,32 +413,53 @@ function addLeg(parent, side) {
   return root;
 }
 
-function addWhiskers(head) {
-  const up = new THREE.Vector3(0, 1, 0);
-  const fans = [
-    [0.15, 0.92, 0.22],
-    [0, 1, 0.18],
-    [-0.16, 0.88, 0.24],
-  ];
+function addWhiskers(head, mats, traits, ownGeometries) {
+  const count = traits.whiskerCount;
   for (const side of [-1, 1]) {
-    for (const [y, x, z] of fans) {
-      const dir = new THREE.Vector3(x * side, y, z).normalize();
-      const whisker = new THREE.Mesh(shared.whiskerGeo, shared.whisker);
-      whisker.quaternion.setFromUnitVectors(up, dir);
-      whisker.position.set(0.1 * side, -0.08, 0.46).addScaledVector(dir, 0.2);
-      head.add(whisker);
+    for (let i = 0; i < count; i += 1) {
+      const t = count === 1 ? 0.5 : i / (count - 1);
+      // Fan from down-forward to up-out so the mustache opens wider.
+      const lift = THREE.MathUtils.lerp(-0.55, 0.7, t) + traits.whiskerLift;
+      const spread = THREE.MathUtils.lerp(0.95, 1.55, t) * traits.whiskerSpread;
+      const forward = THREE.MathUtils.lerp(0.08, -0.02, t);
+      const len = traits.whiskerLen;
+      const curl = traits.whiskerCurl;
+      const geo = taperedTube(
+        new THREE.CatmullRomCurve3([
+          new THREE.Vector3(0.08 * side, -0.05, 0.44),
+          new THREE.Vector3(0.2 * side * spread, -0.02 + lift * 0.1, 0.5 + forward),
+          new THREE.Vector3(0.36 * side * spread * len, 0.04 + lift * 0.22 + curl * 0.08, 0.52 + forward * 0.6),
+          new THREE.Vector3(
+            0.52 * side * spread * len,
+            0.06 + lift * 0.28 + curl * 0.18,
+            0.42 + forward * 0.4 + (1 - Math.abs(curl)) * 0.04,
+          ),
+        ]),
+        8,
+        [0.0075, 0.0022],
+        4,
+      );
+      ownGeometries.push(geo);
+      head.add(new THREE.Mesh(geo, mats.whisker));
     }
   }
 }
 
 export function createMouse(canvases) {
   buildShared();
+  const traits = makeTraits();
+  const mats = clonePalette(traits);
+  const ownGeometries = [];
+
   const root = new THREE.Group();
   root.userData.phase = Math.random() * Math.PI * 2;
   root.userData.targetYaw = 0;
   root.userData.targetPitch = 0;
   root.userData.targetRoll = 0;
   root.userData.live = false;
+  root.userData.traits = traits;
+  root.userData.ownMaterials = Object.values(mats);
+  root.userData.ownGeometries = ownGeometries;
 
   // Soft contact patch under the feet (forward of center), not a hover blob.
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), shared.shadow);
@@ -394,32 +469,32 @@ export function createMouse(canvases) {
   root.add(shadow);
 
   // Planted mass: feet stay on the root while the torso can twist with the head.
-  addLeg(root, -1);
-  addLeg(root, 1);
+  addLeg(root, -1, mats);
+  addLeg(root, 1, mats);
 
   const torso = new THREE.Group();
   root.add(torso);
   root.userData.torso = torso;
 
-  const body = new THREE.Mesh(shared.body, shared.fur);
-  body.scale.set(1.05, 1, 0.95);
+  const body = new THREE.Mesh(shared.body, mats.fur);
+  body.scale.set(1.05 * traits.bodyWide, traits.bodyTall, 0.95 * traits.bodyDeep);
   body.position.set(0, 0.08, 0.02);
   // Body writes depth first so buried arm stubs and belly rim stay inside the silhouette.
   body.renderOrder = 0;
   torso.add(body);
 
   // Cream patch flush on the pear front — mostly inside the body outline.
-  const belly = new THREE.Mesh(shared.bellyGeo, shared.belly);
-  belly.scale.set(0.95, 1.15, 0.18);
+  const belly = new THREE.Mesh(shared.bellyGeo, mats.belly);
+  belly.scale.set(0.95 * traits.bellySize, 1.15 * traits.bellySize, 0.18);
   belly.position.set(0, 0.68, 0.38);
   belly.renderOrder = 1;
   torso.add(belly);
 
-  torso.add(new THREE.Mesh(shared.tail, shared.fur));
+  torso.add(new THREE.Mesh(shared.tail, mats.fur));
 
   // Arms after the body so only the outer sleeve shows past the pear.
-  addArm(torso, -1);
-  addArm(torso, 1);
+  addArm(torso, -1, mats);
+  addArm(torso, 1, mats);
 
   const bob = new THREE.Group();
   torso.add(bob);
@@ -427,25 +502,32 @@ export function createMouse(canvases) {
 
   const head = new THREE.Group();
   head.position.set(0, 1.42, 0.05);
+  head.scale.setScalar(traits.headScale);
   bob.add(head);
   root.userData.head = head;
 
-  const skull = new THREE.Mesh(shared.head, shared.fur);
+  const skull = new THREE.Mesh(shared.head, mats.fur);
   skull.scale.set(1.02, 0.98, 0.96);
   head.add(skull);
 
-  const snout = new THREE.Mesh(shared.snout, shared.fur);
-  snout.scale.set(1.12, 0.82, 1.18);
+  const snout = new THREE.Mesh(shared.snout, mats.fur);
+  snout.scale.set(1.12 * traits.snoutRound, 0.82 * traits.snoutRound, 1.18 * traits.snoutLen);
   snout.position.set(0, -0.12, 0.34);
   head.add(snout);
 
-  const nose = new THREE.Mesh(shared.noseGeo, shared.nose);
+  // Rounder noses stay spherical; flatter ones squash on Z.
+  const nose = new THREE.Mesh(shared.noseGeo, mats.nose);
+  nose.scale.set(
+    traits.noseSize * traits.noseRound,
+    traits.noseSize * traits.noseRound,
+    traits.noseSize * traits.noseFlat,
+  );
   nose.position.set(0, -0.14, 0.54);
   head.add(nose);
 
-  addEar(head, -1);
-  addEar(head, 1);
-  addWhiskers(head);
+  addEar(head, -1, mats, traits);
+  addEar(head, 1, mats, traits);
+  addWhiskers(head, mats, traits, ownGeometries);
 
   const planes = {
     leftEye: addFacePlane(head, canvases.leftEye, new THREE.Vector3(-0.15, 0.08, 0.47), 0.22, 0.28, 1),
@@ -507,6 +589,8 @@ export function disposeMouse(mouse) {
     obj.material.map?.dispose();
     obj.material.dispose();
   });
+  for (const mat of mouse.userData.ownMaterials || []) mat.dispose();
+  for (const geo of mouse.userData.ownGeometries || []) geo.dispose();
 }
 
 export const FACE_KEYS = PATCH_KEYS;
