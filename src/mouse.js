@@ -252,13 +252,13 @@ function hsl(h, s, l) {
 /** One-off look for each visitor mouse. */
 function makeTraits() {
   return {
-    fur: hsl(rand(16, 42), rand(0.42, 0.78), rand(0.42, 0.62)),
+    fur: hsl(rand(0, 255), rand(0.2, 0.4), rand(0.42, 0.62)),
     belly: hsl(rand(22, 48), rand(0.22, 0.48), rand(0.7, 0.88)),
     earInner: hsl(rand(340, 380), rand(0.28, 0.55), rand(0.62, 0.8)),
     nose: hsl(rand(265, 320), rand(0.22, 0.58), rand(0.32, 0.58)),
     whisker: hsl(rand(15, 40), rand(0.15, 0.4), rand(0.12, 0.28)),
     earSize: rand(0.78, 1.32),
-    earWide: rand(0.88, 1.2),
+    earWide: rand(1, 1.2),
     earThick: rand(0.75, 1.25),
     earFlare: rand(0.75, 1.28),
     earTilt: rand(-0.18, 0.22),
