@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createMouse, disposeMouse, refreshLiveFace, retargetFace } from './mouse.js';
+import { createMouse, disposeMouse, refitFacePlanes, refreshLiveFace, retargetFace } from './mouse.js';
 
 const LIVE = { x: 0.05, z: 1.55, ry: 0.02, s: 1.06 };
 const SLOTS = [
@@ -147,6 +147,9 @@ export function createCrowd(scene) {
     clear() {
       for (const actor of [...actors]) removeActor(actor);
       live = null;
+    },
+    refitFaces() {
+      for (const actor of actors) refitFacePlanes(actor.mesh, true);
     },
     update(dt, time, camera) {
       for (const actor of [...actors]) {

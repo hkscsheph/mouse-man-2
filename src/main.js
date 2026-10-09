@@ -1,5 +1,6 @@
 import { createCrowd } from './crowd.js';
 import { initFace, readFace, resetFaceTracking } from './face.js';
+import { getFeatureScale, setFeatureScale } from './mouse.js';
 import { createScene } from './scene.js';
 
 const SETTLE_MS = 600;
@@ -10,6 +11,10 @@ const MIN_EYE_SPAN = 0.055;
 const view = document.querySelector('#view');
 const video = document.querySelector('#cam');
 const gate = document.querySelector('#gate');
+const tune = document.querySelector('#tune');
+const tuneToggle = document.querySelector('#tune-toggle');
+const featureScale = document.querySelector('#feature-scale');
+const featureScaleVal = document.querySelector('#feature-scale-val');
 
 const { scene, camera, renderer } = createScene(view);
 const crowd = createCrowd(scene);
@@ -133,6 +138,27 @@ async function boot() {
   }
 }
 
+function setTuneOpen(open) {
+  tune.classList.toggle('hidden', !open);
+  tune.hidden = !open;
+  tuneToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function applyFeatureScale(value) {
+  setFeatureScale(value);
+  featureScale.value = String(getFeatureScale());
+  featureScaleVal.textContent = `${getFeatureScale().toFixed(2)}×`;
+  crowd.refitFaces();
+}
+
+tuneToggle.addEventListener('click', () => {
+  setTuneOpen(tune.hidden);
+});
+
+featureScale.addEventListener('input', () => {
+  applyFeatureScale(featureScale.value);
+});
+
 window.addEventListener('keydown', (event) => {
   if (event.key === 'f' || event.key === 'F') {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
@@ -143,9 +169,13 @@ window.addEventListener('keydown', (event) => {
     resetFaceTracking();
     setIdle();
   }
+  if (event.key === 'h' || event.key === 'H') {
+    setTuneOpen(tune.hidden);
+  }
 });
 
 window.addEventListener('contextmenu', (event) => event.preventDefault());
+applyFeatureScale(featureScale.value);
 
 function stagePatch(label, draw) {
   const canvas = document.createElement('canvas');

@@ -38,3 +38,63 @@ body {
 #gate.hidden {
   display: none;
 }
+
+#tune-toggle {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(42, 22, 12, 0.45);
+  color: rgba(255, 236, 220, 0.9);
+  font: 13px/1 "Segoe UI", sans-serif;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+#tune-toggle:hover,
+#tune-toggle[aria-expanded="true"] {
+  background: rgba(42, 22, 12, 0.7);
+}
+
+#tune {
+  position: absolute;
+  right: 16px;
+  bottom: 58px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(42, 22, 12, 0.55);
+  color: rgba(255, 236, 220, 0.92);
+  font: 13px/1.2 "Segoe UI", sans-serif;
+  backdrop-filter: blur(8px);
+}
+
+#tune.hidden,
+#tune[hidden] {
+  display: none;
+}
+
+#tune label {
+  white-space: nowrap;
+}
+
+#tune input[type="range"] {
+  flex: 1;
+  accent-color: #e3944a;
+  cursor: pointer;
+}
+
+#feature-scale-val {
+  min-width: 3.2em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}

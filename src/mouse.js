@@ -1,10 +1,22 @@
 import * as THREE from 'three';
 
 const PATCH_KEYS = ['leftEye', 'rightEye', 'nose', 'mouth'];
+const SCALED_PATCHES = new Set(['leftEye', 'rightEye', 'mouth']);
 
 const shared = {
   ready: false,
 };
+
+/** Global scale for projected eyes + mouth (nose stays fixed). */
+let featureScale = 1;
+
+export function getFeatureScale() {
+  return featureScale;
+}
+
+export function setFeatureScale(value) {
+  featureScale = THREE.MathUtils.clamp(Number(value) || 1, 0.6, 2.4);
+}
 
 function feltNormal() {
   const size = 64;
@@ -252,7 +264,7 @@ function hsl(h, s, l) {
 /** One-off look for each visitor mouse. */
 function makeTraits() {
   return {
-    fur: hsl(rand(0, 255), rand(0.2, 0.4), rand(0.42, 0.62)),
+    fur: hsl(rand(16, 42), rand(0.1, .9), rand(0.2, 0.4)),
     belly: hsl(rand(22, 48), rand(0.22, 0.48), rand(0.7, 0.88)),
     earInner: hsl(rand(340, 380), rand(0.28, 0.55), rand(0.62, 0.8)),
     nose: hsl(rand(265, 320), rand(0.22, 0.58), rand(0.32, 0.58)),
@@ -273,10 +285,10 @@ function makeTraits() {
     snoutLen: rand(0.88, 1.22),
     snoutRound: rand(0.85, 1),
     whiskerCount: Math.random() < 0.3 ? 4 :3,
-    whiskerLen: rand(0.72, 1.3),
+    whiskerLen: rand(0.9, 1.3),
     whiskerSpread: rand(.45, .65),
     whiskerLift: rand(-0.5, -.35),
-    whiskerCurl: rand(-0.45, 0.1),
+    whiskerCurl: rand(-0.45, 0),
   };
 }
 
@@ -294,17 +306,16 @@ function clonePalette(traits) {
   return { fur, belly, ear, nose, whisker };
 }
 
-function addFacePlane(parent, canvas, position, height, maxWidth, order) {
+function addFacePlane(parent, canvas, key, position, height, maxWidth, order) {
   const mesh = new THREE.Mesh(shared.plane, faceMaterial(canvas));
   mesh.position.copy(position);
   mesh.userData.isFace = true;
+  mesh.userData.key = key;
   mesh.userData.height = height;
   mesh.userData.maxWidth = maxWidth;
   mesh.userData.order = order;
-  const aspect = THREE.MathUtils.clamp(canvas.aspect || 1.2, 0.55, 2.6);
-  const width = Math.min(height * aspect, maxWidth);
-  mesh.scale.set(width, height, 1);
-  mesh.userData.targetScale = mesh.scale.clone();
+  mesh.userData.aspect = canvas.aspect || 1.2;
+  fitPlane(mesh, mesh.userData.aspect, true);
   parent.add(mesh);
   return mesh;
 }
@@ -530,10 +541,10 @@ export function createMouse(canvases) {
   addWhiskers(head, mats, traits, ownGeometries);
 
   const planes = {
-    leftEye: addFacePlane(head, canvases.leftEye, new THREE.Vector3(-0.15, 0.08, 0.47), 0.22, 0.28, 1),
-    rightEye: addFacePlane(head, canvases.rightEye, new THREE.Vector3(0.15, 0.08, 0.47), 0.22, 0.28, 1),
-    mouth: addFacePlane(head, canvases.mouth, new THREE.Vector3(0, -0.3, 0.42), 0.15, 0.34, 2),
-    nose: addFacePlane(head, canvases.nose, new THREE.Vector3(0, -0.15, 0.6), 0.2, 0.26, 3),
+    leftEye: addFacePlane(head, canvases.leftEye, 'leftEye', new THREE.Vector3(-0.15, 0.08, 0.47), 0.22, 0.28, 1),
+    rightEye: addFacePlane(head, canvases.rightEye, 'rightEye', new THREE.Vector3(0.15, 0.08, 0.47), 0.22, 0.28, 1),
+    mouth: addFacePlane(head, canvases.mouth, 'mouth', new THREE.Vector3(0, -0.3, 0.42), 0.15, 0.34, 2),
+    nose: addFacePlane(head, canvases.nose, 'nose', new THREE.Vector3(0, -0.15, 0.6), 0.2, 0.26, 3),
   };
   root.userData.planes = planes;
   root.userData.liveCanvases = canvases;
@@ -560,7 +571,8 @@ export function retargetFace(mouse, canvases, { copy }) {
     plane.material.map = tex;
     plane.material.needsUpdate = true;
     if (previous) previous.dispose();
-    fitPlane(plane, canvas.aspect || 1.2, true);
+    plane.userData.aspect = canvas.aspect || 1.2;
+    fitPlane(plane, plane.userData.aspect, true);
   }
   mouse.userData.liveCanvases = copy ? null : canvases;
 }
@@ -572,14 +584,25 @@ export function refreshLiveFace(mouse) {
     const plane = mouse.userData.planes[key];
     const canvas = canvases[key];
     if (plane.material.map) plane.material.map.needsUpdate = true;
-    fitPlane(plane, canvas.aspect || 1.2, false);
+    plane.userData.aspect = canvas.aspect || plane.userData.aspect || 1.2;
+    fitPlane(plane, plane.userData.aspect, false);
+  }
+}
+
+export function refitFacePlanes(mouse, snap = true) {
+  for (const plane of Object.values(mouse.userData.planes || {})) {
+    fitPlane(plane, plane.userData.aspect || 1.2, snap);
   }
 }
 
 function fitPlane(plane, aspect, snap) {
   const safeAspect = THREE.MathUtils.clamp(aspect, 0.55, 2.6);
-  const width = Math.min(plane.userData.height * safeAspect, plane.userData.maxWidth);
-  plane.userData.targetScale.set(width, plane.userData.height, 1);
+  const boost = SCALED_PATCHES.has(plane.userData.key) ? featureScale : 1;
+  const height = plane.userData.height * boost;
+  const maxWidth = plane.userData.maxWidth * boost;
+  const width = Math.min(height * safeAspect, maxWidth);
+  if (!plane.userData.targetScale) plane.userData.targetScale = new THREE.Vector3();
+  plane.userData.targetScale.set(width, height, 1);
   if (snap) plane.scale.copy(plane.userData.targetScale);
 }
 
