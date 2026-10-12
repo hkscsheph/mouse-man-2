@@ -1,9 +1,18 @@
 import { createCrowd } from './crowd.js';
 import { initFace, readFace, resetFaceTracking } from './face.js';
 import { getFeatureScale, setFeatureScale } from './mouse.js';
+import {
+  canvasesFromSnapshot,
+  fetchSnapshot,
+  publishSnapshot,
+  shareUrlForId,
+  snapshotFromMouse,
+} from './persist.js';
+import { renderShareQr } from './qr.js';
 import { createScene } from './scene.js';
 
 const SETTLE_MS = 600;
+const SAVE_AFTER_MS = 2000;
 const ABSENCE_MS = 1500;
 const SETTLE_GAP_MS = 300;
 const MIN_EYE_SPAN = 0.055;
@@ -15,6 +24,9 @@ const tune = document.querySelector('#tune');
 const tuneToggle = document.querySelector('#tune-toggle');
 const featureScale = document.querySelector('#feature-scale');
 const featureScaleVal = document.querySelector('#feature-scale-val');
+const sharePanel = document.querySelector('#share');
+const shareQr = document.querySelector('#share-qr');
+const shareHint = document.querySelector('#share-hint');
 
 const { scene, camera, renderer } = createScene(view);
 const crowd = createCrowd(scene);
@@ -22,8 +34,11 @@ const crowd = createCrowd(scene);
 let state = 'idle';
 let settleStart = 0;
 let absentSince = 0;
+let liveSince = 0;
 let tracking = false;
 let last = performance.now();
+let saving = false;
+let currentShareUrl = '';
 
 function showGate(text) {
   gate.textContent = text;
@@ -38,9 +53,76 @@ function setIdle() {
   state = 'idle';
   settleStart = 0;
   absentSince = 0;
+  liveSince = 0;
+}
+
+async function showShareForActor(actor) {
+  if (!actor?.mesh?.userData?.mouseId) {
+    currentShareUrl = '';
+    shareHint.textContent = 'Hold still to save your mouse';
+    await renderShareQr(shareQr, '');
+    sharePanel.classList.add('empty');
+    return;
+  }
+  currentShareUrl = shareUrlForId(actor.mesh.userData.mouseId);
+  shareHint.textContent = 'Scan to open this mouse';
+  sharePanel.classList.remove('empty');
+  try {
+    await renderShareQr(shareQr, currentShareUrl);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+crowd.onFrontChange((actor) => {
+  showShareForActor(actor);
+});
+
+async function persistLiveMouse(actor) {
+  if (!actor || actor.saved || saving) return;
+  saving = true;
+  try {
+    const snapshot = snapshotFromMouse(actor.mesh, {
+      id: actor.mesh.userData.mouseId,
+      featureScale: getFeatureScale(),
+    });
+    const published = await publishSnapshot(snapshot);
+    actor.mesh.userData.mouseId = published.id;
+    actor.saved = true;
+    if (crowd.getLive() === actor) {
+      shareHint.textContent = published.remote
+        ? 'Scan to open this mouse'
+        : 'Saved on this display';
+      await showShareForActor(actor);
+      if (!published.remote) {
+        shareHint.textContent = 'Saved on this display';
+      }
+    }
+  } catch (error) {
+    console.error(error);
+  } finally {
+    saving = false;
+  }
+}
+
+function trackHeadOnly(face) {
+  const live = crowd.getLive();
+  if (!live) return;
+  live.mesh.userData.targetYaw = face.yaw;
+  live.mesh.userData.targetPitch = face.pitch;
+  live.mesh.userData.targetRoll = face.roll;
 }
 
 function onFace(face, now) {
+  const live = crowd.getLive();
+
+  // QR / restored mice stay in front until cleared — webcam must not replace them.
+  if (live?.locked) {
+    state = 'live';
+    if (face.present) trackHeadOnly(face);
+    return;
+  }
+
   if (!face.present) {
     if (state === 'settling') {
       if (!absentSince) absentSince = now;
@@ -50,6 +132,7 @@ function onFace(face, now) {
     if (state === 'live') {
       if (!absentSince) absentSince = now;
       if (now - absentSince > ABSENCE_MS) {
+        if (live && !live.saved) persistLiveMouse(live);
         crowd.freeze();
         setIdle();
       }
@@ -60,9 +143,11 @@ function onFace(face, now) {
   absentSince = 0;
 
   if (face.jumped && state === 'live') {
+    if (live && !live.saved) persistLiveMouse(live);
     crowd.freeze();
     state = 'settling';
     settleStart = now;
+    liveSince = 0;
     return;
   }
   if (face.jumped && state === 'settling') {
@@ -83,11 +168,20 @@ function onFace(face, now) {
     if (now - settleStart >= SETTLE_MS) {
       crowd.spawnLive(face.patches);
       state = 'live';
+      liveSince = now;
     }
     return;
   }
 
-  if (state === 'live') crowd.updateLive(face);
+  if (state === 'live') {
+    if (!live) return;
+    // Restored / clicked mice keep their saved face; only webcam-born live canvases update.
+    if (live.mesh.userData.liveCanvases) crowd.updateLive(face);
+    else trackHeadOnly(face);
+    if (!live.saved && liveSince && now - liveSince >= SAVE_AFTER_MS) {
+      persistLiveMouse(live);
+    }
+  }
 }
 
 function frame(now) {
@@ -108,21 +202,54 @@ async function startCamera() {
   await video.play();
 }
 
+async function loadSharedMouse(id) {
+  showGate('Loading mouse…');
+  try {
+    const snapshot = await fetchSnapshot(id);
+    if (snapshot.featureScale) applyFeatureScale(snapshot.featureScale);
+    const canvases = await canvasesFromSnapshot(snapshot);
+    const actor = crowd.spawnLive(canvases, {
+      traits: snapshot.traits,
+      id: snapshot.id,
+      locked: true,
+      staticFace: true,
+      replaceLocked: true,
+    });
+    actor.saved = true;
+    actor.locked = true;
+    state = 'live';
+    liveSince = performance.now();
+    hideGate();
+    await showShareForActor(actor);
+  } catch (error) {
+    console.error(error);
+    showGate('Could not load that mouse');
+  }
+}
+
 async function boot() {
-  showGate('Starting…');
+  const sharedId = new URLSearchParams(location.search).get('m');
+  if (sharedId) {
+    await loadSharedMouse(sharedId);
+  } else {
+    showGate('Starting…');
+  }
+
   try {
     await initFace();
   } catch (error) {
-    showGate('The face tracker could not start');
+    if (!sharedId) showGate('The face tracker could not start');
     console.error(error);
-    return;
+    if (!sharedId) return;
   }
+
   try {
     await startCamera();
     tracking = true;
-    hideGate();
+    if (!sharedId) hideGate();
   } catch (error) {
     console.error(error);
+    if (sharedId) return;
     showGate('Click to allow the camera');
     const retry = async () => {
       try {
@@ -159,6 +286,21 @@ featureScale.addEventListener('input', () => {
   applyFeatureScale(featureScale.value);
 });
 
+view.addEventListener('pointermove', (event) => {
+  const over = crowd.hoverAt(event.clientX, event.clientY, camera, view);
+  view.style.cursor = over ? 'pointer' : '';
+});
+
+view.addEventListener('click', (event) => {
+  const actor = crowd.promoteAt(event.clientX, event.clientY, camera, view);
+  if (!actor) return;
+  state = 'live';
+  liveSince = performance.now();
+  absentSince = 0;
+  // Keep saved face; head still follows if a visitor is present.
+  actor.mesh.userData.liveCanvases = null;
+});
+
 window.addEventListener('keydown', (event) => {
   if (event.key === 'f' || event.key === 'F') {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
@@ -168,6 +310,13 @@ window.addEventListener('keydown', (event) => {
     crowd.clear();
     resetFaceTracking();
     setIdle();
+    showShareForActor(null);
+    // Drop ?m= so a reload does not re-lock the shared mouse.
+    if (new URLSearchParams(location.search).has('m')) {
+      const url = new URL(location.href);
+      url.searchParams.delete('m');
+      history.replaceState(null, '', url);
+    }
   }
   if (event.key === 'h' || event.key === 'H') {
     setTuneOpen(tune.hidden);
@@ -176,6 +325,7 @@ window.addEventListener('keydown', (event) => {
 
 window.addEventListener('contextmenu', (event) => event.preventDefault());
 applyFeatureScale(featureScale.value);
+showShareForActor(null);
 
 function stagePatch(label, draw) {
   const canvas = document.createElement('canvas');

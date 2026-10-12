@@ -13,9 +13,13 @@
     <button id="tune-toggle" type="button" aria-expanded="false" aria-controls="tune" title="Face size (H)">Face size</button>
     <div id="tune" class="hidden" hidden>
       <label for="feature-scale">Eyes &amp; mouth</label>
-      <input id="feature-scale" type="range" min="0.7" max="2.2" step="0.05" value="1" />
+      <input id="feature-scale" type="range" min="0.7" max="2.2" step="0.05" value="1.5" />
       <span id="feature-scale-val">1.00×</span>
     </div>
+    <aside id="share" class="empty" aria-label="Share this mouse">
+      <canvas id="share-qr" width="132" height="132"></canvas>
+      <p id="share-hint">Hold still to save your mouse</p>
+    </aside>
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>

@@ -292,17 +292,33 @@ function makeTraits() {
   };
 }
 
+function asColor(value) {
+  return value?.isColor ? value : new THREE.Color(value);
+}
+
+/** Rebuild Color traits from a saved plain snapshot. */
+export function hydrateTraits(data) {
+  return {
+    ...data,
+    fur: asColor(data.fur),
+    belly: asColor(data.belly),
+    earInner: asColor(data.earInner),
+    nose: asColor(data.nose),
+    whisker: asColor(data.whisker),
+  };
+}
+
 function clonePalette(traits) {
   const fur = shared.fur.clone();
-  fur.color.copy(traits.fur);
+  fur.color.copy(asColor(traits.fur));
   const belly = shared.belly.clone();
-  belly.color.copy(traits.belly);
+  belly.color.copy(asColor(traits.belly));
   const ear = shared.ear.clone();
-  ear.color.copy(traits.earInner);
+  ear.color.copy(asColor(traits.earInner));
   const nose = shared.nose.clone();
-  nose.color.copy(traits.nose);
+  nose.color.copy(asColor(traits.nose));
   const whisker = shared.whisker.clone();
-  whisker.color.copy(traits.whisker);
+  whisker.color.copy(asColor(traits.whisker));
   return { fur, belly, ear, nose, whisker };
 }
 
@@ -456,18 +472,19 @@ function addWhiskers(head, mats, traits, ownGeometries) {
   }
 }
 
-export function createMouse(canvases) {
+export function createMouse(canvases, options = {}) {
   buildShared();
-  const traits = makeTraits();
+  const traits = options.traits ? hydrateTraits(options.traits) : makeTraits();
   const mats = clonePalette(traits);
   const ownGeometries = [];
 
   const root = new THREE.Group();
-  root.userData.phase = Math.random() * Math.PI * 2;
+  root.userData.phase = options.phase ?? Math.random() * Math.PI * 2;
   root.userData.targetYaw = 0;
   root.userData.targetPitch = 0;
   root.userData.targetRoll = 0;
   root.userData.live = false;
+  root.userData.mouseId = options.id || null;
   root.userData.traits = traits;
   root.userData.ownMaterials = Object.values(mats);
   root.userData.ownGeometries = ownGeometries;
@@ -554,13 +571,15 @@ export function createMouse(canvases) {
 export function retargetFace(mouse, canvases, { copy }) {
   for (const key of PATCH_KEYS) {
     const plane = mouse.userData.planes[key];
-    const source = canvases[key];
+    const source = canvases?.[key];
+    if (!plane || !source) continue;
     let canvas = source;
     if (copy) {
       canvas = document.createElement('canvas');
-      canvas.width = source.width;
-      canvas.height = source.height;
+      canvas.width = source.width || 192;
+      canvas.height = source.height || 192;
       const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(source, 0, 0);
       canvas.aspect = source.aspect;
     }

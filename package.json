@@ -9,9 +9,12 @@
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.22",
+    "@netlify/blobs": "^11.1.4",
+    "qrcode": "^1.5.4",
     "three": "^0.170.0"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.6",
     "vite": "^6.0.0"
   }
 }
