@@ -40,6 +40,7 @@ export function serializeTraits(traits) {
     earInner: colorToHex(traits.earInner),
     nose: colorToHex(traits.nose),
     whisker: colorToHex(traits.whisker),
+    earSides: traits.earSides ?? 0,
     earSize: traits.earSize,
     earWide: traits.earWide,
     earThick: traits.earThick,

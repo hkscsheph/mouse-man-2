@@ -161,7 +161,7 @@ function buildShared() {
   // Flat belly patch — sits on the pear face instead of a sphere that escapes the silhouette.
   shared.bellyGeo = new THREE.SphereGeometry(0.33, 28, 18);
   shared.snout = new THREE.SphereGeometry(0.2, 28, 20);
-  shared.earGeo = new THREE.SphereGeometry(0.3, 28, 18);
+  shared.earGeo = Object.create(null); // sides → ExtrudeGeometry cache
   shared.noseGeo = new THREE.SphereGeometry(0.055, 16, 12);
   shared.palm = new THREE.SphereGeometry(0.085, 16, 12);
   shared.finger = new THREE.CapsuleGeometry(0.016, 0.07, 4, 8);
@@ -261,6 +261,168 @@ function hsl(h, s, l) {
   return new THREE.Color().setHSL(((h % 360) + 360) % 360 / 360, s, l);
 }
 
+/** Ear outline: 3–8 = regular polygon, 0 = circle. */
+const EAR_SIDE_CHOICES = [3, 4, 5, 6, 7, 8, 0];
+
+/** Regular n-gon with soft quadratic corners (still reads as that polygon). */
+function roundedRegularPolygonShape(sides, radius, roundness = 0.5) {
+  const shape = new THREE.Shape();
+  const verts = [];
+  for (let i = 0; i < sides; i += 1) {
+    const a = (i / sides) * Math.PI * 2 - Math.PI / 2;
+    verts.push({ x: Math.cos(a) * radius, y: Math.sin(a) * radius });
+  }
+  const maxR = radius * Math.sin(Math.PI / sides) * 0.9;
+  // Fewer sides → larger fillets so triangles/squares stay plump, not pointy.
+  const r = Math.min(maxR, radius * roundness * (0.62 + (8 - sides) * 0.05));
+
+  for (let i = 0; i < sides; i += 1) {
+    const prev = verts[(i + sides - 1) % sides];
+    const curr = verts[i];
+    const next = verts[(i + 1) % sides];
+    const toPrev = { x: prev.x - curr.x, y: prev.y - curr.y };
+    const toNext = { x: next.x - curr.x, y: next.y - curr.y };
+    const lenPrev = Math.hypot(toPrev.x, toPrev.y) || 1;
+    const lenNext = Math.hypot(toNext.x, toNext.y) || 1;
+    const p1 = {
+      x: curr.x + (toPrev.x / lenPrev) * r,
+      y: curr.y + (toPrev.y / lenPrev) * r,
+    };
+    const p2 = {
+      x: curr.x + (toNext.x / lenNext) * r,
+      y: curr.y + (toNext.y / lenNext) * r,
+    };
+    if (i === 0) shape.moveTo(p1.x, p1.y);
+    else shape.lineTo(p1.x, p1.y);
+    shape.quadraticCurveTo(curr.x, curr.y, p2.x, p2.y);
+  }
+  shape.closePath();
+  return shape;
+}
+
+/** Lens / pillow solid: fat at center, tapering to a thin rim.
+ *  Center bulge is biased forward (+Z) so the ear reads fronter. */
+function pillowFromContour(contour, halfThick = 0.16, rings = 7) {
+  const n = contour.length;
+  const positions = [];
+  const indices = [];
+
+  const push = (x, y, z) => {
+    positions.push(x, y, z);
+    return positions.length / 3 - 1;
+  };
+
+  // thickness profile: ~1 at center → ~rim at edge (cosine ease)
+  const thickAt = (t) => {
+    const rim = 0.06;
+    return halfThick * (rim + (1 - rim) * Math.cos(t * Math.PI * 0.5) ** 1.35);
+  };
+  // Slide the plump center forward; rim stays put.
+  const forwardAt = (t) => halfThick * 0.42 * Math.cos(t * Math.PI * 0.5) ** 1.6;
+
+  const zPair = (t) => {
+    const bulge = thickAt(t);
+    const pushFwd = forwardAt(t);
+    return {
+      front: pushFwd + bulge * 1.2,
+      back: pushFwd - bulge * 0.7,
+    };
+  };
+
+  const front = [];
+  const back = [];
+  const c0 = zPair(0);
+  front.push(push(0, 0, c0.front));
+  back.push(push(0, 0, c0.back));
+
+  for (let r = 1; r <= rings; r += 1) {
+    const t = r / rings;
+    const s = t;
+    const { front: zF, back: zB } = zPair(t);
+    const fRing = [];
+    const bRing = [];
+    for (let i = 0; i < n; i += 1) {
+      const p = contour[i];
+      fRing.push(push(p.x * s, p.y * s, zF));
+      bRing.push(push(p.x * s, p.y * s, zB));
+    }
+    front.push(fRing);
+    back.push(bRing);
+  }
+
+  // Fan from center to first ring
+  for (let i = 0; i < n; i += 1) {
+    const i1 = (i + 1) % n;
+    indices.push(front[0], front[1][i], front[1][i1]);
+    indices.push(back[0], back[1][i1], back[1][i]);
+  }
+
+  // Quads between rings
+  for (let r = 1; r < rings; r += 1) {
+    const a = front[r];
+    const b = front[r + 1];
+    const c = back[r];
+    const d = back[r + 1];
+    for (let i = 0; i < n; i += 1) {
+      const i1 = (i + 1) % n;
+      indices.push(a[i], b[i], b[i1], a[i], b[i1], a[i1]);
+      indices.push(c[i], d[i1], d[i], c[i], c[i1], d[i1]);
+    }
+  }
+
+  // Stitch thin rim (front outer ↔ back outer)
+  const fo = front[rings];
+  const bo = back[rings];
+  for (let i = 0; i < n; i += 1) {
+    const i1 = (i + 1) % n;
+    indices.push(fo[i], bo[i], bo[i1], fo[i], bo[i1], fo[i1]);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function earGeometry(sides) {
+  const nSides = sides >= 3 && sides <= 8 ? sides : 0;
+  const key = `fwd:${nSides}`;
+  if (shared.earGeo[key]) return shared.earGeo[key];
+  const radius = 0.3;
+  let shape;
+  let divisions;
+  if (nSides === 0) {
+    shape = new THREE.Shape();
+    shape.absarc(0, 0, radius, 0, Math.PI * 2, false);
+    divisions = 48;
+  } else {
+    shape = roundedRegularPolygonShape(nSides, radius, 0.52);
+    divisions = Math.max(36, nSides * 10);
+  }
+  const contour = shape.getPoints(divisions);
+  // Drop duplicate close point if present
+  if (contour.length > 2) {
+    const a = contour[0];
+    const b = contour[contour.length - 1];
+    if (Math.hypot(a.x - b.x, a.y - b.y) < 1e-6) contour.pop();
+  }
+  if (contour.length < 3) {
+    // Fallback circle if outline failed
+    const fallback = [];
+    for (let i = 0; i < 48; i += 1) {
+      const a = (i / 48) * Math.PI * 2;
+      fallback.push({ x: Math.cos(a) * radius, y: Math.sin(a) * radius });
+    }
+    const geo = pillowFromContour(fallback, 0.17, 8);
+    shared.earGeo[key] = geo;
+    return geo;
+  }
+  const geo = pillowFromContour(contour, 0.17, 8);
+  shared.earGeo[key] = geo;
+  return geo;
+}
+
 /** One-off look for each visitor mouse. */
 function makeTraits() {
   return {
@@ -269,6 +431,7 @@ function makeTraits() {
     earInner: hsl(rand(340, 380), rand(0.28, 0.55), rand(0.62, 0.8)),
     nose: hsl(rand(265, 320), rand(0.22, 0.58), rand(0.32, 0.58)),
     whisker: hsl(rand(15, 40), rand(0.15, 0.4), rand(0.12, 0.28)),
+    earSides: EAR_SIDE_CHOICES[Math.floor(Math.random() * EAR_SIDE_CHOICES.length)],
     earSize: rand(0.78, 1.32),
     earWide: rand(1, 1.2),
     earThick: rand(0.75, 1.25),
@@ -298,6 +461,7 @@ function asColor(value) {
 
 /** Rebuild Color traits from a saved plain snapshot. */
 export function hydrateTraits(data) {
+  const sides = Number(data.earSides);
   return {
     ...data,
     fur: asColor(data.fur),
@@ -305,6 +469,7 @@ export function hydrateTraits(data) {
     earInner: asColor(data.earInner),
     nose: asColor(data.nose),
     whisker: asColor(data.whisker),
+    earSides: sides >= 3 && sides <= 8 ? sides : 0,
   };
 }
 
@@ -338,15 +503,16 @@ function addFacePlane(parent, canvas, key, position, height, maxWidth, order) {
 
 function addEar(head, side, mats, traits) {
   const size = traits.earSize;
-  const ear = new THREE.Mesh(shared.earGeo, mats.fur);
-  ear.scale.set(0.95 * traits.earWide * size, 1.08 * size, 0.28 * traits.earThick);
-  ear.position.set(0.38 * side * traits.earFlare, 0.34 + traits.earTilt * 0.08, -0.02);
+  const geo = earGeometry(traits.earSides);
+  const ear = new THREE.Mesh(geo, mats.fur);
+  ear.scale.set(0.95 * traits.earWide * size, 1.08 * size, 1.05 * traits.earThick);
+  ear.position.set(0.38 * side * traits.earFlare, 0.34 + traits.earTilt * 0.08, 0.02);
   ear.rotation.set(0.12 + traits.earTilt * 0.4, -0.35 * side * traits.earFlare, (-0.55 - traits.earTilt * 0.3) * side);
   head.add(ear);
 
-  const inner = new THREE.Mesh(shared.earGeo, mats.ear);
-  inner.scale.set(0.62 * traits.earWide * size, 0.72 * size, 0.16 * traits.earThick);
-  inner.position.set(0.37 * side * traits.earFlare, 0.34 + traits.earTilt * 0.08, 0.07);
+  const inner = new THREE.Mesh(geo, mats.ear);
+  inner.scale.set(0.62 * traits.earWide * size, 0.72 * size, 0.7 * traits.earThick);
+  inner.position.set(0.37 * side * traits.earFlare, 0.34 + traits.earTilt * 0.08, .15);
   inner.rotation.copy(ear.rotation);
   head.add(inner);
 }
