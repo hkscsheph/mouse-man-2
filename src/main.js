@@ -3,6 +3,7 @@ import { initFace, readFace, resetFaceTracking } from './face.js';
 import { getFeatureScale, setFeatureScale } from './mouse.js';
 import {
   canvasesFromSnapshot,
+  captureFaceCanvases,
   fetchSnapshot,
   publishSnapshot,
   shareUrlForId,
@@ -78,13 +79,21 @@ crowd.onFrontChange((actor) => {
   showShareForActor(actor);
 });
 
+function lockFaceSnapshot(actor) {
+  if (!actor || actor.frozenFace) return actor?.frozenFace;
+  actor.frozenFace = captureFaceCanvases(actor.mesh);
+  return actor.frozenFace;
+}
+
 async function persistLiveMouse(actor) {
   if (!actor || actor.saved || saving) return;
   saving = true;
   try {
+    const faceCanvases = lockFaceSnapshot(actor);
     const snapshot = snapshotFromMouse(actor.mesh, {
       id: actor.mesh.userData.mouseId,
       featureScale: getFeatureScale(),
+      faceCanvases,
     });
     const published = await publishSnapshot(snapshot);
     actor.mesh.userData.mouseId = published.id;
@@ -103,6 +112,46 @@ async function persistLiveMouse(actor) {
   } finally {
     saving = false;
   }
+}
+
+function retireLiveMouse({ force = false } = {}) {
+  const live = crowd.getLive();
+  if (!live) return;
+  if (live.locked && !force) return;
+  if (live.locked) live.locked = false;
+  lockFaceSnapshot(live);
+  if (!live.saved) persistLiveMouse(live);
+  crowd.freeze();
+}
+
+function clearShareQuery() {
+  if (!new URLSearchParams(location.search).has('m')) return;
+  const url = new URL(location.href);
+  url.searchParams.delete('m');
+  history.replaceState(null, '', url);
+}
+
+/** Staff: freeze current front mouse and start a new webcam-linked one. */
+function initWebcamMouse() {
+  retireLiveMouse({ force: true });
+  clearShareQuery();
+  resetFaceTracking();
+
+  const now = performance.now();
+  absentSince = 0;
+  const face = tracking ? readFace(video, now) : { present: false };
+
+  if (face.present && face.patches && face.eyeSpan >= MIN_EYE_SPAN) {
+    crowd.spawnLive(face.patches, { replaceLocked: true });
+    state = 'live';
+    liveSince = now;
+    settleStart = 0;
+    return;
+  }
+
+  state = 'settling';
+  settleStart = now;
+  liveSince = 0;
 }
 
 function trackHeadOnly(face) {
@@ -132,8 +181,7 @@ function onFace(face, now) {
     if (state === 'live') {
       if (!absentSince) absentSince = now;
       if (now - absentSince > ABSENCE_MS) {
-        if (live && !live.saved) persistLiveMouse(live);
-        crowd.freeze();
+        retireLiveMouse();
         setIdle();
       }
     }
@@ -143,8 +191,7 @@ function onFace(face, now) {
   absentSince = 0;
 
   if (face.jumped && state === 'live') {
-    if (live && !live.saved) persistLiveMouse(live);
-    crowd.freeze();
+    retireLiveMouse();
     state = 'settling';
     settleStart = now;
     liveSince = 0;
@@ -302,6 +349,12 @@ view.addEventListener('click', (event) => {
 });
 
 window.addEventListener('keydown', (event) => {
+  if (event.repeat) return;
+  if (event.code === 'Space' || event.key === ' ') {
+    event.preventDefault();
+    initWebcamMouse();
+    return;
+  }
   if (event.key === 'f' || event.key === 'F') {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
     else document.exitFullscreen?.();
@@ -311,12 +364,7 @@ window.addEventListener('keydown', (event) => {
     resetFaceTracking();
     setIdle();
     showShareForActor(null);
-    // Drop ?m= so a reload does not re-lock the shared mouse.
-    if (new URLSearchParams(location.search).has('m')) {
-      const url = new URL(location.href);
-      url.searchParams.delete('m');
-      history.replaceState(null, '', url);
-    }
+    clearShareQuery();
   }
   if (event.key === 'h' || event.key === 'H') {
     setTuneOpen(tune.hidden);

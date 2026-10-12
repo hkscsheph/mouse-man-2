@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { captureFaceCanvases } from './persist.js';
 import { createMouse, disposeMouse, refitFacePlanes, refreshLiveFace, retargetFace } from './mouse.js';
 
 const LIVE = { x: 0.05, z: 1.55, ry: 0.02, s: 1.06 };
@@ -168,9 +169,18 @@ export function createCrowd(scene) {
 
   function freezeActor(actor) {
     if (!actor || actor.role !== 'live') return;
-    const canvases = actor.mesh.userData.liveCanvases;
+    // Prefer the face captured at save time so the crowd keeps that snapshot,
+    // not whatever the webcam last painted onto the live canvases.
+    if (!actor.frozenFace && actor.mesh.userData.liveCanvases) {
+      try {
+        actor.frozenFace = captureFaceCanvases(actor.mesh);
+      } catch (error) {
+        console.warn('freeze face capture failed', error);
+      }
+    }
+    const face = actor.frozenFace || actor.mesh.userData.liveCanvases;
     try {
-      if (canvases) retargetFace(actor.mesh, canvases, { copy: true });
+      if (face) retargetFace(actor.mesh, face, { copy: true });
     } catch (error) {
       console.warn('freeze face copy failed', error);
     }

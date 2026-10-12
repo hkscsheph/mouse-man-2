@@ -76,12 +76,37 @@ function canvasToPng(source, size = 160) {
   };
 }
 
-export function snapshotFromMouse(mouse, { id, featureScale } = {}) {
+function cloneCanvas(source) {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width || 160;
+  canvas.height = source.height || 160;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(source, 0, 0);
+  canvas.aspect = source.aspect || canvas.width / canvas.height || 1;
+  return canvas;
+}
+
+/** Independent face canvases at a moment in time (for freeze / persist). */
+export function captureFaceCanvases(mouse) {
   const patches = {};
   for (const key of PATCH_KEYS) {
     const plane = mouse.userData.planes[key];
     const map = plane?.material?.map;
     const source = map?.image || mouse.userData.liveCanvases?.[key];
+    if (!source) continue;
+    patches[key] = cloneCanvas(source);
+  }
+  return patches;
+}
+
+export function snapshotFromMouse(mouse, { id, featureScale, faceCanvases } = {}) {
+  const patches = {};
+  const sources = faceCanvases || null;
+  for (const key of PATCH_KEYS) {
+    const plane = mouse.userData.planes[key];
+    const map = plane?.material?.map;
+    const source = sources?.[key] || map?.image || mouse.userData.liveCanvases?.[key];
     if (!source) continue;
     patches[key] = canvasToPng(source);
   }
