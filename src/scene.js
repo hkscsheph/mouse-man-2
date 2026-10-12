@@ -23,11 +23,12 @@ function skyMaterial() {
       uniform vec3 midColor;
       uniform vec3 horizonColor;
       void main() {
-        float h = clamp(vDir.y * 1.2 + 0.08, 0.0, 1.0);
-        vec3 col = mix(horizonColor, midColor, smoothstep(0.0, 0.45, h));
-        col = mix(col, topColor, smoothstep(0.38, 1.0, h));
-        vec3 sunDir = normalize(vec3(-0.45, 0.38, -0.2));
-        float sun = pow(max(dot(normalize(vDir), sunDir), 0.0), 24.0);
+        // Softer vertical falloff so sky bands cover more of the view.
+        float h = clamp(vDir.y * 0.72 + 0.22, 0.0, 1.0);
+        vec3 col = mix(horizonColor, midColor, smoothstep(0.0, 0.55, h));
+        col = mix(col, topColor, smoothstep(0.28, 1.0, h));
+        vec3 sunDir = normalize(vec3(-0.45, 0.42, -0.2));
+        float sun = pow(max(dot(normalize(vDir), sunDir), 0.0), 22.0);
         col += vec3(1.0, 0.78, 0.4) * sun * 0.55;
         gl_FragColor = vec4(col, 1.0);
       }
@@ -54,10 +55,12 @@ function groundTexture() {
 function addHills(scene) {
   const geo = new THREE.SphereGeometry(1, 28, 18);
   const hills = [
-    { x: -7.2, z: -10.5, sx: 5.4, sy: 1.5, sz: 3.1, color: 0x6d9148 },
-    { x: -1.6, z: -12.2, sx: 6.8, sy: 1.8, sz: 3.4, color: 0x5d843c },
-    { x: 3.4, z: -11.4, sx: 5.2, sy: 1.45, sz: 2.8, color: 0x7aa350 },
-    { x: 8.6, z: -12.6, sx: 7.2, sy: 1.9, sz: 3.6, color: 0x4e7838 },
+    { x: -7.2, z: -10.5, sx: 5.4, sy: 2.6, sz: 3.1, color: 0x6d9148 },
+    { x: -1.6, z: -12.2, sx: 6.8, sy: 3.2, sz: 3.4, color: 0x5d843c },
+    { x: 3.4, z: -11.4, sx: 5.2, sy: 2.5, sz: 2.8, color: 0x7aa350 },
+    { x: 8.6, z: -12.6, sx: 7.2, sy: 3.4, sz: 3.6, color: 0x4e7838 },
+    { x: -4.2, z: -14.5, sx: 8.4, sy: 3.8, sz: 4.2, color: 0x547a3a },
+    { x: 5.8, z: -15.2, sx: 7.6, sy: 3.5, sz: 3.8, color: 0x628c44 },
   ];
   for (const hill of hills) {
     const mesh = new THREE.Mesh(
@@ -65,7 +68,7 @@ function addHills(scene) {
       new THREE.MeshStandardMaterial({ color: hill.color, roughness: 1, metalness: 0 }),
     );
     mesh.scale.set(hill.sx, hill.sy, hill.sz);
-    mesh.position.set(hill.x, -0.35, hill.z);
+    mesh.position.set(hill.x, -0.15, hill.z);
     scene.add(mesh);
   }
 }
@@ -106,17 +109,18 @@ export function createScene(canvas) {
   renderer.toneMappingExposure = 1.08;
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0xf0c2a4, 12, 30);
+  scene.fog = new THREE.Fog(0xf0c2a4, 14, 42);
 
-  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 80);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
   const look = new THREE.Vector3(0.05, 1.02, 0.25);
 
   const sky = new THREE.Mesh(new THREE.SphereGeometry(48, 32, 20), skyMaterial());
+  sky.scale.set(1, 1.55, 1);
   sky.frustumCulled = false;
   scene.add(sky);
 
   const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(26, 64),
+    new THREE.CircleGeometry(32, 64),
     new THREE.MeshStandardMaterial({ map: groundTexture(), roughness: 0.96, metalness: 0 }),
   );
   ground.rotation.x = -Math.PI / 2;
