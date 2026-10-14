@@ -99,16 +99,19 @@ async function persistLiveMouse(actor) {
     actor.mesh.userData.mouseId = published.id;
     actor.saved = true;
     if (crowd.getLive() === actor) {
-      shareHint.textContent = published.remote
-        ? 'Scan to open this mouse'
-        : 'Saved on this display';
+      shareHint.textContent = 'Scan to open this mouse';
       await showShareForActor(actor);
-      if (!published.remote) {
-        shareHint.textContent = 'Saved on this display';
-      }
     }
   } catch (error) {
     console.error(error);
+    // Keep unsaved so we retry; do not show a QR that other phones cannot open.
+    actor.saved = false;
+    actor.saveRetryAfter = performance.now() + 4000;
+    if (crowd.getLive() === actor) {
+      shareHint.textContent = 'Could not share — will retry';
+      sharePanel.classList.add('empty');
+      await renderShareQr(shareQr, '');
+    }
   } finally {
     saving = false;
   }
@@ -225,7 +228,12 @@ function onFace(face, now) {
     // Restored / clicked mice keep their saved face; only webcam-born live canvases update.
     if (live.mesh.userData.liveCanvases) crowd.updateLive(face);
     else trackHeadOnly(face);
-    if (!live.saved && liveSince && now - liveSince >= SAVE_AFTER_MS) {
+    if (
+      !live.saved &&
+      liveSince &&
+      now - liveSince >= SAVE_AFTER_MS &&
+      (!live.saveRetryAfter || now >= live.saveRetryAfter)
+    ) {
       persistLiveMouse(live);
     }
   }

@@ -164,36 +164,63 @@ export async function loadLocal(id) {
   return row || null;
 }
 
+function mouseApiUrl(query = '') {
+  // Absolute origin so Vite's relative `base: './'` never breaks the API path.
+  const url = new URL('api/mouse', `${location.origin}/`);
+  if (query) {
+    const params = new URLSearchParams(query);
+    for (const [key, value] of params) url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
+
 export async function publishSnapshot(snapshot) {
   await saveLocal(snapshot);
-  try {
-    const res = await fetch('/api/mouse', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(snapshot),
-    });
-    if (!res.ok) throw new Error(`publish ${res.status}`);
-    const data = await res.json();
-    return { id: data.id || snapshot.id, remote: true };
-  } catch {
-    return { id: snapshot.id, remote: false };
+  const res = await fetch(mouseApiUrl(), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(snapshot),
+  });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const payload = await res.json();
+      detail = payload?.detail || payload?.error || '';
+    } catch {
+      /* ignore */
+    }
+    throw new Error(`publish ${res.status}${detail ? `: ${detail}` : ''}`);
   }
+  const data = await res.json();
+  return { id: data.id || snapshot.id, remote: true };
 }
 
 export async function fetchSnapshot(id) {
+  // Prefer remote on share links so another device does not stick to a stale local miss.
+  try {
+    const res = await fetch(mouseApiUrl(`id=${encodeURIComponent(id)}`));
+    if (res.ok) {
+      const snapshot = await res.json();
+      await saveLocal(snapshot);
+      return snapshot;
+    }
+    if (res.status !== 404) {
+      throw new Error(`fetch ${res.status}`);
+    }
+  } catch (error) {
+    const local = await loadLocal(id);
+    if (local) return local;
+    throw error;
+  }
   const local = await loadLocal(id);
   if (local) return local;
-  const res = await fetch(`/api/mouse?id=${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error('Mouse not found');
-  const snapshot = await res.json();
-  await saveLocal(snapshot);
-  return snapshot;
+  throw new Error('Mouse not found');
 }
 
 export function shareUrlForId(id) {
   const url = new URL(location.href);
-  url.searchParams.delete('stage');
-  url.searchParams.set('m', id);
+  url.search = '';
   url.hash = '';
+  url.searchParams.set('m', id);
   return url.toString();
 }
