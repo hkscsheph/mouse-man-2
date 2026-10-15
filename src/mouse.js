@@ -730,7 +730,8 @@ export function createMouse(canvases, options = {}) {
     nose: addFacePlane(head, canvases.nose, 'nose', new THREE.Vector3(0, -0.15, 0.6), 0.2, 0.26, 3),
   };
   root.userData.planes = planes;
-  root.userData.liveCanvases = canvases;
+  // staticFace = restored / QR mouse — never wire webcam patch canvases.
+  root.userData.liveCanvases = options.staticFace ? null : canvases;
   return root;
 }
 

@@ -218,7 +218,9 @@ export function createCrowd(scene) {
       if (live) freezeActor(live);
       const mesh = createMouse(canvases, options);
       mesh.userData.live = true;
-      if (options.staticFace) mesh.userData.liveCanvases = null;
+      if (options.staticFace || options.locked) {
+        mesh.userData.liveCanvases = null;
+      }
       const from = { ...LIVE, s: LIVE.s * 0.84 };
       writePose(mesh, from);
       scene.add(mesh);
@@ -228,7 +230,7 @@ export function createCrowd(scene) {
         slot: null,
         born: performance.now(),
         saved: Boolean(options.id),
-        locked: Boolean(options.locked),
+        locked: Boolean(options.locked || options.staticFace),
         anim: { from, to: { ...LIVE }, t: 0, dur: 0.42 },
       };
       actors.push(actor);
@@ -237,7 +239,7 @@ export function createCrowd(scene) {
       return actor;
     },
     updateLive(face) {
-      if (!live) return;
+      if (!live || live.locked) return;
       live.mesh.userData.targetYaw = face.yaw;
       live.mesh.userData.targetPitch = face.pitch;
       live.mesh.userData.targetRoll = face.roll;

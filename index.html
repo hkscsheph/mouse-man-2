@@ -17,7 +17,12 @@
       <span id="feature-scale-val">1.00×</span>
     </div>
     <aside id="share" class="empty" aria-label="Share this mouse">
-      <canvas id="share-qr" width="132" height="132"></canvas>
+      <div id="share-frame">
+        <canvas id="share-qr" width="132" height="132"></canvas>
+        <div id="share-loading" aria-hidden="true">
+          <span class="share-spinner"></span>
+        </div>
+      </div>
       <p id="share-hint">Hold still to save your mouse</p>
     </aside>
     <script type="module" src="./src/main.js"></script>

@@ -40,6 +40,8 @@ let tracking = false;
 let last = performance.now();
 let saving = false;
 let currentShareUrl = '';
+/** QR / ?m= visit: block webcam settle & face feeding until Space or R. */
+let showcaseMode = Boolean(new URLSearchParams(location.search).get('m'));
 
 function showGate(text) {
   gate.textContent = text;
@@ -57,21 +59,34 @@ function setIdle() {
   liveSince = 0;
 }
 
+function setShareLoading(on, hint = 'Saving your mouse…') {
+  sharePanel.classList.toggle('loading', on);
+  if (on) {
+    sharePanel.classList.remove('empty');
+    shareHint.textContent = hint;
+  }
+}
+
 async function showShareForActor(actor) {
   if (!actor?.mesh?.userData?.mouseId) {
     currentShareUrl = '';
     shareHint.textContent = 'Hold still to save your mouse';
     await renderShareQr(shareQr, '');
+    sharePanel.classList.remove('loading');
     sharePanel.classList.add('empty');
     return;
   }
   currentShareUrl = shareUrlForId(actor.mesh.userData.mouseId);
-  shareHint.textContent = 'Scan to open this mouse';
-  sharePanel.classList.remove('empty');
+  setShareLoading(true, 'Preparing QR…');
   try {
     await renderShareQr(shareQr, currentShareUrl);
+    sharePanel.classList.remove('loading', 'empty');
+    shareHint.textContent = 'Scan to open this mouse';
   } catch (error) {
     console.error(error);
+    sharePanel.classList.remove('loading');
+    sharePanel.classList.add('empty');
+    shareHint.textContent = 'Could not make QR';
   }
 }
 
@@ -88,6 +103,7 @@ function lockFaceSnapshot(actor) {
 async function persistLiveMouse(actor) {
   if (!actor || actor.saved || saving) return;
   saving = true;
+  if (crowd.getLive() === actor) setShareLoading(true, 'Saving your mouse…');
   try {
     const faceCanvases = lockFaceSnapshot(actor);
     const snapshot = snapshotFromMouse(actor.mesh, {
@@ -99,7 +115,6 @@ async function persistLiveMouse(actor) {
     actor.mesh.userData.mouseId = published.id;
     actor.saved = true;
     if (crowd.getLive() === actor) {
-      shareHint.textContent = 'Scan to open this mouse';
       await showShareForActor(actor);
     }
   } catch (error) {
@@ -108,8 +123,9 @@ async function persistLiveMouse(actor) {
     actor.saved = false;
     actor.saveRetryAfter = performance.now() + 4000;
     if (crowd.getLive() === actor) {
-      shareHint.textContent = 'Could not share — will retry';
+      sharePanel.classList.remove('loading');
       sharePanel.classList.add('empty');
+      shareHint.textContent = 'Could not share — will retry';
       await renderShareQr(shareQr, '');
     }
   } finally {
@@ -128,15 +144,23 @@ function retireLiveMouse({ force = false } = {}) {
 }
 
 function clearShareQuery() {
+  showcaseMode = false;
   if (!new URLSearchParams(location.search).has('m')) return;
   const url = new URL(location.href);
   url.searchParams.delete('m');
   history.replaceState(null, '', url);
 }
 
+function endShowcase() {
+  showcaseMode = false;
+  const live = crowd.getLive();
+  if (live) live.locked = false;
+}
+
 /** Staff: freeze current front mouse and start a new webcam-linked one. */
 function initWebcamMouse() {
   retireLiveMouse({ force: true });
+  endShowcase();
   clearShareQuery();
   resetFaceTracking();
 
@@ -168,10 +192,14 @@ function trackHeadOnly(face) {
 function onFace(face, now) {
   const live = crowd.getLive();
 
-  // QR / restored mice stay in front until cleared — webcam must not replace them.
-  if (live?.locked) {
-    state = 'live';
-    if (face.present) trackHeadOnly(face);
+  // QR / ?m= showcase: head may follow, but never settle, spawn, or feed face patches.
+  if (showcaseMode || live?.locked) {
+    if (live) {
+      live.locked = true;
+      live.mesh.userData.liveCanvases = null;
+      state = 'live';
+      if (face.present) trackHeadOnly(face);
+    }
     return;
   }
 
@@ -258,6 +286,7 @@ async function startCamera() {
 }
 
 async function loadSharedMouse(id) {
+  showcaseMode = true;
   showGate('Loading mouse…');
   try {
     const snapshot = await fetchSnapshot(id);
@@ -272,6 +301,7 @@ async function loadSharedMouse(id) {
     });
     actor.saved = true;
     actor.locked = true;
+    actor.mesh.userData.liveCanvases = null;
     state = 'live';
     liveSince = performance.now();
     hideGate();
@@ -279,14 +309,17 @@ async function loadSharedMouse(id) {
   } catch (error) {
     console.error(error);
     showGate('Could not load that mouse');
+    // Stay in showcaseMode so a failed load does not fall through to webcam spawn.
   }
 }
 
 async function boot() {
   const sharedId = new URLSearchParams(location.search).get('m');
   if (sharedId) {
+    showcaseMode = true;
     await loadSharedMouse(sharedId);
   } else {
+    showcaseMode = false;
     showGate('Starting…');
   }
 
@@ -368,6 +401,7 @@ window.addEventListener('keydown', (event) => {
     else document.exitFullscreen?.();
   }
   if (event.key === 'r' || event.key === 'R') {
+    endShowcase();
     crowd.clear();
     resetFaceTracking();
     setIdle();
