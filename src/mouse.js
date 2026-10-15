@@ -763,12 +763,34 @@ export function retargetFace(mouse, canvases, { copy }) {
   mouse.userData.liveCanvases = copy ? null : canvases;
 }
 
+/** Wire selected face planes to live webcam patch canvases (no copy). */
+export function bindLiveFeatures(mouse, patches, keys = ['leftEye', 'rightEye', 'mouth']) {
+  const live = { ...(mouse.userData.liveCanvases || {}) };
+  for (const key of keys) {
+    const plane = mouse.userData.planes[key];
+    const source = patches?.[key];
+    if (!plane || !source) continue;
+    const tex = new THREE.CanvasTexture(source);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    const previous = plane.material.map;
+    plane.material.map = tex;
+    plane.material.needsUpdate = true;
+    if (previous) previous.dispose();
+    plane.userData.aspect = source.aspect || plane.userData.aspect || 1.2;
+    fitPlane(plane, plane.userData.aspect, true);
+    live[key] = source;
+  }
+  mouse.userData.liveCanvases = live;
+}
+
 export function refreshLiveFace(mouse) {
   const canvases = mouse.userData.liveCanvases;
   if (!canvases) return;
   for (const key of PATCH_KEYS) {
     const plane = mouse.userData.planes[key];
     const canvas = canvases[key];
+    if (!plane || !canvas) continue;
     if (plane.material.map) plane.material.map.needsUpdate = true;
     plane.userData.aspect = canvas.aspect || plane.userData.aspect || 1.2;
     fitPlane(plane, plane.userData.aspect, false);

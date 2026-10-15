@@ -1,6 +1,6 @@
 import { createCrowd } from './crowd.js';
 import { initFace, readFace, resetFaceTracking } from './face.js';
-import { getFeatureScale, setFeatureScale } from './mouse.js';
+import { bindLiveFeatures, getFeatureScale, setFeatureScale } from './mouse.js';
 import {
   canvasesFromSnapshot,
   captureFaceCanvases,
@@ -192,17 +192,26 @@ function trackHeadOnly(face) {
   live.mesh.userData.targetRoll = face.roll;
 }
 
+function feedShowcaseFace(face) {
+  const live = crowd.getLive();
+  if (!live) return;
+  live.locked = true;
+  state = 'live';
+  if (!face.present) return;
+  // Eyes + mouth follow the webcam; nose / body stay from the saved snapshot.
+  if (!live.mesh.userData.liveFeaturesBound && face.patches) {
+    bindLiveFeatures(live.mesh, face.patches, ['leftEye', 'rightEye', 'mouth']);
+    live.mesh.userData.liveFeaturesBound = true;
+  }
+  crowd.updateLive(face);
+}
+
 function onFace(face, now) {
   const live = crowd.getLive();
 
-  // QR / ?m= showcase: head may follow, but never settle, spawn, or feed face patches.
+  // QR / ?m= showcase: live eyes+mouth, but never settle or spawn a replacement mouse.
   if (showcaseMode || live?.locked) {
-    if (live) {
-      live.locked = true;
-      live.mesh.userData.liveCanvases = null;
-      state = 'live';
-      if (face.present) trackHeadOnly(face);
-    }
+    feedShowcaseFace(face);
     return;
   }
 

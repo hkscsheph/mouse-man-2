@@ -239,7 +239,7 @@ export function createCrowd(scene) {
       return actor;
     },
     updateLive(face) {
-      if (!live || live.locked) return;
+      if (!live) return;
       live.mesh.userData.targetYaw = face.yaw;
       live.mesh.userData.targetPitch = face.pitch;
       live.mesh.userData.targetRoll = face.roll;
