@@ -116,16 +116,19 @@ async function persistLiveMouse(actor) {
     actor.saved = true;
     if (crowd.getLive() === actor) {
       await showShareForActor(actor);
+      if (!published.remote) {
+        shareHint.textContent = 'Saved on this display';
+      }
     }
   } catch (error) {
     console.error(error);
-    // Keep unsaved so we retry; do not show a QR that other phones cannot open.
+    // Local snapshot failed — retry later; do not show a broken QR.
     actor.saved = false;
     actor.saveRetryAfter = performance.now() + 4000;
     if (crowd.getLive() === actor) {
       sharePanel.classList.remove('loading');
       sharePanel.classList.add('empty');
-      shareHint.textContent = 'Could not share — will retry';
+      shareHint.textContent = 'Could not save — will retry';
       await renderShareQr(shareQr, '');
     }
   } finally {

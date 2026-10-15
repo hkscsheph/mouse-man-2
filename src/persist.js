@@ -176,23 +176,29 @@ function mouseApiUrl(query = '') {
 
 export async function publishSnapshot(snapshot) {
   await saveLocal(snapshot);
-  const res = await fetch(mouseApiUrl(), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(snapshot),
-  });
-  if (!res.ok) {
-    let detail = '';
-    try {
-      const payload = await res.json();
-      detail = payload?.detail || payload?.error || '';
-    } catch {
-      /* ignore */
+  try {
+    const res = await fetch(mouseApiUrl(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(snapshot),
+    });
+    if (!res.ok) {
+      let detail = '';
+      try {
+        const payload = await res.json();
+        detail = payload?.detail || payload?.error || '';
+      } catch {
+        /* ignore */
+      }
+      throw new Error(`publish ${res.status}${detail ? `: ${detail}` : ''}`);
     }
-    throw new Error(`publish ${res.status}${detail ? `: ${detail}` : ''}`);
+    const data = await res.json();
+    return { id: data.id || snapshot.id, remote: true };
+  } catch (error) {
+    // Vite/local has no /api/mouse — keep IndexedDB save so QR still works on this device.
+    console.warn('remote publish unavailable', error);
+    return { id: snapshot.id, remote: false };
   }
-  const data = await res.json();
-  return { id: data.id || snapshot.id, remote: true };
 }
 
 export async function fetchSnapshot(id) {
@@ -201,10 +207,12 @@ export async function fetchSnapshot(id) {
     const res = await fetch(mouseApiUrl(`id=${encodeURIComponent(id)}`));
     if (res.ok) {
       const snapshot = await res.json();
-      await saveLocal(snapshot);
-      return snapshot;
-    }
-    if (res.status !== 404) {
+      // Vite may serve index.html for unknown routes — require a real snapshot.
+      if (snapshot?.traits && snapshot?.patches) {
+        await saveLocal(snapshot);
+        return snapshot;
+      }
+    } else if (res.status !== 404) {
       throw new Error(`fetch ${res.status}`);
     }
   } catch (error) {
