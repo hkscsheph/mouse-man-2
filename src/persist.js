@@ -40,6 +40,8 @@ export function serializeTraits(traits) {
     earInner: colorToHex(traits.earInner),
     nose: colorToHex(traits.nose),
     whisker: colorToHex(traits.whisker),
+    accent: colorToHex(traits.accent),
+    metal: colorToHex(traits.metal),
     earSides: traits.earSides ?? 0,
     earSize: traits.earSize,
     earWide: traits.earWide,
@@ -49,6 +51,7 @@ export function serializeTraits(traits) {
     noseRound: traits.noseRound,
     noseFlat: traits.noseFlat,
     noseSize: traits.noseSize,
+    fitness: traits.fitness ?? 0.5,
     headScale: traits.headScale,
     bodyWide: traits.bodyWide,
     bodyTall: traits.bodyTall,
@@ -61,6 +64,10 @@ export function serializeTraits(traits) {
     whiskerSpread: traits.whiskerSpread,
     whiskerLift: traits.whiskerLift,
     whiskerCurl: traits.whiskerCurl,
+    accessoryNeck: traits.accessoryNeck || 'none',
+    accessoryHead: traits.accessoryHead || 'none',
+    accessoryEyes: traits.accessoryEyes || 'none',
+    accessoryEarrings: Boolean(traits.accessoryEarrings),
   };
 }
 

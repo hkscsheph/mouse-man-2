@@ -134,12 +134,37 @@ function buildShared() {
     color: 0x4a3428,
     roughness: 0.48,
   });
+  shared.accent = new THREE.MeshStandardMaterial({
+    color: 0xd45a6a,
+    roughness: 0.55,
+    metalness: 0.04,
+  });
+  shared.metal = new THREE.MeshStandardMaterial({
+    color: 0xc9b48a,
+    roughness: 0.32,
+    metalness: 0.62,
+  });
+  shared.lens = new THREE.MeshStandardMaterial({
+    color: 0x1a1410,
+    roughness: 0.2,
+    metalness: 0.15,
+    transparent: true,
+    opacity: 0.82,
+    depthWrite: false,
+  });
   shared.shadow = new THREE.MeshBasicMaterial({
     color: 0x000000,
     transparent: true,
     opacity: 0.1,
     depthWrite: false,
   });
+  shared.decorBall = new THREE.SphereGeometry(0.08, 14, 12);
+  shared.decorDisc = new THREE.SphereGeometry(0.1, 16, 12);
+  shared.decorRing = new THREE.TorusGeometry(0.22, 0.032, 10, 28);
+  shared.decorThinRing = new THREE.TorusGeometry(0.1, 0.012, 8, 24);
+  shared.decorBox = new THREE.BoxGeometry(1, 1, 1);
+  shared.decorCap = new THREE.SphereGeometry(0.28, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.55);
+  shared.decorCylinder = new THREE.CylinderGeometry(0.22, 0.24, 0.2, 20);
   shared.head = new THREE.SphereGeometry(0.46, 40, 28);
   // Pear from the turnaround: wide base, soft shoulder shelf, tapering to the neck.
   shared.body = new THREE.LatheGeometry(
@@ -423,14 +448,70 @@ function earGeometry(sides) {
   return geo;
 }
 
+const NECK_ACCESSORIES = ['none', 'bowtie', 'tie', 'scarf', 'necklace'];
+const HEAD_ACCESSORIES = ['none', 'hat', 'cap'];
+const EYE_ACCESSORIES = ['none', 'glasses', 'sunglasses'];
+
+function pickWeighted(options) {
+  const total = options.reduce((sum, [, w]) => sum + w, 0);
+  let roll = Math.random() * total;
+  for (const [value, weight] of options) {
+    roll -= weight;
+    if (roll <= 0) return value;
+  }
+  return options[options.length - 1][0];
+}
+
+function pickAccessories() {
+  const picks = {
+    accessoryNeck: pickWeighted([
+      ['none', 0.82],
+      ['bowtie', 0.05],
+      ['tie', 0.04],
+      ['scarf', 0.05],
+      ['necklace', 0.04],
+    ]),
+    accessoryHead: pickWeighted([
+      ['none', 0.84],
+      ['hat', 0.08],
+      ['cap', 0.08],
+    ]),
+    accessoryEyes: pickWeighted([
+      ['none', 0.84],
+      ['glasses', 0.09],
+      ['sunglasses', 0.07],
+    ]),
+    accessoryEarrings: Math.random() < 0.1,
+  };
+  // Usually keep a single statement piece so rare hits read clearly.
+  const worn = [];
+  if (picks.accessoryNeck !== 'none') worn.push('neck');
+  if (picks.accessoryHead !== 'none') worn.push('head');
+  if (picks.accessoryEyes !== 'none') worn.push('eyes');
+  if (picks.accessoryEarrings) worn.push('earrings');
+  if (worn.length > 1) {
+    const keep = worn[Math.floor(Math.random() * worn.length)];
+    if (keep !== 'neck') picks.accessoryNeck = 'none';
+    if (keep !== 'head') picks.accessoryHead = 'none';
+    if (keep !== 'eyes') picks.accessoryEyes = 'none';
+    if (keep !== 'earrings') picks.accessoryEarrings = false;
+  }
+  return picks;
+}
+
 /** One-off look for each visitor mouse. */
 function makeTraits() {
+  const fitness = rand(0, 1);
+  const accessories = pickAccessories();
   return {
-    fur: hsl(rand(16, 42), rand(0.1, .9), rand(0.2, 0.4)),
+    fur: hsl(rand(16, 42), rand(0.1, 0.9), rand(0.2, 0.4)),
     belly: hsl(rand(22, 48), rand(0.22, 0.48), rand(0.7, 0.88)),
     earInner: hsl(rand(340, 380), rand(0.28, 0.55), rand(0.62, 0.8)),
     nose: hsl(rand(265, 320), rand(0.22, 0.58), rand(0.32, 0.58)),
     whisker: hsl(rand(15, 40), rand(0.15, 0.4), rand(0.12, 0.28)),
+    // Punchy accessory colors so rare items pop against fur.
+    accent: hsl(rand(0, 360), rand(0.72, 0.95), rand(0.42, 0.58)),
+    metal: hsl(rand(38, 52), rand(0.45, 0.7), rand(0.58, 0.78)),
     earSides: EAR_SIDE_CHOICES[Math.floor(Math.random() * EAR_SIDE_CHOICES.length)],
     earSize: rand(0.78, 1.32),
     earWide: rand(1, 1.2),
@@ -440,18 +521,20 @@ function makeTraits() {
     noseRound: rand(0.72, 1.4),
     noseFlat: rand(0.7, 1.25),
     noseSize: rand(0.85, 1.3),
-    headScale: 1.05,//rand(0.9, 1.12),
-    bodyWide: 1.1,//rand(0.93, 1.14),
-    bodyTall: .9,//rand(0.92, 1.1),
-    bodyDeep: 1,//rand(0.9, 1.08),
-    bellySize: rand(0.9, 1.25),
+    fitness,
+    headScale: THREE.MathUtils.lerp(0.94, 1.14, 0.35 + fitness * 0.65),
+    bodyWide: THREE.MathUtils.lerp(0.84, 1.32, fitness),
+    bodyTall: THREE.MathUtils.lerp(1.02, 0.82, fitness),
+    bodyDeep: THREE.MathUtils.lerp(0.86, 1.24, fitness),
+    bellySize: THREE.MathUtils.lerp(0.72, 1.42, fitness),
     snoutLen: rand(0.88, 1.22),
     snoutRound: rand(0.85, 1),
-    whiskerCount: Math.random() < 0.3 ? 4 :3,
+    whiskerCount: Math.random() < 0.3 ? 4 : 3,
     whiskerLen: rand(0.9, 1.3),
-    whiskerSpread: rand(.45, .65),
-    whiskerLift: rand(-0.5, -.35),
+    whiskerSpread: rand(0.45, 0.65),
+    whiskerLift: rand(-0.5, -0.35),
     whiskerCurl: rand(-0.45, 0),
+    ...accessories,
   };
 }
 
@@ -459,9 +542,14 @@ function asColor(value) {
   return value?.isColor ? value : new THREE.Color(value);
 }
 
+function normalizeChoice(value, allowed, fallback = 'none') {
+  return allowed.includes(value) ? value : fallback;
+}
+
 /** Rebuild Color traits from a saved plain snapshot. */
 export function hydrateTraits(data) {
   const sides = Number(data.earSides);
+  const fitness = Number.isFinite(data.fitness) ? data.fitness : 0.5;
   return {
     ...data,
     fur: asColor(data.fur),
@@ -469,7 +557,14 @@ export function hydrateTraits(data) {
     earInner: asColor(data.earInner),
     nose: asColor(data.nose),
     whisker: asColor(data.whisker),
+    accent: asColor(data.accent || '#d45a6a'),
+    metal: asColor(data.metal || '#c9b48a'),
     earSides: sides >= 3 && sides <= 8 ? sides : 0,
+    fitness,
+    accessoryNeck: normalizeChoice(data.accessoryNeck, NECK_ACCESSORIES),
+    accessoryHead: normalizeChoice(data.accessoryHead, HEAD_ACCESSORIES),
+    accessoryEyes: normalizeChoice(data.accessoryEyes, EYE_ACCESSORIES),
+    accessoryEarrings: Boolean(data.accessoryEarrings),
   };
 }
 
@@ -484,7 +579,12 @@ function clonePalette(traits) {
   nose.color.copy(asColor(traits.nose));
   const whisker = shared.whisker.clone();
   whisker.color.copy(asColor(traits.whisker));
-  return { fur, belly, ear, nose, whisker };
+  const accent = shared.accent.clone();
+  accent.color.copy(asColor(traits.accent));
+  const metal = shared.metal.clone();
+  metal.color.copy(asColor(traits.metal));
+  const lens = shared.lens.clone();
+  return { fur, belly, ear, nose, whisker, accent, metal, lens };
 }
 
 function addFacePlane(parent, canvas, key, position, height, maxWidth, order) {
@@ -638,6 +738,186 @@ function addWhiskers(head, mats, traits, ownGeometries) {
   }
 }
 
+function addBowtie(torso, mats, traits) {
+  const group = new THREE.Group();
+  group.position.set(0, 1.2, 0.42 * traits.bodyDeep);
+  group.scale.setScalar(1.55);
+  torso.add(group);
+  const left = new THREE.Mesh(shared.decorDisc, mats.accent);
+  left.scale.set(1.7, 0.9, 0.45);
+  left.position.set(-0.12, 0, 0);
+  left.rotation.z = 0.45;
+  const right = new THREE.Mesh(shared.decorDisc, mats.accent);
+  right.scale.set(1.7, 0.9, 0.45);
+  right.position.set(0.12, 0, 0);
+  right.rotation.z = -0.45;
+  const knot = new THREE.Mesh(shared.decorBall, mats.accent);
+  knot.scale.set(0.75, 0.6, 0.65);
+  group.add(left, right, knot);
+}
+
+function addTie(torso, mats, traits) {
+  const group = new THREE.Group();
+  group.position.set(0, 1.18, 0.4 * traits.bodyDeep);
+  group.scale.setScalar(1.45);
+  torso.add(group);
+  const knot = new THREE.Mesh(shared.decorBox, mats.accent);
+  knot.scale.set(0.12, 0.1, 0.055);
+  knot.position.set(0, 0.02, 0.01);
+  const blade = new THREE.Mesh(shared.decorBox, mats.accent);
+  blade.scale.set(0.13, 0.48, 0.045);
+  blade.position.set(0, -0.24, 0.01);
+  const tip = new THREE.Mesh(shared.decorBox, mats.accent);
+  tip.scale.set(0.1, 0.1, 0.045);
+  tip.rotation.z = Math.PI / 4;
+  tip.position.set(0, -0.48, 0.01);
+  group.add(knot, blade, tip);
+}
+
+function addScarf(torso, mats, traits) {
+  const wrap = new THREE.Mesh(shared.decorRing, mats.accent);
+  wrap.rotation.x = Math.PI / 2;
+  wrap.position.set(0, 1.24, 0.06);
+  wrap.scale.set(1.35 * traits.bodyWide, 1.55, 1.35 * traits.bodyDeep);
+  torso.add(wrap);
+  for (const side of [-1, 1]) {
+    const end = new THREE.Mesh(shared.decorBox, mats.accent);
+    end.scale.set(0.14, 0.48, 0.07);
+    end.position.set(0.14 * side, 0.92, 0.4 * traits.bodyDeep);
+    end.rotation.set(0.2, 0.12 * side, 0.25 * side);
+    torso.add(end);
+  }
+}
+
+function addNecklace(torso, mats, traits) {
+  const chain = new THREE.Mesh(shared.decorRing, mats.metal);
+  chain.rotation.x = Math.PI / 2 + 0.35;
+  chain.position.set(0, 1.14, 0.16);
+  chain.scale.set(1.1 * traits.bodyWide, 1.05, 1.25 * traits.bodyDeep);
+  torso.add(chain);
+  const pendant = new THREE.Mesh(shared.decorBall, mats.accent);
+  pendant.scale.setScalar(0.95);
+  pendant.position.set(0, 0.9, 0.48 * traits.bodyDeep);
+  torso.add(pendant);
+}
+
+function addEarrings(head, mats, traits) {
+  for (const side of [-1, 1]) {
+    const drop = new THREE.Group();
+    drop.position.set(0.46 * side * traits.earFlare, 0.14 + traits.earTilt * 0.05, 0.1);
+    drop.scale.setScalar(1.6);
+    head.add(drop);
+    const hoop = new THREE.Mesh(shared.decorThinRing, mats.metal);
+    hoop.scale.setScalar(0.85);
+    hoop.rotation.y = Math.PI / 2;
+    const bead = new THREE.Mesh(shared.decorBall, mats.accent);
+    bead.scale.setScalar(0.55);
+    bead.position.set(0, -0.12, 0);
+    drop.add(hoop, bead);
+  }
+}
+
+function addHat(head, mats) {
+  const hat = new THREE.Group();
+  hat.position.set(0, 0.4, -0.02);
+  hat.scale.setScalar(1.25);
+  head.add(hat);
+  const brim = new THREE.Mesh(shared.decorDisc, mats.accent);
+  brim.scale.set(3.8, 0.28, 3.8);
+  brim.position.y = 0.02;
+  const crown = new THREE.Mesh(shared.decorCylinder, mats.accent);
+  crown.scale.set(1.05, 1.35, 1.05);
+  crown.position.y = 0.2;
+  const band = new THREE.Mesh(shared.decorRing, mats.metal);
+  band.rotation.x = Math.PI / 2;
+  band.position.y = 0.1;
+  band.scale.set(1.05, 0.9, 1.05);
+  hat.add(brim, crown, band);
+}
+
+function addCap(head, mats) {
+  const cap = new THREE.Group();
+  cap.position.set(0, 0.32, 0.02);
+  cap.scale.setScalar(1.3);
+  head.add(cap);
+  const crown = new THREE.Mesh(shared.decorCap, mats.accent);
+  crown.scale.set(1.5, 1.3, 1.5);
+  crown.position.set(0, 0.02, -0.02);
+  const bill = new THREE.Mesh(shared.decorBox, mats.accent);
+  bill.scale.set(0.48, 0.055, 0.3);
+  bill.position.set(0, 0.02, 0.34);
+  bill.rotation.x = -0.2;
+  cap.add(crown, bill);
+}
+
+function addEyewear(head, mats, tinted) {
+  const wear = new THREE.Group();
+  // Sit just in front of the face planes so lenses frame the live eyes.
+  wear.position.set(0, 0.08, 0.54);
+  wear.scale.setScalar(1.35);
+  head.add(wear);
+  const frameMat = tinted ? mats.accent : mats.metal;
+  for (const side of [-1, 1]) {
+    const rim = new THREE.Mesh(shared.decorThinRing, frameMat);
+    rim.position.set(0.15 * side, 0, 0);
+    rim.scale.set(1.2, 1.05, 1.15);
+    rim.renderOrder = 4;
+    wear.add(rim);
+    if (tinted) {
+      const lens = new THREE.Mesh(shared.decorDisc, mats.lens);
+      lens.position.set(0.15 * side, 0, 0.01);
+      lens.scale.set(1.0, 0.85, 0.16);
+      lens.renderOrder = 4;
+      wear.add(lens);
+    }
+  }
+  const bridge = new THREE.Mesh(shared.decorBox, frameMat);
+  bridge.scale.set(0.1, 0.03, 0.03);
+  bridge.position.set(0, 0.01, 0.01);
+  wear.add(bridge);
+  for (const side of [-1, 1]) {
+    const arm = new THREE.Mesh(shared.decorBox, frameMat);
+    arm.scale.set(0.2, 0.03, 0.03);
+    arm.position.set(0.3 * side, 0.02, -0.1);
+    arm.rotation.y = -0.55 * side;
+    wear.add(arm);
+  }
+}
+
+function addAccessories(head, torso, mats, traits) {
+  switch (traits.accessoryNeck) {
+    case 'bowtie':
+      addBowtie(torso, mats, traits);
+      break;
+    case 'tie':
+      addTie(torso, mats, traits);
+      break;
+    case 'scarf':
+      addScarf(torso, mats, traits);
+      break;
+    case 'necklace':
+      addNecklace(torso, mats, traits);
+      break;
+    default:
+      break;
+  }
+
+  switch (traits.accessoryHead) {
+    case 'hat':
+      addHat(head, mats);
+      break;
+    case 'cap':
+      addCap(head, mats);
+      break;
+    default:
+      break;
+  }
+
+  if (traits.accessoryEyes === 'glasses') addEyewear(head, mats, false);
+  if (traits.accessoryEyes === 'sunglasses') addEyewear(head, mats, true);
+  if (traits.accessoryEarrings) addEarrings(head, mats, traits);
+}
+
 export function createMouse(canvases, options = {}) {
   buildShared();
   const traits = options.traits ? hydrateTraits(options.traits) : makeTraits();
@@ -658,7 +938,8 @@ export function createMouse(canvases, options = {}) {
   // Soft contact patch under the feet (forward of center), not a hover blob.
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), shared.shadow);
   shadow.rotation.x = -Math.PI / 2;
-  shadow.scale.set(1.15, 0.7, 1);
+  const fitness = traits.fitness ?? 0.5;
+  shadow.scale.set(1.05 + fitness * 0.35, 0.65 + fitness * 0.12, 1);
   shadow.position.set(0, 0.008, 0.08);
   root.add(shadow);
 
@@ -679,8 +960,8 @@ export function createMouse(canvases, options = {}) {
 
   // Cream patch flush on the pear front — mostly inside the body outline.
   const belly = new THREE.Mesh(shared.bellyGeo, mats.belly);
-  belly.scale.set(0.95 * traits.bellySize, 1.15 * traits.bellySize, 0.18);
-  belly.position.set(0, 0.68, 0.38);
+  belly.scale.set(0.95 * traits.bellySize, 1.15 * traits.bellySize, 0.18 + fitness * 0.08);
+  belly.position.set(0, 0.68 - fitness * 0.04, 0.38 + fitness * 0.06);
   belly.renderOrder = 1;
   torso.add(belly);
 
@@ -730,6 +1011,7 @@ export function createMouse(canvases, options = {}) {
     nose: addFacePlane(head, canvases.nose, 'nose', new THREE.Vector3(0, -0.15, 0.6), 0.2, 0.26, 3),
   };
   root.userData.planes = planes;
+  addAccessories(head, torso, mats, traits);
   // staticFace = restored / QR mouse — never wire webcam patch canvases.
   root.userData.liveCanvases = options.staticFace ? null : canvases;
   return root;
