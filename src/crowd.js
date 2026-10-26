@@ -82,6 +82,12 @@ function pickActor(actors, mesh) {
   }
   return null;
 }
+function randomWalkTarget() {
+  return {
+    x: THREE.MathUtils.randFloat(-4, 4),
+    z: THREE.MathUtils.randFloat(-1.8, 2.8),
+  };
+}
 
 export function createCrowd(scene) {
   const actors = [];
@@ -227,6 +233,29 @@ export function createCrowd(scene) {
       notifyFront();
       return actor;
     },
+    spawnWanderers(canvases, count) {
+      for (let i = 0; i < count; i += 1) {
+        const mesh = createMouse(canvases);
+        mesh.position.set(
+          THREE.MathUtils.randFloat(-4, 4),
+          0,
+          THREE.MathUtils.randFloat(-1.8, 2.8),
+        );
+        mesh.rotation.y = Math.random() * Math.PI * 2 - Math.PI;
+        mesh.scale.setScalar(0.45 + Math.random() * 0.3);
+        scene.add(mesh);
+        actors.push({
+          mesh,
+          role: 'wanderer',
+          slot: null,
+          born: performance.now(),
+          saved: false,
+          locked: false,
+          anim: null,
+          walk: { target: randomWalkTarget(), speed: 0.25 + Math.random() * 0.3 },
+        });
+      }
+    },
     updateLive(face) {
       if (!live) return;
       live.mesh.userData.targetYaw = face.yaw;
@@ -284,6 +313,24 @@ export function createCrowd(scene) {
     },
     update(dt, time) {
       for (const actor of [...actors]) {
+        if (actor.walk) {
+          const dx = actor.walk.target.x - actor.mesh.position.x;
+          const dz = actor.walk.target.z - actor.mesh.position.z;
+          const distance = Math.hypot(dx, dz);
+          if (distance < 0.12) {
+            actor.walk.target = randomWalkTarget();
+          } else {
+            const heading = Math.atan2(dx, dz);
+            const turn = Math.atan2(
+              Math.sin(heading - actor.mesh.rotation.y),
+              Math.cos(heading - actor.mesh.rotation.y),
+            );
+            actor.mesh.rotation.y += turn * (1 - Math.exp(-5 * dt));
+            const step = Math.min(distance, actor.walk.speed * dt);
+            actor.mesh.position.x += (dx / distance) * step;
+            actor.mesh.position.z += (dz / distance) * step;
+          }
+        }
         if (actor.anim) {
           actor.anim.t += dt / actor.anim.dur;
           const pose = mixPose(actor.anim.from, actor.anim.to, smoothstep(actor.anim.t));
@@ -303,6 +350,13 @@ export function createCrowd(scene) {
         const head = actor.mesh.userData.head;
         bob.position.y = Math.sin(time * (isLive ? 1.8 : 1.2) + phase) * (isLive ? 0.006 : 0.01);
         bob.rotation.z = Math.sin(time * 1.1 + phase) * (isLive ? 0.004 : 0.008);
+        if (actor.walk) {
+          const gait = Math.sin(time * 9 + phase);
+          actor.mesh.userData.legs[0].rotation.x = 0.02 + gait * 0.48;
+          actor.mesh.userData.legs[1].rotation.x = 0.02 - gait * 0.48;
+          actor.mesh.userData.arms[0].rotation.x = 0.2 - gait * 0.18;
+          actor.mesh.userData.arms[1].rotation.x = 0.2 + gait * 0.18;
+        }
         if (isLive) {
           const yaw = actor.mesh.userData.targetYaw || 0;
           const pitch = actor.mesh.userData.targetPitch || 0;

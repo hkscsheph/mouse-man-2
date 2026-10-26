@@ -186,7 +186,7 @@ function buildShared() {
   // Flat belly patch — sits on the pear face instead of a sphere that escapes the silhouette.
   shared.bellyGeo = new THREE.SphereGeometry(0.33, 28, 18);
   shared.snout = new THREE.SphereGeometry(0.2, 28, 20);
-  shared.earGeo = Object.create(null); // sides → ExtrudeGeometry cache
+  shared.earGeo = Object.create(null); // sides → ear geometry cache
   shared.noseGeo = new THREE.SphereGeometry(0.055, 16, 12);
   shared.palm = new THREE.SphereGeometry(0.085, 16, 12);
   shared.finger = new THREE.CapsuleGeometry(0.016, 0.07, 4, 8);
@@ -348,9 +348,10 @@ function pillowFromContour(contour, halfThick = 0.16, rings = 7) {
   const zPair = (t) => {
     const bulge = thickAt(t);
     const pushFwd = forwardAt(t);
+    // Keep the front dome while thinning the back for a flatter side profile.
     return {
       front: pushFwd + bulge * 1.2,
-      back: pushFwd - bulge * 0.7,
+      back: pushFwd + bulge * 0.8,
     };
   };
 
@@ -426,14 +427,12 @@ function earGeometry(sides) {
     divisions = Math.max(36, nSides * 10);
   }
   const contour = shape.getPoints(divisions);
-  // Drop duplicate close point if present
   if (contour.length > 2) {
     const a = contour[0];
     const b = contour[contour.length - 1];
     if (Math.hypot(a.x - b.x, a.y - b.y) < 1e-6) contour.pop();
   }
   if (contour.length < 3) {
-    // Fallback circle if outline failed
     const fallback = [];
     for (let i = 0; i < 48; i += 1) {
       const a = (i / 48) * Math.PI * 2;
@@ -612,7 +611,8 @@ function addEar(head, side, mats, traits) {
   const ear = new THREE.Mesh(geo, mats.fur);
   ear.scale.set(0.95 * traits.earWide * size, 1.08 * size, 1.05 * traits.earThick);
   ear.position.set(0.38 * side * traits.earFlare, 0.34 + traits.earTilt * 0.08, 0.02);
-  ear.rotation.set(0.12 + traits.earTilt * 0.4, -0.35 * side * traits.earFlare, (-0.55 - traits.earTilt * 0.3) * side);
+  // The head faces +Z, so negative X leans the ear tips toward its back.
+  ear.rotation.set(-0.65 + traits.earTilt * 0.2, -0.35 * side * traits.earFlare, (-0.55 - traits.earTilt * 0.3) * side);
   head.add(ear);
 
   const inner = new THREE.Mesh(geo, mats.ear);
@@ -963,8 +963,7 @@ export function createMouse(canvases, options = {}) {
   root.add(shadow);
 
   // Planted mass: feet stay on the root while the torso can twist with the head.
-  addLeg(root, -1, mats);
-  addLeg(root, 1, mats);
+  root.userData.legs = [addLeg(root, -1, mats), addLeg(root, 1, mats)];
 
   const torso = new THREE.Group();
   root.add(torso);
@@ -979,16 +978,22 @@ export function createMouse(canvases, options = {}) {
 
   // Cream patch flush on the pear front — mostly inside the body outline.
   const belly = new THREE.Mesh(shared.bellyGeo, mats.belly);
-  belly.scale.set(0.95 * traits.bellySize, 1.15 * traits.bellySize, 0.18 + fitness * 0.08);
-  belly.position.set(0, 0.68 - fitness * 0.04, 0.38 + fitness * 0.06);
+  const bellyDepth = 0.18 + fitness * 0.08;
+  belly.scale.set(0.95 * traits.bellySize, 1.15 * traits.bellySize, bellyDepth);
+  belly.position.set(
+    0,
+    0.68 - fitness * 0.04,
+    0.02 + 0.95 * traits.bodyDeep * 0.49 - 0.33 * bellyDepth + 0.015,
+  );
+  // Tilt the patch's top back to follow the pear's narrowing shoulders.
+  belly.rotation.x = -0.35;
   belly.renderOrder = 1;
   torso.add(belly);
 
   torso.add(new THREE.Mesh(shared.tail, mats.fur));
 
   // Arms after the body so only the outer sleeve shows past the pear.
-  addArm(torso, -1, mats, traits);
-  addArm(torso, 1, mats, traits);
+  root.userData.arms = [addArm(torso, -1, mats, traits), addArm(torso, 1, mats, traits)];
 
   const bob = new THREE.Group();
   torso.add(bob);

@@ -47,8 +47,9 @@ let suppressNextClick = false;
 let lastPointerX = 0;
 let lastPointerY = 0;
 let dragDistance = 0;
-/** QR / ?m= visit: block webcam settle & face feeding until Space or R. */
-let showcaseMode = Boolean(new URLSearchParams(location.search).get('m'));
+const urlParams = new URLSearchParams(location.search);
+const mode = !urlParams.has('m') && urlParams.get('mode') === 'random' ? 'random' : 'default';
+let showcaseMode = Boolean(urlParams.get('m'));
 
 function showGate(text) {
   gate.textContent = text;
@@ -333,10 +334,13 @@ async function loadSharedMouse(id) {
 }
 
 async function boot() {
-  const sharedId = new URLSearchParams(location.search).get('m');
+  const sharedId = urlParams.get('m');
   if (sharedId) {
     showcaseMode = true;
     await loadSharedMouse(sharedId);
+  } else if (mode === 'random') {
+    startRandomMode();
+    return;
   } else {
     showcaseMode = false;
     showGate('Starting…');
@@ -448,7 +452,7 @@ window.addEventListener('keydown', (event) => {
   if (event.repeat) return;
   if (event.code === 'Space' || event.key === ' ') {
     event.preventDefault();
-    initWebcamMouse();
+    if (mode !== 'random') initWebcamMouse();
     return;
   }
   if (event.key === 'f' || event.key === 'F') {
@@ -456,12 +460,15 @@ window.addEventListener('keydown', (event) => {
     else document.exitFullscreen?.();
   }
   if (event.key === 'r' || event.key === 'R') {
-    endShowcase();
-    crowd.clear();
-    resetFaceTracking();
-    setIdle();
-    showShareForActor(null);
-    clearShareQuery();
+    if (mode === 'random') startRandomMode();
+    else {
+      endShowcase();
+      crowd.clear();
+      resetFaceTracking();
+      setIdle();
+      showShareForActor(null);
+      clearShareQuery();
+    }
   }
   if (event.key === 'h' || event.key === 'H') {
     setTuneOpen(tune.hidden);
@@ -491,9 +498,9 @@ function stagePatch(label, draw) {
   return canvas;
 }
 
-function stageCanvases(hue) {
+function stageCanvases(hue, labels = true) {
   return {
-    leftEye: stagePatch('L', (ctx) => {
+    leftEye: stagePatch(labels ? 'L' : '', (ctx) => {
       ctx.fillStyle = `hsl(${hue} 45% 72%)`;
       ctx.beginPath();
       ctx.ellipse(96, 110, 70, 48, 0, 0, Math.PI * 2);
@@ -507,7 +514,7 @@ function stageCanvases(hue) {
       ctx.arc(104, 118, 12, 0, Math.PI * 2);
       ctx.fill();
     }),
-    rightEye: stagePatch('R', (ctx) => {
+    rightEye: stagePatch(labels ? 'R' : '', (ctx) => {
       ctx.fillStyle = `hsl(${hue} 45% 72%)`;
       ctx.beginPath();
       ctx.ellipse(96, 110, 70, 48, 0, 0, Math.PI * 2);
@@ -534,6 +541,12 @@ function stageCanvases(hue) {
       ctx.fill();
     }),
   };
+}
+function startRandomMode() {
+  crowd.clear();
+  crowd.spawnWanderers(stageCanvases(Math.random() * 360, false), 12);
+  sharePanel.hidden = true;
+  hideGate();
 }
 
 if (new URLSearchParams(location.search).has('stage')) {
