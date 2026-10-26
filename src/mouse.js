@@ -85,7 +85,7 @@ function taperedTube(curve, segments, radiusAt, radial) {
     for (let j = 0; j < radial; j += 1) {
       const a = i * (radial + 1) + j;
       const b = a + radial + 1;
-      indices.push(a, b, a + 1, b, b + 1, a + 1);
+      indices.push(a, a + 1, b, a + 1, b + 1, b);
     }
   }
   const geo = new THREE.BufferGeometry();
@@ -192,15 +192,15 @@ function buildShared() {
   shared.finger = new THREE.CapsuleGeometry(0.016, 0.07, 4, 8);
   shared.foot = new THREE.SphereGeometry(0.135, 16, 12);
   shared.toe = new THREE.CapsuleGeometry(0.022, 0.08, 4, 8);
-  // Arms hang down/forward in front of the pear.
-  const armRadius = limbRadius(0.1, 0.055, 0.4, 0.01);
+  // Arms bend around the pear, with a soft elbow and a tapered wrist.
+  const armRadius = limbRadius(0.112, 0.062, 0.38, 0.018);
   shared.armL = taperedTube(
     new THREE.CatmullRomCurve3([
       new THREE.Vector3(0.08, 0.02, 0.0),
-      new THREE.Vector3(-0.02, -0.08, 0.03),
-      new THREE.Vector3(-0.08, -0.2, 0.04),
-      new THREE.Vector3(-0.08, -0.34, 0.05),
-      new THREE.Vector3(-0.05, -0.46, 0.05),
+      new THREE.Vector3(-0.025, -0.08, 0.035),
+      new THREE.Vector3(-0.11, -0.19, 0.065),
+      new THREE.Vector3(-0.085, -0.31, 0.095),
+      new THREE.Vector3(-0.035, -0.46, 0.11),
     ]),
     20,
     armRadius,
@@ -209,10 +209,10 @@ function buildShared() {
   shared.armR = taperedTube(
     new THREE.CatmullRomCurve3([
       new THREE.Vector3(-0.08, 0.02, 0.0),
-      new THREE.Vector3(0.02, -0.08, 0.03),
-      new THREE.Vector3(0.08, -0.2, 0.04),
-      new THREE.Vector3(0.08, -0.34, 0.05),
-      new THREE.Vector3(0.05, -0.46, 0.05),
+      new THREE.Vector3(0.025, -0.08, 0.035),
+      new THREE.Vector3(0.11, -0.19, 0.065),
+      new THREE.Vector3(0.085, -0.31, 0.095),
+      new THREE.Vector3(0.035, -0.46, 0.11),
     ]),
     20,
     armRadius,
@@ -571,6 +571,11 @@ export function hydrateTraits(data) {
 function clonePalette(traits) {
   const fur = shared.fur.clone();
   fur.color.copy(asColor(traits.fur));
+  const arm = shared.fur.clone();
+  arm.color.copy(asColor(traits.fur));
+  arm.transparent = false;
+  arm.opacity = 1;
+  arm.depthWrite = true;
   const belly = shared.belly.clone();
   belly.color.copy(asColor(traits.belly));
   const ear = shared.ear.clone();
@@ -584,7 +589,7 @@ function clonePalette(traits) {
   const metal = shared.metal.clone();
   metal.color.copy(asColor(traits.metal));
   const lens = shared.lens.clone();
-  return { fur, belly, ear, nose, whisker, accent, metal, lens };
+  return { fur, arm, belly, ear, nose, whisker, accent, metal, lens };
 }
 
 function addFacePlane(parent, canvas, key, position, height, maxWidth, order) {
@@ -625,19 +630,23 @@ function mesh(geometry, material, position, scale, rotation) {
   return part;
 }
 
-function addArm(parent, side, mats) {
+function addArm(parent, side, mats, traits) {
   const root = new THREE.Group();
   // Attach on the pear’s side surface so the body hides only the stub, not half the arm.
-  root.position.set(0.4 * side, 1.08, 0.24);
+  root.position.set(
+    0.37 * 1.05 * traits.bodyWide * side,
+    0.08 + 0.98 * traits.bodyTall,
+    0.1 * traits.bodyDeep,
+  );
   root.rotation.set(0.2, -0.02 * side, 0.2 * side);
   parent.add(root);
 
-  const armMesh = new THREE.Mesh(side < 0 ? shared.armL : shared.armR, mats.fur);
+  const armMesh = new THREE.Mesh(side < 0 ? shared.armL : shared.armR, mats.arm);
   armMesh.renderOrder = 1;
   root.add(armMesh);
 
   const hand = new THREE.Group();
-  hand.position.set(0.04 * side, -0.5, 0.08);
+  hand.position.set(0.04 * side, -0.5, 0.12);
   hand.rotation.set(0.4, 0.1 * side, -0.04 * side);
   root.add(hand);
 
@@ -663,6 +672,16 @@ function addArm(parent, side, mats) {
       ),
     );
   }
+
+  hand.add(
+    mesh(
+      shared.finger,
+      mats.belly,
+      { x: 0.075 * side, y: -0.005, z: 0.015 },
+      { x: 1.1, y: 0.72, z: 1.05 },
+      { x: 0.7, y: 0.15 * side, z: -0.65 * side },
+    ),
+  );
 
   return root;
 }
@@ -968,8 +987,8 @@ export function createMouse(canvases, options = {}) {
   torso.add(new THREE.Mesh(shared.tail, mats.fur));
 
   // Arms after the body so only the outer sleeve shows past the pear.
-  addArm(torso, -1, mats);
-  addArm(torso, 1, mats);
+  addArm(torso, -1, mats, traits);
+  addArm(torso, 1, mats, traits);
 
   const bob = new THREE.Group();
   torso.add(bob);

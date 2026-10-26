@@ -41,9 +41,6 @@ function buildSlots(count) {
 
 const SLOTS = buildSlots(MAX_FROZEN);
 
-const _camQ = new THREE.Quaternion();
-const _parentQ = new THREE.Quaternion();
-const _localQ = new THREE.Quaternion();
 const _raycaster = new THREE.Raycaster();
 const _pointer = new THREE.Vector2();
 
@@ -74,14 +71,6 @@ function mixPose(from, to, t) {
     ry: THREE.MathUtils.lerp(from.ry, to.ry, t),
     s: THREE.MathUtils.lerp(from.s, to.s, t),
   };
-}
-
-function billboard(plane, camera) {
-  if (!plane.parent) return;
-  camera.getWorldQuaternion(_camQ);
-  plane.parent.getWorldQuaternion(_parentQ);
-  _localQ.copy(_parentQ).invert().multiply(_camQ);
-  plane.quaternion.copy(_localQ);
 }
 
 function pickActor(actors, mesh) {
@@ -293,7 +282,7 @@ export function createCrowd(scene) {
     refitFaces() {
       for (const actor of actors) refitFacePlanes(actor.mesh, true);
     },
-    update(dt, time, camera) {
+    update(dt, time) {
       for (const actor of [...actors]) {
         if (actor.anim) {
           actor.anim.t += dt / actor.anim.dur;
@@ -332,7 +321,6 @@ export function createCrowd(scene) {
         }
         const orderBias = Math.round(actor.mesh.position.z * 20);
         for (const plane of Object.values(actor.mesh.userData.planes)) {
-          billboard(plane, camera);
           plane.renderOrder = plane.userData.order + orderBias;
           if (plane.userData.targetScale) {
             plane.scale.lerp(plane.userData.targetScale, 1 - Math.exp(-8 * dt));

@@ -29,7 +29,7 @@ const sharePanel = document.querySelector('#share');
 const shareQr = document.querySelector('#share-qr');
 const shareHint = document.querySelector('#share-hint');
 
-const { scene, camera, renderer } = createScene(view);
+const { scene, camera, renderer, rotateCamera } = createScene(view);
 const crowd = createCrowd(scene);
 
 let state = 'idle';
@@ -40,6 +40,13 @@ let tracking = false;
 let last = performance.now();
 let saving = false;
 let currentShareUrl = '';
+let environmentRotationLocked = false;
+let dragPointerId = null;
+let dragMoved = false;
+let suppressNextClick = false;
+let lastPointerX = 0;
+let lastPointerY = 0;
+let dragDistance = 0;
 /** QR / ?m= visit: block webcam settle & face feeding until Space or R. */
 let showcaseMode = Boolean(new URLSearchParams(location.search).get('m'));
 
@@ -283,7 +290,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   if (tracking) onFace(readFace(video, now), now);
-  crowd.update(dt, now / 1000, camera);
+  crowd.update(dt, now / 1000);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
@@ -386,18 +393,54 @@ featureScale.addEventListener('input', () => {
   applyFeatureScale(featureScale.value);
 });
 
-view.addEventListener('pointermove', (event) => {
-  const over = crowd.hoverAt(event.clientX, event.clientY, camera, view);
-  view.style.cursor = over ? 'pointer' : '';
+view.addEventListener('pointerdown', (event) => {
+  if (environmentRotationLocked || event.button !== 0) return;
+  dragPointerId = event.pointerId;
+  dragMoved = false;
+  dragDistance = 0;
+  lastPointerX = event.clientX;
+  lastPointerY = event.clientY;
+  view.setPointerCapture(event.pointerId);
+  view.style.cursor = 'grabbing';
 });
 
+view.addEventListener('pointermove', (event) => {
+  if (dragPointerId === event.pointerId) {
+    const deltaX = event.clientX - lastPointerX;
+    const deltaY = event.clientY - lastPointerY;
+    lastPointerX = event.clientX;
+    lastPointerY = event.clientY;
+    dragDistance += Math.abs(deltaX) + Math.abs(deltaY);
+    if (dragDistance > 3) dragMoved = true;
+    if (!environmentRotationLocked) rotateCamera(deltaX, deltaY);
+  }
+  const over = crowd.hoverAt(event.clientX, event.clientY, camera, view);
+  if (dragPointerId === event.pointerId) view.style.cursor = 'grabbing';
+  else view.style.cursor = environmentRotationLocked ? (over ? 'pointer' : '') : 'grab';
+});
+
+function endEnvironmentDrag(event) {
+  if (dragPointerId !== event.pointerId) return;
+  suppressNextClick = event.type === 'pointerup' && dragMoved;
+  dragPointerId = null;
+  view.style.cursor = environmentRotationLocked ? '' : 'grab';
+  if (view.hasPointerCapture(event.pointerId)) view.releasePointerCapture(event.pointerId);
+}
+
+view.addEventListener('pointerup', endEnvironmentDrag);
+view.addEventListener('pointercancel', endEnvironmentDrag);
+view.addEventListener('lostpointercapture', endEnvironmentDrag);
+
 view.addEventListener('click', (event) => {
+  if (suppressNextClick) {
+    suppressNextClick = false;
+    return;
+  }
   const actor = crowd.promoteAt(event.clientX, event.clientY, camera, view);
   if (!actor) return;
   state = 'live';
   liveSince = performance.now();
   absentSince = 0;
-  // Keep saved face; head still follows if a visitor is present.
   actor.mesh.userData.liveCanvases = null;
 });
 
@@ -422,6 +465,10 @@ window.addEventListener('keydown', (event) => {
   }
   if (event.key === 'h' || event.key === 'H') {
     setTuneOpen(tune.hidden);
+  }
+  if (event.key === 'l' || event.key === 'L') {
+    environmentRotationLocked = !environmentRotationLocked;
+    view.style.cursor = environmentRotationLocked ? '' : 'grab';
   }
 });
 
