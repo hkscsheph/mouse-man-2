@@ -11,6 +11,12 @@ const MOUSE_FRAME_COUNT = 6;
 const MOUSE_FOOT_ROW = 20;
 const mouseSprite = new Image();
 mouseSprite.src = new URL('./MouseRun.png', import.meta.url).href;
+const MOUSE_COUNT = 20;
+const mouseOffsets = new Float32Array(MOUSE_COUNT * 2);
+for (let i = 0; i < MOUSE_COUNT; i += 1) {
+  mouseOffsets[i * 2] = Math.random();
+  mouseOffsets[i * 2 + 1] = Math.random();
+}
 catSource.addEventListener('load', prepareCatSprite, { once: true });
 catSource.src = new URL('./cat-run.png', import.meta.url).href;
 
@@ -63,9 +69,10 @@ function prepareCatSprite() {
         data[i + 2] = 76;
       } else if (red > 140 && green > 70 && red > green * 1.25 && green > blue * 1.2 && blue < 130) {
         const localX = x % CAT_FRAME_SIZE;
-        const whiteFur = (localX < 24 && y > 28 && y < 41)
-          || (localX >= 18 && localX <= 44 && y > 40)
-          || (y > 48 && localX > 8 && localX < 52);
+        const whiteFur = 0;
+        // const whiteFur = (localX < 24 && y > 28 && y < 41)
+        //   || (localX >= 18 && localX <= 44 && y > 40)
+        //   || (y > 48 && localX > 8 && localX < 52);
         const color = whiteFur ? [243, 244, 242] : red < 225 ? [78, 85, 96] : [23, 25, 35];
         data[i] = color[0];
         data[i + 1] = color[1];
@@ -86,7 +93,7 @@ function prepareCatSprite() {
 function drawDesk(x, y, deskWidth) {
   const one = Math.max(1, px(1));
   ctx.fillStyle = '#684332';
-  ctx.fillRect(x + px(4), y + px(4), deskWidth, px(5));
+  ctx.fillRect(x, y + px(4), deskWidth, px(5));
   ctx.fillStyle = '#a86e42';
   ctx.fillRect(x, y, deskWidth, px(5));
   ctx.fillStyle = '#e0aa62';
@@ -96,7 +103,7 @@ function drawDesk(x, y, deskWidth) {
   ctx.fillRect(x + deskWidth - px(8), y + px(8), px(3), px(11));
 }
 
-function drawClassroom(groundY) {
+function drawClassroomWall(groundY) {
   ctx.fillStyle = '#e8d9ba';
   ctx.fillRect(0, 0, width, height);
   ctx.fillStyle = '#bda982';
@@ -144,13 +151,24 @@ function drawClassroom(groundY) {
   ctx.fillStyle = '#594734';
   ctx.fillRect(clockX + px(7), clockY + px(4), Math.max(1, px(1)), px(4));
   ctx.fillRect(clockX + px(7), clockY + px(7), px(4), Math.max(1, px(1)));
+}
 
+function drawClassroom(groundY) {
+  const wallOffset = px(scroll/2) % width;
+  for (let x = -wallOffset; x < width; x += width) {
+    ctx.save();
+    ctx.translate(x, 0);
+    drawClassroomWall(groundY);
+    ctx.restore();
+  }
   const cabinetY = groundY - px(27);
   ctx.fillStyle = '#936541';
   ctx.fillRect(0, cabinetY, width, px(23));
   ctx.fillStyle = '#c48b53';
   ctx.fillRect(0, cabinetY, width, Math.max(1, px(2)));
-  for (let x = px(32); x < width; x += Math.max(1, px(48))) {
+  const cabinetStride = Math.max(1, px(48));
+  const cabinetOffset = px(scroll) % cabinetStride;
+  for (let x = px(32) - cabinetOffset; x < width; x += cabinetStride) {
     ctx.fillStyle = '#6e4b38';
     ctx.fillRect(x, cabinetY + px(3), Math.max(1, px(2)), px(18));
     ctx.fillStyle = '#d2a36b';
@@ -158,9 +176,10 @@ function drawClassroom(groundY) {
   }
 
   for (let i = 0; i < 3; i += 1) {
-    const x = Math.floor(px(wrap(i * 126 - scroll * 0.82, BASE_WIDTH + 48) - 24));
-    const y = groundY - Math.max(px(34), Math.floor(height * 0.18)) - (i % 2) * Math.max(px(14), Math.floor(height * 0.08));
-    drawDesk(x, y, px(42 + (i % 2) * 8));
+    const deskWidth = 42 + (i % 2) * 8;
+    const x = Math.floor(px(wrap(i * 126 - scroll * 0.82, BASE_WIDTH + deskWidth) - deskWidth));
+    const y = groundY - Math.max(px(34), Math.floor(height * 0.18)) - 3 //(i % 1) * Math.max(px(14), Math.floor(height * 0.08));
+    drawDesk(x, y, px(deskWidth));
   }
 
   ctx.fillStyle = '#96623f';
@@ -168,7 +187,7 @@ function drawClassroom(groundY) {
   ctx.fillStyle = '#d5a266';
   ctx.fillRect(0, groundY, width, Math.max(1, px(2)));
   const tileWidth = Math.max(px(32), 2);
-  const tileOffset = px(scroll % 32) % tileWidth;
+  const tileOffset = px(scroll) % (tileWidth * 2);
   for (let i = 0, x = -tileOffset; x < width; i += 1, x += tileWidth) {
     ctx.fillStyle = i % 2 ? '#a16a43' : '#8c593a';
     ctx.fillRect(x, groundY + px(2), tileWidth - 1, height - groundY - px(2));
@@ -185,20 +204,14 @@ function onePixel() {
 function frame(now) {
   const dt = Math.min(0.05, (now - lastFrame) / 1000);
   lastFrame = now;
-  scroll = (scroll + dt * 64) % (BASE_WIDTH + 64);
+  scroll += dt * 64;
   const groundY = Math.floor(height * 0.82);
   drawClassroom(groundY);
 
   const catFrame = Math.floor(now / 110) % CAT_FRAME_COUNT;
-  const mouseCount = width < 120 ? 2 : width < 360 ? 3 : 4;
-  const mouseBaseSize = width < 120 ? 20 : width < 160 ? 32 : width < 280 ? 48 : 64;
-  const mouseGap = Math.max(3, Math.floor(mouseBaseSize * 0.125));
-  let groupWidth = (mouseCount - 1) * mouseGap;
-  for (let i = 0; i < mouseCount; i += 1) groupWidth += mouseBaseSize + (i % 2) * 4;
-  const mouseStart = width - groupWidth - px(4);
-  const requestedCatSize = width < 150 ? 40 : width < 240 ? 64 : 88;
-  const catSize = Math.min(requestedCatSize, Math.max(20, mouseStart - px(8)));
-  const catX = Math.min(px(18), mouseStart - catSize - px(8));
+  const catSize = width < 150 ? 40 : width < 240 ? 64 : 88;
+  const catX = px(18);
+  const mouseStart = Math.max(catX + catSize + px(5), Math.floor(width * 0.35));
   const catY = groundY - Math.ceil((CAT_FOOT_ROW * catSize) / CAT_FRAME_SIZE);
   if (catRunSheet) {
     ctx.save();
@@ -207,15 +220,17 @@ function frame(now) {
     ctx.drawImage(catRunSheet, catFrame * CAT_FRAME_SIZE, 0, CAT_FRAME_SIZE, CAT_FRAME_SIZE, 0, 0, catSize, catSize);
     ctx.restore();
   }
-
+  const mouseBaseSize = 30;
+  const mouseSpreadX = Math.max(1, width - mouseStart - mouseBaseSize - 2);
+  const mouseSpreadY = px(16);
   if (mouseSprite.complete && mouseSprite.naturalWidth === MOUSE_FRAME_SIZE && mouseSprite.naturalHeight === MOUSE_FRAME_SIZE * MOUSE_FRAME_COUNT) {
-    let x = mouseStart;
-    for (let i = 0; i < mouseCount; i += 1) {
-      const size = mouseBaseSize + (i % 2) * 4;
+    for (let i = 0; i < MOUSE_COUNT; i += 1) {
+      const size = mouseBaseSize + (i % 3);
       const mouseFrame = Math.floor(now / 105 + i * 1.5) % MOUSE_FRAME_COUNT;
-      const y = groundY - Math.ceil((MOUSE_FOOT_ROW * size) / MOUSE_FRAME_SIZE);
+      const x = mouseStart + Math.floor(mouseOffsets[i * 2] * mouseSpreadX);
+      const yOffset = Math.floor(mouseOffsets[i * 2 + 1] * mouseSpreadY);
+      const y = groundY - Math.ceil((MOUSE_FOOT_ROW * size) / MOUSE_FRAME_SIZE) - yOffset;
       ctx.drawImage(mouseSprite, 0, mouseFrame * MOUSE_FRAME_SIZE, MOUSE_FRAME_SIZE, MOUSE_FRAME_SIZE, x, y, size, size);
-      x += size + mouseGap;
     }
   }
 
