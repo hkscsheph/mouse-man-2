@@ -525,7 +525,7 @@ function makeTraits() {
     bodyWide: THREE.MathUtils.lerp(0.84, 1.32, fitness),
     bodyTall: THREE.MathUtils.lerp(1.02, 0.82, fitness),
     bodyDeep: THREE.MathUtils.lerp(0.86, 1.24, fitness),
-    bellySize: THREE.MathUtils.lerp(0.72, 1.32, fitness),
+    bellySize: THREE.MathUtils.lerp(0.82, 1.22, fitness),
     snoutLen: rand(0.88, 1.22),
     snoutRound: rand(0.85, 1),
     whiskerCount: Math.random() < 0.3 ? 4 : 3,
