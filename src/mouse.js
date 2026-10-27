@@ -513,7 +513,7 @@ function makeTraits() {
     metal: hsl(rand(38, 52), rand(0.45, 0.7), rand(0.58, 0.78)),
     earSides: EAR_SIDE_CHOICES[Math.floor(Math.random() * EAR_SIDE_CHOICES.length)],
     earSize: rand(0.78, 1.32),
-    earWide: rand(1, 1.2),
+    earWide: rand(1.2, 1.3),
     earThick: rand(0.75, 1.25),
     earFlare: rand(0.75, 1.28),
     earTilt: rand(-0.18, 0.22),
@@ -525,7 +525,7 @@ function makeTraits() {
     bodyWide: THREE.MathUtils.lerp(0.84, 1.32, fitness),
     bodyTall: THREE.MathUtils.lerp(1.02, 0.82, fitness),
     bodyDeep: THREE.MathUtils.lerp(0.86, 1.24, fitness),
-    bellySize: THREE.MathUtils.lerp(0.72, 1.42, fitness),
+    bellySize: THREE.MathUtils.lerp(0.72, 1.32, fitness),
     snoutLen: rand(0.88, 1.22),
     snoutRound: rand(0.85, 1),
     whiskerCount: Math.random() < 0.3 ? 4 : 3,
@@ -605,21 +605,27 @@ function addFacePlane(parent, canvas, key, position, height, maxWidth, order) {
   return mesh;
 }
 
-function addEar(head, side, mats, traits) {
+function addEar(head, side, mats, traits, tuningEars) {
   const size = traits.earSize;
   const geo = earGeometry(traits.earSides);
   const ear = new THREE.Mesh(geo, mats.fur);
   ear.scale.set(0.95 * traits.earWide * size, 1.08 * size, 1.05 * traits.earThick);
-  ear.position.set(0.38 * side * traits.earFlare, 0.34 + traits.earTilt * 0.08, 0.02);
-  // The head faces +Z, so negative X leans the ear tips toward its back.
-  ear.rotation.set(-0.65 + traits.earTilt * 0.2, -0.35 * side * traits.earFlare, (-0.55 - traits.earTilt * 0.3) * side);
+  ear.position.set(0.38 * side * traits.earFlare, 0.34 + traits.earTilt * 0.08, 0.15);
+  // A 180° yaw flips the ear front-to-back while keeping its tip upright.
+  ear.rotation.set(0.4 - traits.earTilt * 0.2, Math.PI - 0.35 * side * traits.earFlare, (-0.35 - traits.earTilt * 0.3) * side);
+  ear.userData.tuneBaseZ = ear.position.z;
+  ear.userData.tuneBaseRotationX = ear.rotation.x;
   head.add(ear);
 
   const inner = new THREE.Mesh(geo, mats.ear);
-  inner.scale.set(0.62 * traits.earWide * size, 0.72 * size, 0.7 * traits.earThick);
-  inner.position.set(0.37 * side * traits.earFlare, 0.34 + traits.earTilt * 0.08, .15);
+  inner.scale.set(0.82 * traits.earWide * size, 0.94 * size, 0.98 * traits.earThick);
+  inner.position.copy(ear.position);
+  inner.position.z += 0.015; // shortcut: about 2px at the default camera distance; update if framing changes.
   inner.rotation.copy(ear.rotation);
+  inner.userData.tuneBaseZ = inner.position.z;
+  inner.userData.tuneBaseRotationX = inner.rotation.x;
   head.add(inner);
+  tuningEars.push(ear, inner);
 }
 
 function mesh(geometry, material, position, scale, rotation) {
@@ -987,6 +993,11 @@ export function createMouse(canvases, options = {}) {
   );
   // Tilt the patch's top back to follow the pear's narrowing shoulders.
   belly.rotation.x = -0.35;
+  belly.userData.tuneBaseX = belly.position.x;
+  belly.userData.tuneBaseY = belly.position.y;
+  belly.userData.tuneBaseZ = belly.position.z;
+  belly.userData.tuneBaseRotationX = belly.rotation.x;
+  root.userData.tuneParts = { chest: belly, body, ears: [] };
   belly.renderOrder = 1;
   torso.add(belly);
 
@@ -1024,8 +1035,8 @@ export function createMouse(canvases, options = {}) {
   nose.position.set(0, -0.14, 0.54);
   head.add(nose);
 
-  addEar(head, -1, mats, traits);
-  addEar(head, 1, mats, traits);
+  addEar(head, -1, mats, traits, root.userData.tuneParts.ears);
+  addEar(head, 1, mats, traits, root.userData.tuneParts.ears);
   addWhiskers(head, mats, traits, ownGeometries);
 
   const planes = {

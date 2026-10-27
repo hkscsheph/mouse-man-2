@@ -93,6 +93,34 @@ export function createCrowd(scene) {
   const actors = [];
   let live = null;
   let onFrontChange = null;
+  const partTuning = {
+    chestPositionX: 0,
+    chestPositionY: 0,
+    chestPositionZ: -0.1,
+    chestTilt: (30 * Math.PI) / 180,
+    earPosition: 0.1,
+    earTilt: (-25 * Math.PI) / 180,
+  };
+
+  function applyPartTuning(mesh) {
+    const { chest, body, ears } = mesh.userData.tuneParts;
+    chest.position.set(
+      chest.userData.tuneBaseX + partTuning.chestPositionX * body.scale.x,
+      chest.userData.tuneBaseY + partTuning.chestPositionY * body.scale.y,
+      chest.userData.tuneBaseZ + partTuning.chestPositionZ * body.scale.z,
+    );
+    chest.rotation.x = chest.userData.tuneBaseRotationX + partTuning.chestTilt;
+    for (const ear of ears) {
+      ear.position.z = ear.userData.tuneBaseZ + partTuning.earPosition;
+      ear.rotation.x = ear.userData.tuneBaseRotationX + partTuning.earTilt;
+    }
+  }
+
+  function createTunedMouse(canvases, options) {
+    const mesh = createMouse(canvases, options);
+    applyPartTuning(mesh);
+    return mesh;
+  }
 
   function removeActor(actor) {
     const index = actors.indexOf(actor);
@@ -211,7 +239,7 @@ export function createCrowd(scene) {
         return live;
       }
       if (live) freezeActor(live);
-      const mesh = createMouse(canvases, options);
+      const mesh = createTunedMouse(canvases, options);
       mesh.userData.live = true;
       if (options.staticFace || options.locked) {
         mesh.userData.liveCanvases = null;
@@ -235,7 +263,7 @@ export function createCrowd(scene) {
     },
     spawnWanderers(canvases, count) {
       for (let i = 0; i < count; i += 1) {
-        const mesh = createMouse(canvases);
+        const mesh = createTunedMouse(canvases);
         mesh.position.set(
           THREE.MathUtils.randFloat(-4, 4),
           0,
@@ -310,6 +338,10 @@ export function createCrowd(scene) {
     },
     refitFaces() {
       for (const actor of actors) refitFacePlanes(actor.mesh, true);
+    },
+    setPartTuning(values) {
+      Object.assign(partTuning, values);
+      for (const actor of actors) applyPartTuning(actor.mesh);
     },
     update(dt, time) {
       for (const actor of [...actors]) {

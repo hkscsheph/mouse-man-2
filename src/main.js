@@ -25,6 +25,18 @@ const tune = document.querySelector('#tune');
 const tuneToggle = document.querySelector('#tune-toggle');
 const featureScale = document.querySelector('#feature-scale');
 const featureScaleVal = document.querySelector('#feature-scale-val');
+const chestPositionX = document.querySelector('#chest-position-x');
+const chestPositionXValue = document.querySelector('#chest-position-x-value');
+const chestPositionY = document.querySelector('#chest-position-y');
+const chestPositionYValue = document.querySelector('#chest-position-y-value');
+const chestPositionZ = document.querySelector('#chest-position-z');
+const chestPositionZValue = document.querySelector('#chest-position-z-value');
+const chestTilt = document.querySelector('#chest-tilt');
+const chestTiltValue = document.querySelector('#chest-tilt-value');
+const earPosition = document.querySelector('#ear-position');
+const earPositionValue = document.querySelector('#ear-position-value');
+const earTilt = document.querySelector('#ear-tilt');
+const earTiltValue = document.querySelector('#ear-tilt-value');
 const sharePanel = document.querySelector('#share');
 const shareQr = document.querySelector('#share-qr');
 const shareHint = document.querySelector('#share-hint');
@@ -389,6 +401,29 @@ function applyFeatureScale(value) {
   crowd.refitFaces();
 }
 
+function applyPartTuning() {
+  const chestX = Number(chestPositionX.value);
+  const chestY = Number(chestPositionY.value);
+  const chestZ = Number(chestPositionZ.value);
+  const chestTiltDegrees = Number(chestTilt.value);
+  const earPositionAmount = Number(earPosition.value);
+  const earTiltDegrees = Number(earTilt.value);
+  crowd.setPartTuning({
+    chestPositionX: chestX,
+    chestPositionY: chestY,
+    chestPositionZ: chestZ,
+    chestTilt: (chestTiltDegrees * Math.PI) / 180,
+    earPosition: earPositionAmount,
+    earTilt: (earTiltDegrees * Math.PI) / 180,
+  });
+  chestPositionXValue.textContent = `${chestX.toFixed(2)}×`;
+  chestPositionYValue.textContent = `${chestY.toFixed(2)}×`;
+  chestPositionZValue.textContent = `${chestZ.toFixed(2)}×`;
+  chestTiltValue.textContent = `${chestTiltDegrees}°`;
+  earPositionValue.textContent = earPositionAmount.toFixed(2);
+  earTiltValue.textContent = `${earTiltDegrees}°`;
+}
+
 tuneToggle.addEventListener('click', () => {
   setTuneOpen(tune.hidden);
 });
@@ -396,6 +431,10 @@ tuneToggle.addEventListener('click', () => {
 featureScale.addEventListener('input', () => {
   applyFeatureScale(featureScale.value);
 });
+
+for (const control of [chestPositionX, chestPositionY, chestPositionZ, chestTilt, earPosition, earTilt]) {
+  control.addEventListener('input', applyPartTuning);
+}
 
 view.addEventListener('pointerdown', (event) => {
   if (environmentRotationLocked || event.button !== 0) return;
@@ -481,6 +520,7 @@ window.addEventListener('keydown', (event) => {
 
 window.addEventListener('contextmenu', (event) => event.preventDefault());
 applyFeatureScale(featureScale.value);
+applyPartTuning();
 showShareForActor(null);
 
 function stagePatch(label, draw) {

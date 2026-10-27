@@ -10,11 +10,29 @@
     <canvas id="view"></canvas>
     <video id="cam" playsinline autoplay muted></video>
     <p id="gate">Allow the camera to begin</p>
-    <button id="tune-toggle" type="button" aria-expanded="false" aria-controls="tune" title="Face size (H)" style="display: none;">Face size</button>
+    <button id="tune-toggle" type="button" aria-expanded="false" aria-controls="tune" title="Adjust chest and ear position (H)">Tune mice</button>
     <div id="tune" class="hidden" hidden>
       <label for="feature-scale">Eyes &amp; mouth</label>
       <input id="feature-scale" type="range" min="0.7" max="2.2" step="0.05" value="1.5" />
       <span id="feature-scale-val">1.00×</span>
+      <label for="chest-position-x">Chest X</label>
+      <input id="chest-position-x" type="range" min="-0.50" max="0.50" step="0.01" value="0" title="Position as a fraction of body width" />
+      <span id="chest-position-x-value" class="tune-value">0.00×</span>
+      <label for="chest-position-y">Chest Y</label>
+      <input id="chest-position-y" type="range" min="-0.50" max="0.50" step="0.01" value="0" title="Position as a fraction of body height" />
+      <span id="chest-position-y-value" class="tune-value">0.00×</span>
+      <label for="chest-position-z">Chest Z</label>
+      <input id="chest-position-z" type="range" min="-0.50" max="0.50" step="0.01" value="-0.10" title="Position as a fraction of body depth" />
+      <span id="chest-position-z-value" class="tune-value">-0.10×</span>
+      <label for="chest-tilt">Chest rotation</label>
+      <input id="chest-tilt" type="range" min="-45" max="45" step="1" value="30" />
+      <span id="chest-tilt-value" class="tune-value">30°</span>
+      <label for="ear-position">Ear position</label>
+      <input id="ear-position" type="range" min="-0.30" max="0.30" step="0.01" value="0.10" />
+      <span id="ear-position-value" class="tune-value">0.10</span>
+      <label for="ear-tilt">Ear rotation</label>
+      <input id="ear-tilt" type="range" min="-45" max="45" step="1" value="-25" />
+      <span id="ear-tilt-value" class="tune-value">-25°</span>
     </div>
     <aside id="share" class="empty" aria-label="Share this mouse">
       <div id="share-frame">
@@ -25,6 +43,11 @@
       </div>
       <p id="share-hint">Hold still to save your mouse</p>
     </aside>
-    <script type="module" src="./src/main.js"></script>
+    <p id="pixel-credit">
+      Cat art: <a href="https://opengameart.org/content/pixel-cat-0" target="_blank" rel="noopener">alizard (CC0)</a> ·
+      Mouse sprite: <a href="https://ikoiku.itch.io/16-x-16-pixel-art-character-mouse" target="_blank" rel="noopener">ikoiku</a>
+      (<a href="https://creativecommons.org/licenses/by-nd/4.0/" target="_blank" rel="noopener">CC BY-ND 4.0</a>)
+    </p>
+    <script type="module" src="./src/entry.js"></script>
   </body>
 </html>
