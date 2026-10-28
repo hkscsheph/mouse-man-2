@@ -282,6 +282,10 @@ function rand(min, max) {
   return min + Math.random() * (max - min);
 }
 
+function bodyY(traits, referenceY) {
+  return 0.08 + (referenceY - 0.08) * traits.bodyTall;
+}
+
 function hsl(h, s, l) {
   return new THREE.Color().setHSL(((h % 360) + 360) % 360 / 360, s, l);
 }
@@ -626,6 +630,7 @@ function addEar(head, side, mats, traits, tuningEars) {
   inner.userData.tuneBaseRotationX = inner.rotation.x;
   head.add(inner);
   tuningEars.push(ear, inner);
+  return ear;
 }
 
 function mesh(geometry, material, position, scale, rotation) {
@@ -765,8 +770,8 @@ function addWhiskers(head, mats, traits, ownGeometries) {
 
 function addBowtie(torso, mats, traits) {
   const group = new THREE.Group();
-  group.position.set(0, 1.2, 0.42 * traits.bodyDeep);
-  group.scale.setScalar(1.55);
+  group.position.set(0, bodyY(traits, 1.0), 0.42 * traits.bodyDeep);
+  group.scale.set(0.95 * traits.bodyWide, 1.1, 1.2 * traits.bodyDeep);
   torso.add(group);
   const left = new THREE.Mesh(shared.decorDisc, mats.accent);
   left.scale.set(1.7, 0.9, 0.45);
@@ -783,8 +788,8 @@ function addBowtie(torso, mats, traits) {
 
 function addTie(torso, mats, traits) {
   const group = new THREE.Group();
-  group.position.set(0, 1.18, 0.4 * traits.bodyDeep);
-  group.scale.setScalar(1.45);
+  group.position.set(0, bodyY(traits, 1.18), 0.4 * traits.bodyDeep);
+  group.scale.set(1.45 * traits.bodyWide, 1.45 * traits.bodyTall, 1.45 * traits.bodyDeep);
   torso.add(group);
   const knot = new THREE.Mesh(shared.decorBox, mats.accent);
   knot.scale.set(0.12, 0.1, 0.055);
@@ -802,13 +807,13 @@ function addTie(torso, mats, traits) {
 function addScarf(torso, mats, traits) {
   const wrap = new THREE.Mesh(shared.decorRing, mats.accent);
   wrap.rotation.x = Math.PI / 2;
-  wrap.position.set(0, 1.24, 0.06);
+  wrap.position.set(0, bodyY(traits, 1.16), 0.22 * traits.bodyDeep);
   wrap.scale.set(1.35 * traits.bodyWide, 1.55, 1.35 * traits.bodyDeep);
   torso.add(wrap);
   for (const side of [-1, 1]) {
     const end = new THREE.Mesh(shared.decorBox, mats.accent);
-    end.scale.set(0.14, 0.48, 0.07);
-    end.position.set(0.14 * side, 0.92, 0.4 * traits.bodyDeep);
+    end.scale.set(0.14 * traits.bodyWide, 0.48 * traits.bodyTall, 0.07 * traits.bodyDeep);
+    end.position.set(0.14 * side * traits.bodyWide, bodyY(traits, 0.92), 0.4 * traits.bodyDeep);
     end.rotation.set(0.2, 0.12 * side, 0.25 * side);
     torso.add(end);
   }
@@ -817,35 +822,55 @@ function addScarf(torso, mats, traits) {
 function addNecklace(torso, mats, traits) {
   const chain = new THREE.Mesh(shared.decorRing, mats.metal);
   chain.rotation.x = Math.PI / 2 + 0.35;
-  chain.position.set(0, 1.14, 0.16);
+  chain.position.set(0, bodyY(traits, 1.14), 0.3 * traits.bodyDeep);
   chain.scale.set(1.1 * traits.bodyWide, 1.05, 1.25 * traits.bodyDeep);
   torso.add(chain);
   const pendant = new THREE.Mesh(shared.decorBall, mats.accent);
   pendant.scale.setScalar(0.95);
-  pendant.position.set(0, 0.9, 0.48 * traits.bodyDeep);
+  pendant.position.set(0, bodyY(traits, 0.9), 0.48 * traits.bodyDeep);
   torso.add(pendant);
 }
 
-function addEarrings(head, mats, traits) {
-  for (const side of [-1, 1]) {
+function headwearScale(traits) {
+  return Math.min(1.1, 1 / Math.sqrt(traits.earSize * traits.earWide));
+}
+
+function addEarrings(ears, mats, traits) {
+  const bounds = new THREE.Box3();
+  for (const ear of ears) {
+    const side = Math.sign(ear.position.x);
+    ear.updateMatrix();
+    if (!ear.geometry.boundingBox) ear.geometry.computeBoundingBox();
+    bounds.copy(ear.geometry.boundingBox).applyMatrix4(ear.matrix);
+    const x = -0.12 * side;
+    const z = -0.16;
+    const y = (bounds.min.y + 0.12 - ear.matrix.elements[1] * x - ear.matrix.elements[9] * z - ear.matrix.elements[13]) / ear.matrix.elements[5];
     const drop = new THREE.Group();
-    drop.position.set(0.46 * side * traits.earFlare, 0.14 + traits.earTilt * 0.05, 0.1);
-    drop.scale.setScalar(1.6);
-    head.add(drop);
-    const hoop = new THREE.Mesh(shared.decorThinRing, mats.metal);
-    hoop.scale.setScalar(0.85);
-    hoop.rotation.y = Math.PI / 2;
+    drop.position.set(x, y, z);
+    drop.scale.setScalar(0.9 / traits.earSize);
+    ear.add(drop);
+    if (traits.earSize * traits.earWide < 1.2) {
+      const stud = new THREE.Mesh(shared.decorBall, mats.metal);
+      stud.scale.setScalar(0.9);
+      drop.add(stud);
+    } else {
+      const hoop = new THREE.Mesh(shared.decorThinRing, mats.metal);
+      hoop.scale.setScalar(0.75);
+      hoop.rotation.y = Math.PI / 2;
+      drop.add(hoop);
+    }
     const bead = new THREE.Mesh(shared.decorBall, mats.accent);
-    bead.scale.setScalar(0.55);
+    bead.scale.setScalar(0.38);
     bead.position.set(0, -0.12, 0);
-    drop.add(hoop, bead);
+    drop.add(bead);
   }
 }
 
-function addHat(head, mats) {
+function addHat(head, mats, traits) {
   const hat = new THREE.Group();
-  hat.position.set(0, 0.4, -0.02);
-  hat.scale.setScalar(1.25);
+  hat.position.set(0, 0.4 + Math.max(0, traits.earSize - 1) * 0.12, -0.02);
+  const fit = headwearScale(traits);
+  hat.scale.set(1.25 * fit, 1.25, 1.25 * fit);
   head.add(hat);
   const brim = new THREE.Mesh(shared.decorDisc, mats.accent);
   brim.scale.set(3.8, 0.28, 3.8);
@@ -860,10 +885,11 @@ function addHat(head, mats) {
   hat.add(brim, crown, band);
 }
 
-function addCap(head, mats) {
+function addCap(head, mats, traits) {
   const cap = new THREE.Group();
-  cap.position.set(0, 0.32, 0.02);
-  cap.scale.setScalar(1.3);
+  cap.position.set(0, 0.32 + Math.max(0, traits.earSize - 1) * 0.12, 0.02);
+  const fit = headwearScale(traits);
+  cap.scale.set(1.3 * fit, 1.3, 1.3 * fit);
   head.add(cap);
   const crown = new THREE.Mesh(shared.decorCap, mats.accent);
   crown.scale.set(1.5, 1.3, 1.5);
@@ -909,7 +935,7 @@ function addEyewear(head, mats, tinted) {
   }
 }
 
-function addAccessories(head, torso, mats, traits) {
+function addAccessories(head, torso, mats, traits, ears) {
   switch (traits.accessoryNeck) {
     case 'bowtie':
       addBowtie(torso, mats, traits);
@@ -929,10 +955,10 @@ function addAccessories(head, torso, mats, traits) {
 
   switch (traits.accessoryHead) {
     case 'hat':
-      addHat(head, mats);
+      addHat(head, mats, traits);
       break;
     case 'cap':
-      addCap(head, mats);
+      addCap(head, mats, traits);
       break;
     default:
       break;
@@ -940,7 +966,7 @@ function addAccessories(head, torso, mats, traits) {
 
   if (traits.accessoryEyes === 'glasses') addEyewear(head, mats, false);
   if (traits.accessoryEyes === 'sunglasses') addEyewear(head, mats, true);
-  if (traits.accessoryEarrings) addEarrings(head, mats, traits);
+  if (traits.accessoryEarrings) addEarrings(ears, mats, traits);
 }
 
 export function createMouse(canvases, options = {}) {
@@ -1035,8 +1061,10 @@ export function createMouse(canvases, options = {}) {
   nose.position.set(0, -0.14, 0.54);
   head.add(nose);
 
-  addEar(head, -1, mats, traits, root.userData.tuneParts.ears);
-  addEar(head, 1, mats, traits, root.userData.tuneParts.ears);
+  const ears = [
+    addEar(head, -1, mats, traits, root.userData.tuneParts.ears),
+    addEar(head, 1, mats, traits, root.userData.tuneParts.ears),
+  ];
   addWhiskers(head, mats, traits, ownGeometries);
 
   const planes = {
@@ -1046,7 +1074,7 @@ export function createMouse(canvases, options = {}) {
     nose: addFacePlane(head, canvases.nose, 'nose', new THREE.Vector3(0, -0.15, 0.6), 0.2, 0.26, 3),
   };
   root.userData.planes = planes;
-  addAccessories(head, torso, mats, traits);
+  addAccessories(head, torso, mats, traits, ears);
   // staticFace = restored / QR mouse — never wire webcam patch canvases.
   root.userData.liveCanvases = options.staticFace ? null : canvases;
   return root;

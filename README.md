@@ -6,3 +6,6 @@
 
 ## Pixel mode
 The classroom background, floor, and desks scroll continuously and wrap without an on-screen reset.
+
+## Accessories
+Random accessories adjust to each mouse's randomized body and ear dimensions.
