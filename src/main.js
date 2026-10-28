@@ -1,6 +1,14 @@
 import { createCrowd } from './crowd.js';
 import { initFace, readFace, resetFaceTracking } from './face.js';
-import { bindLiveFeatures, getFeatureScale, setFeatureScale } from './mouse.js';
+import {
+  bindLiveFeatures,
+  getEyePosition,
+  getFeatureScale,
+  getNostrilScale,
+  setEyePosition,
+  setFeatureScale,
+  setNostrilScale,
+} from './mouse.js';
 import {
   canvasesFromSnapshot,
   captureFaceCanvases,
@@ -25,6 +33,10 @@ const tune = document.querySelector('#tune');
 const tuneToggle = document.querySelector('#tune-toggle');
 const featureScale = document.querySelector('#feature-scale');
 const featureScaleVal = document.querySelector('#feature-scale-val');
+const nostrilScale = document.querySelector('#nostril-scale');
+const nostrilScaleVal = document.querySelector('#nostril-scale-val');
+const eyePosition = document.querySelector('#eye-position');
+const eyePositionValue = document.querySelector('#eye-position-value');
 const chestPositionX = document.querySelector('#chest-position-x');
 const chestPositionXValue = document.querySelector('#chest-position-x-value');
 const chestPositionY = document.querySelector('#chest-position-y');
@@ -129,6 +141,8 @@ async function persistLiveMouse(actor) {
     const snapshot = snapshotFromMouse(actor.mesh, {
       id: actor.mesh.userData.mouseId,
       featureScale: getFeatureScale(),
+      nostrilScale: getNostrilScale(),
+      eyePosition: getEyePosition(),
       faceCanvases,
     });
     const published = await publishSnapshot(snapshot);
@@ -323,6 +337,8 @@ async function loadSharedMouse(id) {
   try {
     const snapshot = await fetchSnapshot(id);
     if (snapshot.featureScale) applyFeatureScale(snapshot.featureScale);
+    if (snapshot.nostrilScale != null) applyNostrilScale(snapshot.nostrilScale);
+    if (snapshot.eyePosition != null) applyEyePosition(snapshot.eyePosition);
     const canvases = await canvasesFromSnapshot(snapshot);
     const actor = crowd.spawnLive(canvases, {
       traits: snapshot.traits,
@@ -401,6 +417,20 @@ function applyFeatureScale(value) {
   crowd.refitFaces();
 }
 
+function applyNostrilScale(value) {
+  setNostrilScale(value);
+  nostrilScale.value = String(getNostrilScale());
+  nostrilScaleVal.textContent = `${getNostrilScale().toFixed(2)}×`;
+  crowd.refitFaces();
+}
+
+function applyEyePosition(value) {
+  setEyePosition(value);
+  eyePosition.value = String(getEyePosition());
+  eyePositionValue.textContent = getEyePosition().toFixed(2);
+  crowd.refitFaces();
+}
+
 function applyPartTuning() {
   const chestX = Number(chestPositionX.value);
   const chestY = Number(chestPositionY.value);
@@ -430,6 +460,12 @@ tuneToggle.addEventListener('click', () => {
 
 featureScale.addEventListener('input', () => {
   applyFeatureScale(featureScale.value);
+});
+nostrilScale.addEventListener('input', () => {
+  applyNostrilScale(nostrilScale.value);
+});
+eyePosition.addEventListener('input', () => {
+  applyEyePosition(eyePosition.value);
 });
 
 for (const control of [chestPositionX, chestPositionY, chestPositionZ, chestTilt, earPosition, earTilt]) {
@@ -517,9 +553,11 @@ window.addEventListener('keydown', (event) => {
     view.style.cursor = environmentRotationLocked ? '' : 'grab';
   }
 });
+applyEyePosition(eyePosition.value);
 
 window.addEventListener('contextmenu', (event) => event.preventDefault());
 applyFeatureScale(featureScale.value);
+applyNostrilScale(nostrilScale.value);
 applyPartTuning();
 showShareForActor(null);
 

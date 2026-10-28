@@ -108,7 +108,7 @@ export function captureFaceCanvases(mouse) {
   return patches;
 }
 
-export function snapshotFromMouse(mouse, { id, featureScale, faceCanvases } = {}) {
+export function snapshotFromMouse(mouse, { id, featureScale, nostrilScale, eyePosition, faceCanvases } = {}) {
   const patches = {};
   const sources = faceCanvases || null;
   for (const key of PATCH_KEYS) {
@@ -122,6 +122,8 @@ export function snapshotFromMouse(mouse, { id, featureScale, faceCanvases } = {}
     id: id || mouse.userData.mouseId || newMouseId(),
     createdAt: Date.now(),
     featureScale: featureScale ?? 1,
+    nostrilScale: nostrilScale ?? 1,
+    eyePosition: eyePosition ?? 0,
     traits: serializeTraits(mouse.userData.traits),
     patches,
   };

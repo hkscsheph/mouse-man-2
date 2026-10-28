@@ -1,13 +1,17 @@
 import * as THREE from 'three';
 
 const PATCH_KEYS = ['leftEye', 'rightEye', 'nose', 'mouth'];
+const CURVED_PATCHES = new Set(PATCH_KEYS);
 const SCALED_PATCHES = new Set(['leftEye', 'rightEye', 'mouth']);
+const EYE_PATCHES = new Set(['leftEye', 'rightEye']);
 
+const HEAD_SURFACE = { centerX: 0, centerY: 0, centerZ: 0, x: 0.46 * 1.02, y: 0.46 * 0.98, z: 0.46 * 0.96 };
+const FACE_SURFACE_OFFSET = 0.004;
 const shared = {
   ready: false,
 };
 
-/** Global scale for projected eyes + mouth (nose stays fixed). */
+/** Global scale for projected eyes and mouth. */
 let featureScale = 1;
 
 export function getFeatureScale() {
@@ -15,7 +19,27 @@ export function getFeatureScale() {
 }
 
 export function setFeatureScale(value) {
-  featureScale = THREE.MathUtils.clamp(Number(value) || 1, 0.6, 2.4);
+  featureScale = THREE.MathUtils.clamp(Number(value) || 1, 2, 3.6);
+}
+
+let eyePosition = 0;
+
+export function getEyePosition() {
+  return eyePosition;
+}
+
+export function setEyePosition(value) {
+  eyePosition = THREE.MathUtils.clamp(Number(value) || 0, -0.15, 0.15);
+}
+
+let nostrilScale = 2.4;
+
+export function getNostrilScale() {
+  return nostrilScale;
+}
+
+export function setNostrilScale(value) {
+  nostrilScale = THREE.MathUtils.clamp(Number(value) || 1, 2, 3.6);
 }
 
 function feltNormal() {
@@ -245,7 +269,7 @@ function buildShared() {
     12,
   );
   shared.whiskerGeo = new THREE.CylinderGeometry(0.008, 0.003, 0.4, 5);
-  shared.plane = new THREE.PlaneGeometry(1, 1);
+  shared.plane = new THREE.PlaneGeometry(1, 1, 16, 12);
   shared.tail = taperedTube(
     new THREE.CatmullRomCurve3([
       new THREE.Vector3(0.02, 0.48, -0.32),
@@ -595,8 +619,11 @@ function clonePalette(traits) {
   return { fur, arm, belly, ear, nose, whisker, accent, metal, lens };
 }
 
-function addFacePlane(parent, canvas, key, position, height, maxWidth, order) {
-  const mesh = new THREE.Mesh(shared.plane, faceMaterial(canvas));
+function addFacePlane(parent, canvas, key, position, height, maxWidth, order, ownGeometries, surface = HEAD_SURFACE) {
+  const isCurved = CURVED_PATCHES.has(key);
+  const geometry = isCurved ? shared.plane.clone() : shared.plane;
+  if (isCurved) ownGeometries.push(geometry);
+  const mesh = new THREE.Mesh(geometry, faceMaterial(canvas));
   mesh.position.copy(position);
   mesh.userData.isFace = true;
   mesh.userData.key = key;
@@ -604,6 +631,14 @@ function addFacePlane(parent, canvas, key, position, height, maxWidth, order) {
   mesh.userData.maxWidth = maxWidth;
   mesh.userData.order = order;
   mesh.userData.aspect = canvas.aspect || 1.2;
+  mesh.userData.surface = surface;
+  mesh.userData.isCurved = isCurved;
+  if (isCurved) {
+    mesh.userData.centerX = position.x;
+    mesh.userData.centerY = position.y;
+    mesh.userData.baseCenterY = position.y;
+    mesh.onBeforeRender = () => updateFaceSurface(mesh);
+  }
   fitPlane(mesh, mesh.userData.aspect, true);
   parent.add(mesh);
   return mesh;
@@ -843,7 +878,7 @@ function addEarrings(ears, mats, traits) {
     if (!ear.geometry.boundingBox) ear.geometry.computeBoundingBox();
     bounds.copy(ear.geometry.boundingBox).applyMatrix4(ear.matrix);
     const x = -0.12 * side;
-    const z = -0.16;
+    const z = -0.02;
     const y = (bounds.min.y + 0.12 - ear.matrix.elements[1] * x - ear.matrix.elements[9] * z - ear.matrix.elements[13]) / ear.matrix.elements[5];
     const drop = new THREE.Group();
     drop.position.set(x, y, z);
@@ -1050,6 +1085,14 @@ export function createMouse(canvases, options = {}) {
   snout.scale.set(1.12 * traits.snoutRound, 0.82 * traits.snoutRound, 1.18 * traits.snoutLen);
   snout.position.set(0, -0.12, 0.34);
   head.add(snout);
+  const snoutSurface = {
+    centerX: snout.position.x,
+    centerY: snout.position.y,
+    centerZ: snout.position.z,
+    x: 0.2 * snout.scale.x,
+    y: 0.2 * snout.scale.y,
+    z: 0.2 * snout.scale.z,
+  };
 
   // Rounder noses stay spherical; flatter ones squash on Z.
   const nose = new THREE.Mesh(shared.noseGeo, mats.nose);
@@ -1058,7 +1101,7 @@ export function createMouse(canvases, options = {}) {
     traits.noseSize * traits.noseRound,
     traits.noseSize * traits.noseFlat,
   );
-  nose.position.set(0, -0.14, 0.54);
+  nose.position.set(0, -0.14, faceSurfaceZ(0, -0.14, snoutSurface) + 0.055 * nose.scale.z - FACE_SURFACE_OFFSET);
   head.add(nose);
 
   const ears = [
@@ -1068,10 +1111,10 @@ export function createMouse(canvases, options = {}) {
   addWhiskers(head, mats, traits, ownGeometries);
 
   const planes = {
-    leftEye: addFacePlane(head, canvases.leftEye, 'leftEye', new THREE.Vector3(-0.15, 0.08, 0.47), 0.22, 0.28, 1),
-    rightEye: addFacePlane(head, canvases.rightEye, 'rightEye', new THREE.Vector3(0.15, 0.08, 0.47), 0.22, 0.28, 1),
-    mouth: addFacePlane(head, canvases.mouth, 'mouth', new THREE.Vector3(0, -0.3, 0.42), 0.15, 0.34, 2),
-    nose: addFacePlane(head, canvases.nose, 'nose', new THREE.Vector3(0, -0.15, 0.6), 0.2, 0.26, 3),
+    leftEye: addFacePlane(head, canvases.leftEye, 'leftEye', new THREE.Vector3(-0.15, 0.08, 0.47), 0.22, 0.28, 1, ownGeometries),
+    rightEye: addFacePlane(head, canvases.rightEye, 'rightEye', new THREE.Vector3(0.15, 0.08, 0.47), 0.22, 0.28, 1, ownGeometries),
+    mouth: addFacePlane(head, canvases.mouth, 'mouth', new THREE.Vector3(0, -0.3, 0.42), 0.15, 0.34, 2, ownGeometries),
+    nose: addFacePlane(head, canvases.nose, 'nose', new THREE.Vector3(0, -0.15, 0.6), 0.12, 0.16, 3, ownGeometries, snoutSurface),
   };
   root.userData.planes = planes;
   addAccessories(head, torso, mats, traits, ears);
@@ -1148,15 +1191,80 @@ export function refitFacePlanes(mouse, snap = true) {
   }
 }
 
+function faceSurfaceZ(x, y, surface) {
+  const xRatio = (x - surface.centerX) / surface.x;
+  const yRatio = (y - surface.centerY) / surface.y;
+  return surface.centerZ + surface.z * Math.sqrt(Math.max(0, 1 - xRatio * xRatio - yRatio * yRatio));
+}
+
+function faceFitScale(x, y, width, height, surface) {
+  const rx2 = surface.x * surface.x;
+  const ry2 = surface.y * surface.y;
+  const localX = x - surface.centerX;
+  const localY = y - surface.centerY;
+  const a = (width * width) / (4 * rx2) + (height * height) / (4 * ry2);
+  const b = (Math.abs(localX) * width) / rx2 + (Math.abs(localY) * height) / ry2;
+  const c = (localX * localX) / rx2 + (localY * localY) / ry2;
+  if (c >= 1) return 0;
+  return Math.min(1, (-b + Math.sqrt(b * b + 4 * a * (1 - c))) / (2 * a));
+}
+
+function updateFaceSurface(plane) {
+  const width = plane.scale.x;
+  const height = plane.scale.y;
+  const centerX = plane.userData.centerX;
+  const centerY = plane.userData.centerY;
+  if (plane.userData.curvedWidth !== undefined
+    && Math.abs(width - plane.userData.curvedWidth) < 1e-5
+    && Math.abs(height - plane.userData.curvedHeight) < 1e-5
+    && Math.abs(centerX - plane.userData.curvedCenterX) < 1e-5
+    && Math.abs(centerY - plane.userData.curvedCenterY) < 1e-5) return;
+
+  const surface = plane.userData.surface;
+  const centerZ = faceSurfaceZ(centerX, centerY, surface);
+  const positions = plane.geometry.getAttribute('position');
+  const normals = plane.geometry.getAttribute('normal');
+  plane.position.set(centerX, centerY, centerZ + FACE_SURFACE_OFFSET);
+  for (let i = 0; i < positions.count; i += 1) {
+    const x = centerX + positions.getX(i) * width;
+    const y = centerY + positions.getY(i) * height;
+    const z = faceSurfaceZ(x, y, surface);
+    positions.setZ(i, z - centerZ);
+    const localX = x - surface.centerX;
+    const localY = y - surface.centerY;
+    const nx = localX / (surface.x * surface.x);
+    const ny = localY / (surface.y * surface.y);
+    const nz = (z - surface.centerZ) / (surface.z * surface.z);
+    const normalLength = Math.hypot(nx, ny, nz);
+    normals.setXYZ(i, nx / normalLength, ny / normalLength, nz / normalLength);
+  }
+  positions.needsUpdate = true;
+  normals.needsUpdate = true;
+  plane.geometry.computeBoundingSphere();
+  plane.userData.curvedWidth = width;
+  plane.userData.curvedCenterX = centerX;
+  plane.userData.curvedCenterY = centerY;
+  plane.userData.curvedHeight = height;
+}
+
 function fitPlane(plane, aspect, snap) {
   const safeAspect = THREE.MathUtils.clamp(aspect, 0.55, 2.6);
-  const boost = SCALED_PATCHES.has(plane.userData.key) ? featureScale : 1;
+  const key = plane.userData.key;
+  if (EYE_PATCHES.has(key)) plane.userData.centerY = plane.userData.baseCenterY + eyePosition;
+  const boost = SCALED_PATCHES.has(key) ? featureScale : key === 'nose' ? nostrilScale : 1;
   const height = plane.userData.height * boost;
   const maxWidth = plane.userData.maxWidth * boost;
-  const width = Math.min(height * safeAspect, maxWidth);
+  let width = Math.min(height * safeAspect, maxWidth);
+  let fittedHeight = height;
+  if (plane.userData.isCurved) {
+    const fit = faceFitScale(plane.userData.centerX, plane.userData.centerY, width, height, plane.userData.surface);
+    width *= fit;
+    fittedHeight *= fit;
+  }
   if (!plane.userData.targetScale) plane.userData.targetScale = new THREE.Vector3();
-  plane.userData.targetScale.set(width, height, 1);
+  plane.userData.targetScale.set(width, fittedHeight, 1);
   if (snap) plane.scale.copy(plane.userData.targetScale);
+  if (plane.userData.isCurved) updateFaceSurface(plane);
 }
 
 export function disposeMouse(mouse) {
