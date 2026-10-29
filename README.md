@@ -12,3 +12,5 @@ Random accessories adjust to each mouse's randomized body and ear dimensions.
 Eyes and mouth patches conform to the skull; nose patches and 3D noses follow the muzzle surface.
 The nostril-size slider scales the nose face patch independently of eyes and mouth.
 The eye-position slider moves both eyes vertically without moving the mouth or nose.
+Generated nose patches place nostrils near the bottom of the nose.
+Live face patches follow the tracked head tilt as a single face.

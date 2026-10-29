@@ -121,7 +121,7 @@ function poseFromLandmarks(lm) {
   const chin = lm[152];
   if (!left || !right || !nose || !forehead || !chin) return { yaw: 0, pitch: 0, roll: 0 };
   const midX = (left.x + right.x) * 0.5;
-  const eyeDist = Math.max(0.0001, Math.abs(right.x - left.x));
+  const eyeDist = Math.max(0.01, Math.abs(right.x - left.x));
   const yaw = THREE.MathUtils.clamp(-((nose.x - midX) / eyeDist) * 0.85, -0.38, 0.38);
   const midY = (left.y + right.y) * 0.5;
   const faceH = Math.max(0.0001, chin.y - forehead.y);
@@ -165,7 +165,7 @@ function convexHull(points) {
   return lower.concat(upper);
 }
 
-function paintPatch(target, points, expand) {
+function paintPatch(target, points, expand, roll = 0) {
   const width = mirror.width;
   const height = mirror.height;
   if (!width || !height || points.length < 3) return;
@@ -184,11 +184,17 @@ function paintPatch(target, points, expand) {
     x: cx + (point.x - cx) * expand,
     y: cy + (point.y - cy) * expand,
   }));
+  const cos = Math.cos(roll);
+  const sin = Math.sin(roll);
+  const aligned = grown.map((point) => ({
+    x: cx + (point.x - cx) * cos + (point.y - cy) * sin,
+    y: cy - (point.x - cx) * sin + (point.y - cy) * cos,
+  }));
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
-  for (const point of grown) {
+  for (const point of aligned) {
     minX = Math.min(minX, point.x);
     minY = Math.min(minY, point.y);
     maxX = Math.max(maxX, point.x);
@@ -201,11 +207,19 @@ function paintPatch(target, points, expand) {
   maxY += pad;
   const boxW = Math.max(2, maxX - minX);
   const boxH = Math.max(2, maxY - minY);
+  const scaleX = PATCH / boxW;
+  const scaleY = PATCH / boxH;
   target.aspect = boxW / boxH;
 
   const ctx = target.getContext('2d');
   ctx.clearRect(0, 0, PATCH, PATCH);
-  ctx.drawImage(mirror, minX, minY, boxW, boxH, 0, 0, PATCH, PATCH);
+  ctx.save();
+  ctx.setTransform(scaleX, 0, 0, scaleY, -minX * scaleX, -minY * scaleY);
+  ctx.translate(cx, cy);
+  ctx.rotate(roll);
+  ctx.translate(-cx, -cy);
+  ctx.drawImage(mirror, 0, 0);
+  ctx.restore();
   ctx.save();
   ctx.globalCompositeOperation = 'soft-light';
   ctx.fillStyle = 'rgba(255, 148, 64, 0.28)';
@@ -214,15 +228,16 @@ function paintPatch(target, points, expand) {
 
   maskCtx.clearRect(0, 0, PATCH, PATCH);
   maskCtx.fillStyle = '#fff';
+  maskCtx.save();
+  maskCtx.setTransform(scaleX, 0, 0, scaleY, -minX * scaleX, -minY * scaleY);
   maskCtx.beginPath();
-  grown.forEach((point, index) => {
-    const x = ((point.x - minX) / boxW) * PATCH;
-    const y = ((point.y - minY) / boxH) * PATCH;
-    if (index === 0) maskCtx.moveTo(x, y);
-    else maskCtx.lineTo(x, y);
+  aligned.forEach((point, index) => {
+    if (index === 0) maskCtx.moveTo(point.x, point.y);
+    else maskCtx.lineTo(point.x, point.y);
   });
   maskCtx.closePath();
   maskCtx.fill();
+  maskCtx.restore();
 
   ctx.save();
   ctx.globalCompositeOperation = 'destination-in';
@@ -230,6 +245,20 @@ function paintPatch(target, points, expand) {
   ctx.drawImage(maskCanvas, 0, 0);
   ctx.filter = 'none';
   ctx.restore();
+}
+
+function paintAll(lm, roll) {
+  const brows = {
+    leftEye: 0.015,
+    rightEye: 0.015,
+    nose: 0,
+    mouth: 0,
+  };
+  const expand = { leftEye: 1.18, rightEye: 1.18, nose: 1.42, mouth: 1.22 };
+  for (const key of ['leftEye', 'rightEye', 'nose', 'mouth']) {
+    const patchRoll = key === 'leftEye' || key === 'rightEye' ? roll : 0;
+    paintPatch(patches[key], gather(lm, indices[key], brows[key]), expand[key], patchRoll);
+  }
 }
 
 function updateMirror(video) {
@@ -245,18 +274,6 @@ function updateMirror(video) {
   mirrorCtx.restore();
 }
 
-function paintAll(lm) {
-  const brows = {
-    leftEye: 0.015,
-    rightEye: 0.015,
-    nose: 0,
-    mouth: 0,
-  };
-  const expand = { leftEye: 1.18, rightEye: 1.18, nose: 1.42, mouth: 1.22 };
-  for (const key of ['leftEye', 'rightEye', 'nose', 'mouth']) {
-    paintPatch(patches[key], gather(lm, indices[key], brows[key]), expand[key]);
-  }
-}
 
 export function readFace(video, now) {
   if (!landmarker || video.readyState < 2) return { present: false };
@@ -307,7 +324,7 @@ export function readFace(video, now) {
   let patchesDirty = false;
   if (!paintedOnce || now - lastPaint >= PAINT_INTERVAL) {
     updateMirror(video);
-    paintAll(lm);
+    paintAll(lm, pose.roll);
     lastPaint = now;
     paintedOnce = true;
     patchesDirty = true;

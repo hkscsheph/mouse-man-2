@@ -611,6 +611,11 @@ function stageCanvases(hue, labels = true) {
       ctx.beginPath();
       ctx.ellipse(96, 100, 48, 62, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = 'rgba(55, 24, 35, 0.82)';
+      ctx.beginPath();
+      ctx.ellipse(84, 136, 5, 7, -0.2, 0, Math.PI * 2);
+      ctx.ellipse(108, 136, 5, 7, 0.2, 0, Math.PI * 2);
+      ctx.fill();
     }),
     mouth: stagePatch('', (ctx) => {
       ctx.fillStyle = `hsl(${hue + 20} 45% 48%)`;

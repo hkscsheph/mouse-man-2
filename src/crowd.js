@@ -397,7 +397,7 @@ export function createCrowd(scene) {
           torso.rotation.z = THREE.MathUtils.damp(torso.rotation.z, roll * 0.18, 4, dt);
           head.rotation.y = THREE.MathUtils.damp(head.rotation.y, yaw * 0.68, 5, dt);
           head.rotation.x = THREE.MathUtils.damp(head.rotation.x, pitch, 5, dt);
-          head.rotation.z = THREE.MathUtils.damp(head.rotation.z, roll * 0.82, 5, dt);
+          head.rotation.z = THREE.MathUtils.damp(head.rotation.z, roll, 5, dt);
         } else {
           torso.rotation.y = THREE.MathUtils.damp(torso.rotation.y, Math.sin(time * 0.35 + phase) * 0.04, 2, dt);
           torso.rotation.z = THREE.MathUtils.damp(torso.rotation.z, Math.sin(time * 0.22 + phase) * 0.02, 2, dt);
@@ -405,6 +405,7 @@ export function createCrowd(scene) {
           head.rotation.x = Math.sin(time * 0.32 + phase * 1.3) * 0.03;
           head.rotation.z = Math.sin(time * 0.28 + phase * 0.7) * 0.04;
         }
+
         const orderBias = Math.round(actor.mesh.position.z * 20);
         for (const plane of Object.values(actor.mesh.userData.planes)) {
           plane.renderOrder = plane.userData.order + orderBias;

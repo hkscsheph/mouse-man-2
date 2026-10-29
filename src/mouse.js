@@ -1230,10 +1230,10 @@ function updateFaceSurface(plane) {
     const y = centerY + positions.getY(i) * height;
     const z = faceSurfaceZ(x, y, surface);
     positions.setZ(i, z - centerZ);
-    const localX = x - surface.centerX;
-    const localY = y - surface.centerY;
-    const nx = localX / (surface.x * surface.x);
-    const ny = localY / (surface.y * surface.y);
+    const surfaceX = x - surface.centerX;
+    const surfaceY = y - surface.centerY;
+    const nx = surfaceX / (surface.x * surface.x);
+    const ny = surfaceY / (surface.y * surface.y);
     const nz = (z - surface.centerZ) / (surface.z * surface.z);
     const normalLength = Math.hypot(nx, ny, nz);
     normals.setXYZ(i, nx / normalLength, ny / normalLength, nz / normalLength);
