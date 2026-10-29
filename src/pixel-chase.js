@@ -1,0 +1,389 @@
+/**
+ * Scrollable pixel classroom with a running cat and dynamic mouse sprites.
+ * Used by standalone pixel mode and main-stage mode.
+ */
+
+const BASE_WIDTH = 320;
+const CAT_FRAME_SIZE = 66;
+const CAT_FRAME_COUNT = 5;
+const CAT_FOOT_ROW = 50;
+const MOUSE_FRAME_SIZE = 32;
+const MOUSE_FRAME_COUNT = 6;
+const MOUSE_FOOT_ROW = 20;
+
+function wrap(value, period) {
+  return ((value % period) + period) % period;
+}
+
+function onePixel(pxFn) {
+  return Math.max(1, pxFn(1));
+}
+
+export function createPixelChase(canvas, options = {}) {
+  const ctx = canvas.getContext('2d');
+  let width = BASE_WIDTH;
+  let height = 200;
+  let worldScale = 1;
+  let lastFrame = performance.now();
+  let scroll = 0;
+  let running = true;
+  let raf = 0;
+
+  const catSource = new Image();
+  let catRunSheet = null;
+  const mouseSprite = new Image();
+  mouseSprite.src = new URL('./MouseRun.png', import.meta.url).href;
+
+  /** @type {{ id: string, spread: number, ySpread: number, sizeBias: number }[]} */
+  const mice = [];
+
+  let catBaseX = 18;
+  let catSlide = 0;
+  /** @type {null | { id: string, fromSlide: number, toSlide: number, t: number, dur: number, phase: 'run' | 'bite' }} */
+  let catChase = null;
+
+  const initialCount = options.initialCount ?? 0;
+  const seedRandom = options.seedRandom ?? Math.random;
+
+  function px(value) {
+    return Math.round(value * worldScale);
+  }
+
+  function prepareCatSprite() {
+    const sheet = document.createElement('canvas');
+    sheet.width = catSource.naturalWidth;
+    sheet.height = catSource.naturalHeight;
+    const sheetContext = sheet.getContext('2d', { willReadFrequently: true });
+    sheetContext.drawImage(catSource, 0, 0);
+    const image = sheetContext.getImageData(0, 0, sheet.width, sheet.height);
+    const { data } = image;
+    for (let y = 0; y < sheet.height; y += 1) {
+      for (let x = 0; x < sheet.width; x += 1) {
+        const i = (y * sheet.width + x) * 4;
+        const red = data[i];
+        const green = data[i + 1];
+        const blue = data[i + 2];
+        if (red < 20 && green > 120 && blue > 180) {
+          data[i + 3] = 0;
+        } else if (green > 175 && red < 180 && blue < 180) {
+          data[i] = 220;
+          data[i + 1] = 62;
+          data[i + 2] = 76;
+        } else if (red > 140 && green > 70 && red > green * 1.25 && green > blue * 1.2 && blue < 130) {
+          const color = red < 225 ? [78, 85, 96] : [23, 25, 35];
+          data[i] = color[0];
+          data[i + 1] = color[1];
+          data[i + 2] = color[2];
+        } else if (red < 80 && green > 80 && blue > 80) {
+          data[i] = 40;
+          data[i + 1] = 44;
+          data[i + 2] = 52;
+        }
+      }
+    }
+    sheetContext.putImageData(image, 0, 0);
+    catRunSheet = sheet;
+  }
+
+  catSource.addEventListener('load', prepareCatSprite, { once: true });
+  catSource.src = new URL('./cat-run.png', import.meta.url).href;
+
+  function resize() {
+    if (typeof options.getSize === 'function') {
+      const size = options.getSize();
+      width = Math.max(80, Math.round(size.width));
+      height = Math.max(60, Math.round(size.height));
+    } else {
+      width = Math.max(80, Math.round((options.width ?? window.innerWidth) / (options.widthDivisor ?? 4)));
+      height = Math.max(
+        60,
+        Math.round((options.height ?? window.innerHeight) / (options.heightDivisor ?? 4)),
+      );
+    }
+    worldScale = width / BASE_WIDTH;
+    canvas.width = width;
+    canvas.height = height;
+    ctx.imageSmoothingEnabled = false;
+  }
+
+  function drawDesk(x, y, deskWidth) {
+    const one = Math.max(1, px(1));
+    ctx.fillStyle = '#684332';
+    ctx.fillRect(x, y + px(4), deskWidth, px(5));
+    ctx.fillStyle = '#a86e42';
+    ctx.fillRect(x, y, deskWidth, px(5));
+    ctx.fillStyle = '#e0aa62';
+    ctx.fillRect(x, y, deskWidth, one);
+    ctx.fillStyle = '#795039';
+    ctx.fillRect(x + px(5), y + px(8), px(3), px(11));
+    ctx.fillRect(x + deskWidth - px(8), y + px(8), px(3), px(11));
+  }
+
+  function drawClassroomWall(groundY) {
+    ctx.fillStyle = '#e8d9ba';
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = '#bda982';
+    ctx.fillRect(0, 0, width, px(7));
+    ctx.fillStyle = '#f5e9cd';
+    ctx.fillRect(0, px(7), width, px(2));
+
+    const boardX = px(36);
+    const boardY = Math.max(px(24), Math.floor(groundY * 0.2));
+    const boardWidth = px(144);
+    const boardHeight = px(58);
+    ctx.fillStyle = '#79553b';
+    ctx.fillRect(boardX - px(3), boardY - px(3), boardWidth + px(6), boardHeight + px(6));
+    ctx.fillStyle = '#345c50';
+    ctx.fillRect(boardX, boardY, boardWidth, boardHeight);
+    ctx.fillStyle = '#d7e6c7';
+    ctx.fillRect(boardX + px(12), boardY + px(14), px(28), Math.max(1, px(2)));
+    ctx.fillRect(boardX + px(12), boardY + px(22), px(18), Math.max(1, px(2)));
+    ctx.fillRect(boardX + px(54), boardY + px(15), px(2), px(19));
+    ctx.fillRect(boardX + px(48), boardY + px(23), px(14), Math.max(1, px(2)));
+    ctx.fillRect(boardX + px(94), boardY + px(18), px(30), Math.max(1, px(2)));
+    ctx.fillStyle = '#e1b16e';
+    ctx.fillRect(boardX + px(3), boardY + boardHeight, boardWidth - px(6), Math.max(1, px(3)));
+
+    const windowX = width - px(82);
+    const windowY = boardY;
+    const windowWidth = px(70);
+    const windowHeight = px(58);
+    ctx.fillStyle = '#79553b';
+    ctx.fillRect(windowX - px(3), windowY - px(3), windowWidth + px(6), windowHeight + px(6));
+    ctx.fillStyle = '#93d8e6';
+    ctx.fillRect(windowX, windowY, windowWidth, windowHeight);
+    ctx.fillStyle = '#f4e6c8';
+    ctx.fillRect(windowX + Math.floor(windowWidth / 2) - onePixel(px), windowY, px(3), windowHeight);
+    ctx.fillRect(windowX, windowY + Math.floor(windowHeight / 2), windowWidth, px(3));
+    ctx.fillStyle = '#b5e9ec';
+    ctx.fillRect(windowX + px(5), windowY + px(5), px(16), px(12));
+
+    const clockX = px(13);
+    const clockY = boardY + px(5);
+    ctx.fillStyle = '#79553b';
+    ctx.fillRect(clockX, clockY, px(15), px(15));
+    ctx.fillStyle = '#f5e9cd';
+    ctx.fillRect(clockX + px(2), clockY + px(2), px(11), px(11));
+    ctx.fillStyle = '#594734';
+    ctx.fillRect(clockX + px(7), clockY + px(4), Math.max(1, px(1)), px(4));
+    ctx.fillRect(clockX + px(7), clockY + px(7), px(4), Math.max(1, px(1)));
+  }
+
+  function drawClassroom(groundY) {
+    const wallOffset = px(scroll / 2) % width;
+    for (let x = -wallOffset; x < width; x += width) {
+      ctx.save();
+      ctx.translate(x, 0);
+      drawClassroomWall(groundY);
+      ctx.restore();
+    }
+    const cabinetY = groundY - px(27);
+    ctx.fillStyle = '#936541';
+    ctx.fillRect(0, cabinetY, width, px(23));
+    ctx.fillStyle = '#c48b53';
+    ctx.fillRect(0, cabinetY, width, Math.max(1, px(2)));
+    const cabinetStride = Math.max(1, px(48));
+    const cabinetOffset = px(scroll) % cabinetStride;
+    for (let x = px(32) - cabinetOffset; x < width; x += cabinetStride) {
+      ctx.fillStyle = '#6e4b38';
+      ctx.fillRect(x, cabinetY + px(3), Math.max(1, px(2)), px(18));
+      ctx.fillStyle = '#d2a36b';
+      ctx.fillRect(x + px(4), cabinetY + px(10), Math.max(1, px(3)), Math.max(1, px(1)));
+    }
+
+    for (let i = 0; i < 3; i += 1) {
+      const deskWidth = 42 + (i % 2) * 8;
+      const x = Math.floor(px(wrap(i * 126 - scroll * 0.82, BASE_WIDTH + deskWidth) - deskWidth));
+      const y = groundY - Math.max(px(34), Math.floor(height * 0.18)) - 3;
+      drawDesk(x, y, px(deskWidth));
+    }
+
+    ctx.fillStyle = '#96623f';
+    ctx.fillRect(0, groundY, width, height - groundY);
+    ctx.fillStyle = '#d5a266';
+    ctx.fillRect(0, groundY, width, Math.max(1, px(2)));
+    const tileWidth = Math.max(px(32), 2);
+    const tileOffset = px(scroll) % (tileWidth * 2);
+    for (let i = 0, x = -tileOffset; x < width; i += 1, x += tileWidth) {
+      ctx.fillStyle = i % 2 ? '#a16a43' : '#8c593a';
+      ctx.fillRect(x, groundY + px(2), tileWidth - 1, height - groundY - px(2));
+      ctx.fillStyle = '#c18a55';
+      ctx.fillRect(x + px(5), groundY + px(8), px(10), Math.max(1, px(1)));
+      ctx.fillRect(x + px(20), groundY + px(19), px(7), Math.max(1, px(1)));
+    }
+  }
+
+  function mouseLayout(groundY, now) {
+    const catSize = width < 150 ? 40 : width < 240 ? 64 : 88;
+    const catX = px(catBaseX) + px(catSlide);
+    const mouseStart = Math.max(catX + catSize + px(5), Math.floor(width * 0.35));
+    const mouseBaseSize = 30;
+    const mouseSpreadX = Math.max(1, width - mouseStart - mouseBaseSize - 2);
+    const mouseSpreadY = px(16);
+    return { catSize, catX, mouseStart, mouseBaseSize, mouseSpreadX, mouseSpreadY, groundY, now };
+  }
+
+  function indexOfMouse(id) {
+    return mice.findIndex((m) => m.id === id);
+  }
+
+  function addMouse(id) {
+    if (indexOfMouse(id) >= 0) return false;
+    mice.push({
+      id,
+      spread: seedRandom(),
+      ySpread: seedRandom(),
+      sizeBias: mice.length % 3,
+    });
+    return true;
+  }
+
+  function removeMouse(id) {
+    const idx = indexOfMouse(id);
+    if (idx < 0) return false;
+    mice.splice(idx, 1);
+    return true;
+  }
+
+  function listMouseIds() {
+    return mice.map((m) => m.id);
+  }
+
+  /**
+   * Animate the cat running to a mouse and eating it. Returns a promise when done.
+   */
+  function eatMouse(id) {
+    if (catChase) return Promise.resolve(false);
+    const idx = id ? indexOfMouse(id) : 0;
+    if (idx < 0 || !mice.length) return Promise.resolve(false);
+    const target = mice[idx];
+    const layout = mouseLayout(Math.floor(height * 0.82), performance.now());
+    const targetSpreadX =
+      layout.mouseStart + Math.floor(target.spread * layout.mouseSpreadX) - layout.catX;
+    const toSlide = Math.max(0, targetSpreadX / worldScale - catBaseX);
+
+    return new Promise((resolve) => {
+      catChase = {
+        id: target.id,
+        fromSlide: catSlide,
+        toSlide,
+        t: 0,
+        dur: 0.85,
+        phase: 'run',
+        resolve,
+      };
+    });
+  }
+
+  function seedInitialMice(count) {
+    for (let i = 0; i < count; i += 1) {
+      addMouse(`demo-${i}`);
+    }
+  }
+
+  if (initialCount > 0) seedInitialMice(initialCount);
+
+  function frame(now) {
+    if (!running) return;
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    scroll += dt * 64;
+
+    if (catChase) {
+      catChase.t += dt / catChase.dur;
+      if (catChase.phase === 'run') {
+        const k = Math.min(1, catChase.t);
+        const eased = k * k * (3 - 2 * k);
+        catSlide = catChase.fromSlide + (catChase.toSlide - catChase.fromSlide) * eased;
+        if (k >= 1) {
+          catChase.phase = 'bite';
+          catChase.t = 0;
+          catChase.dur = 0.35;
+        }
+      } else if (catChase.phase === 'bite') {
+        if (catChase.t >= 1) {
+          removeMouse(catChase.id);
+          catChase.resolve?.(true);
+          catChase = null;
+          catSlide = 0;
+        }
+      }
+    }
+
+    const groundY = Math.floor(height * 0.82);
+    drawClassroom(groundY);
+
+    const layout = mouseLayout(groundY, now);
+    const catFrame = Math.floor(now / 110) % CAT_FRAME_COUNT;
+    const catY = groundY - Math.ceil((CAT_FOOT_ROW * layout.catSize) / CAT_FRAME_SIZE);
+    if (catRunSheet) {
+      ctx.save();
+      ctx.translate(layout.catX + layout.catSize, catY);
+      ctx.scale(-1, 1);
+      ctx.drawImage(
+        catRunSheet,
+        catFrame * CAT_FRAME_SIZE,
+        0,
+        CAT_FRAME_SIZE,
+        CAT_FRAME_SIZE,
+        0,
+        0,
+        layout.catSize,
+        layout.catSize,
+      );
+      ctx.restore();
+    }
+
+    if (
+      mouseSprite.complete &&
+      mouseSprite.naturalWidth === MOUSE_FRAME_SIZE &&
+      mouseSprite.naturalHeight === MOUSE_FRAME_SIZE * MOUSE_FRAME_COUNT
+    ) {
+      for (let i = 0; i < mice.length; i += 1) {
+        const entry = mice[i];
+        const size = layout.mouseBaseSize + entry.sizeBias;
+        const mouseFrame = Math.floor(now / 105 + i * 1.5) % MOUSE_FRAME_COUNT;
+        const x = layout.mouseStart + Math.floor(entry.spread * layout.mouseSpreadX);
+        const yOffset = Math.floor(entry.ySpread * layout.mouseSpreadY);
+        const y = groundY - Math.ceil((MOUSE_FOOT_ROW * size) / MOUSE_FRAME_SIZE) - yOffset;
+        ctx.drawImage(
+          mouseSprite,
+          0,
+          mouseFrame * MOUSE_FRAME_SIZE,
+          MOUSE_FRAME_SIZE,
+          MOUSE_FRAME_SIZE,
+          x,
+          y,
+          size,
+          size,
+        );
+      }
+    }
+
+    raf = requestAnimationFrame(frame);
+  }
+
+  function start() {
+    if (raf) return;
+    lastFrame = performance.now();
+    raf = requestAnimationFrame(frame);
+  }
+
+  function stop() {
+    running = false;
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+  }
+
+  resize();
+  start();
+
+  return {
+    resize,
+    addMouse,
+    removeMouse,
+    listMouseIds,
+    eatMouse,
+    stop,
+  };
+}

@@ -209,3 +209,99 @@ body.pixel-mode #share {
 #view.pixelated {
   image-rendering: pixelated;
 }
+
+body.stage-mode {
+  background: #84d8f2;
+  display: flex;
+  flex-direction: column;
+}
+
+body.stage-mode #gate {
+  top: 40%;
+  bottom: auto;
+}
+
+body.stage-mode #cam,
+body.stage-mode #tune-toggle,
+body.stage-mode #tune,
+body.stage-mode #share {
+  display: none;
+}
+
+#stage-photo {
+  display: block;
+  width: 100%;
+  flex: 0 0 48vh;
+  max-height: 48vh;
+  background: linear-gradient(180deg, #e8dcc8 0%, #cbb896 100%);
+}
+
+#view.stage-pixel {
+  flex: 1 1 auto;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+}
+
+.stage-scratch-layer {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+}
+
+#stage-photo + .stage-scratch-layer {
+  /* positioned via inline styles from stage-photo.js */
+}
+
+#stage-hud {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 3;
+  max-width: min(420px, 90vw);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(42, 22, 12, 0.55);
+  color: rgba(255, 236, 220, 0.92);
+  font: 13px/1.45 "Segoe UI", sans-serif;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+#stage-hud kbd {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 12px;
+}
+
+#stage-hud p {
+  margin: 0 0 6px;
+}
+
+#stage-hud p:last-child {
+  margin-bottom: 0;
+}
+
+#stage-scan {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#stage-admit {
+  position: absolute;
+  left: 50%;
+  top: 20%;
+  transform: translateX(-50%);
+  z-index: 4;
+  width: min(420px, 90vw);
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 236, 220, 0.35);
+  background: rgba(42, 22, 12, 0.85);
+  color: #ffe8d4;
+  font: 15px "Segoe UI", sans-serif;
+}
