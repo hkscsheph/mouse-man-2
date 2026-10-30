@@ -20,7 +20,7 @@ Split screen: **pixel chase** on top, **class photo** (3D mice in uniform) on th
 
 1. Operators scan participant QR codes (uses native `BarcodeDetector` when available and a `jsQR` fallback otherwise).
 2. Each QR admit restores the original 3D mouse from its persisted traits, captured eyes/nose/mouth, face tuning, and part tuning. If its snapshot cannot be loaded, the stage reports an error instead of showing a different mouse. The `m` value also carries the saved fur color for the pixel mouse. `D` adds a demo guest with a placeholder face.
-3. A WebSocket client listens for cat-eat commands and runs the pixel cat eat animation plus a scratch-out on the matching photo figure.
+3. Pressing `E` (or sending a `catEat` WebSocket message without an ID) targets the closest active pixel mouse. The cat runs to it, then uses the second row of `cat-run-actions.png` while crawling away; the mouse stays on the floor as both drift left with the scrolling background until off-screen, and the cat returns to its starting position. Its 3D figure stays in the photo blacked out with randomized red claw slashes and is no longer counted as active. Messages with an ID target that specific mouse.
 
 `npm run dev` and `npm run preview` provide a local `/api/mouse` backed by ignored `.dev-data/mice/` files, so saved QR snapshots can be retrieved across browser sessions using the same server origin.
 
@@ -30,7 +30,7 @@ Split screen: **pixel chase** on top, **class photo** (3D mice in uniform) on th
 | --- | --- |
 | `A` | Paste / type a QR URL or mouse id |
 | `D` | Admit a random demo guest (placeholder face) |
-| `E` | Broadcast `{ "type": "catEat" }` via `postMessage` (same handler as WebSocket) |
+| `E` | Eat the closest active mouse; its 3D figure remains blacked out with red scratches |
 | `T` | Show / hide the HUD and webcam thumbnail; QR scanning continues |
 | `+=` / `-` | Enlarge / shrink the pixel cat and mice (starts at 300%) |
 | Arrow keys | Move the 3D camera left/right and closer/farther |

@@ -83,13 +83,37 @@ export function createStagePhoto(canvas) {
   scratchCanvas.className = 'stage-scratch-layer';
   canvas.insertAdjacentElement('afterend', scratchCanvas);
 
-  /** @type {{ id: string, mesh: THREE.Group, slot: number, scratching: boolean }[]} */
+  /** @type {{ angle: number, centerX: number, centerY: number, halfLength: number, spacing: number, shadowWidth: number, highlightWidth: number, opacity: number, highlightColor: string, slashes: { offset: number, lengthScale: number, curve: number }[] }} */
+  function createScratchStyle() {
+    const randomBetween = (min, max) => min + Math.random() * (max - min);
+    const spacing = randomBetween(8, 12);
+    return {
+      angle: -Math.PI / 4 + randomBetween(-0.18, 0.18),
+      centerX: randomBetween(-5, 5),
+      centerY: randomBetween(-5, 5),
+      halfLength: randomBetween(20, 28),
+      spacing,
+      shadowWidth: randomBetween(6, 8),
+      highlightWidth: randomBetween(2.5, 3.8),
+      opacity: randomBetween(0.8, 1),
+      highlightColor: ['#f52330', '#ff4556', '#e71e3d'][Math.floor(Math.random() * 3)],
+      slashes: Array.from({ length: 3 }, (_, i) => ({
+        offset: (i - 1) * spacing + randomBetween(-1.5, 1.5),
+        lengthScale: randomBetween(0.78, 1.12),
+        curve: randomBetween(-5, 5),
+      })),
+    };
+  }
+
+  /** @type {{ id: string, mesh: THREE.Group, slot: number, scratching: boolean, eaten: boolean, scratchProgress: number, scratchStyle: ReturnType<typeof createScratchStyle> | null }[]} */
   const roster = [];
 
   function layoutScratchCanvas() {
     const rect = canvas.getBoundingClientRect();
-    scratchCanvas.width = Math.round(rect.width * devicePixelRatio);
-    scratchCanvas.height = Math.round(rect.height * devicePixelRatio);
+    const width = Math.round(rect.width * devicePixelRatio);
+    const height = Math.round(rect.height * devicePixelRatio);
+    if (scratchCanvas.width !== width) scratchCanvas.width = width;
+    if (scratchCanvas.height !== height) scratchCanvas.height = height;
     scratchCanvas.style.position = 'fixed';
     scratchCanvas.style.left = `${rect.left}px`;
     scratchCanvas.style.top = `${rect.top}px`;
@@ -113,6 +137,7 @@ export function createStagePhoto(canvas) {
     renderer.setSize(w, h, false);
     layoutScratchCanvas();
     renderer.render(scene, camera);
+    renderScratchOverlay();
   }
 
   function projectSlotCenterFixed(slot) {
@@ -191,61 +216,108 @@ export function createStagePhoto(canvas) {
     mesh.rotation.y = pose.ry;
     mesh.scale.setScalar(pose.s);
     scene.add(mesh);
-    const entry = { id, mesh, slot, scratching: false };
+    const entry = {
+      id,
+      mesh,
+      slot,
+      scratching: false,
+      eaten: false,
+      scratchProgress: 0,
+      scratchStyle: null,
+    };
     roster.push(entry);
     frame();
     return entry;
   }
 
-  function drawScratches(cx, cy, progress) {
+  function drawScratches(cx, cy, progress, style) {
     const ctx = scratchCanvas.getContext('2d');
     const dpr = devicePixelRatio;
-    const radius = 42 * dpr * (0.6 + progress * 0.5);
+    cx += style.centerX * dpr;
+    cy += style.centerY * dpr;
+    const halfLength = style.halfLength * dpr * (0.35 + progress * 0.65);
+    const angle = style.angle;
+    const alongX = Math.cos(angle);
+    const alongY = Math.sin(angle);
+    const acrossX = -alongY;
+    const acrossY = alongX;
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
-    ctx.strokeStyle = `rgba(42, 22, 12, ${0.35 + progress * 0.45})`;
-    ctx.lineWidth = 5 * dpr;
     ctx.lineCap = 'round';
-    const lines = 7 + Math.floor(progress * 5);
-    for (let i = 0; i < lines; i += 1) {
-      const angle = (i / lines) * Math.PI * 2 + progress * 1.2;
+    ctx.lineJoin = 'round';
+    for (const slash of style.slashes) {
+      const offset = slash.offset * dpr;
+      const curve = slash.curve * dpr;
+      const length = halfLength * slash.lengthScale;
+      const startX = cx + acrossX * offset - alongX * length;
+      const startY = cy + acrossY * offset - alongY * length;
+      const endX = cx + acrossX * offset + alongX * length;
+      const endY = cy + acrossY * offset + alongY * length;
+      const controlX = cx + acrossX * offset + acrossX * curve;
+      const controlY = cy + acrossY * offset + acrossY * curve;
       ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+      ctx.moveTo(startX, startY);
+      ctx.quadraticCurveTo(controlX, controlY, endX, endY);
+      ctx.strokeStyle = '#69000c';
+      ctx.globalAlpha = (0.55 + progress * 0.4) * style.opacity;
+      ctx.lineWidth = style.shadowWidth * dpr;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.quadraticCurveTo(controlX, controlY, endX, endY);
+      ctx.strokeStyle = style.highlightColor;
+      ctx.globalAlpha = (0.55 + progress * 0.45) * style.opacity;
+      ctx.lineWidth = style.highlightWidth * dpr;
       ctx.stroke();
     }
-    ctx.fillStyle = `rgba(232, 220, 200, ${progress * 0.55})`;
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.85, 0, Math.PI * 2);
-    ctx.fill();
     ctx.restore();
+  }
+
+  function renderScratchOverlay() {
+    const ctx = scratchCanvas.getContext('2d');
+    ctx.clearRect(0, 0, scratchCanvas.width, scratchCanvas.height);
+    for (const entry of roster) {
+      if (entry.scratchProgress <= 0) continue;
+      const center = projectSlotCenterFixed(entry.slot);
+      drawScratches(
+        center.x * devicePixelRatio,
+        center.y * devicePixelRatio,
+        entry.scratchProgress,
+        entry.scratchStyle,
+      );
+    }
+  }
+
+  function blackOutFigure(entry) {
+    for (const material of entry.mesh.userData.ownMaterials ?? []) {
+      material.color?.set(0x000000);
+      material.emissive?.set(0x000000);
+    }
+    entry.mesh.traverse((child) => {
+      if (!child.isMesh || !child.userData.isFace) return;
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) material.color?.set(0x000000);
+    });
   }
 
   function scratchOut(id) {
     const entry = roster.find((r) => r.id === id);
-    if (!entry || entry.scratching) return Promise.resolve(false);
+    if (!entry || entry.scratching || entry.eaten) return Promise.resolve(false);
     entry.scratching = true;
+    entry.scratchStyle = createScratchStyle();
     frame();
-    const center = projectSlotCenterFixed(entry.slot);
-    const cx = center.x * devicePixelRatio;
-    const cy = center.y * devicePixelRatio;
 
     return new Promise((resolve) => {
       const start = performance.now();
       const dur = 650;
       function tick(now) {
         const t = Math.min(1, (now - start) / dur);
-        drawScratches(cx, cy, t);
-        const visible = t < 0.92;
-        if (entry.mesh.visible !== visible) {
-          entry.mesh.visible = visible;
-          frame();
-        }
+        entry.scratchProgress = t;
+        renderScratchOverlay();
         if (t >= 1) {
-          scene.remove(entry.mesh);
-          disposeMouse(entry.mesh);
-          const idx = roster.indexOf(entry);
-          if (idx >= 0) roster.splice(idx, 1);
+          entry.scratching = false;
+          entry.eaten = true;
+          blackOutFigure(entry);
           frame();
           resolve(true);
           return;
@@ -257,11 +329,11 @@ export function createStagePhoto(canvas) {
   }
 
   function indexOf(id) {
-    return roster.findIndex((r) => r.id === id);
+    return roster.findIndex((r) => r.id === id && !r.eaten);
   }
 
   function listIds() {
-    return roster.map((r) => r.id);
+    return roster.filter((r) => !r.eaten).map((r) => r.id);
   }
 
   window.addEventListener('resize', frame);

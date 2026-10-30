@@ -35,7 +35,7 @@ hud.hidden = true;
 hud.innerHTML = `
   <p id="stage-status" data-state="idle" role="status" aria-live="polite">Scan participant QR codes (camera) or press <kbd>A</kbd> to admit demo ID.</p>
   <p id="stage-ws-status">WebSocket: connecting…</p>
-  <p id="stage-count">On stage: 0 mice</p>
+  <p id="stage-count">Active mice: 0</p>
   <p id="stage-scale">Pixel cat &amp; mice: ${Math.round(initialPixelSpriteScale * 100)}% (<kbd>+</kbd>/<kbd>-</kbd> to resize)</p>
   <div id="stage-row-height">
     <label for="stage-row-rise">3D row rise: <output id="stage-row-rise-value">0.80</output></label>
@@ -86,12 +86,10 @@ function setWsStatus(text) {
 
 function updateCount() {
   const el = document.querySelector('#stage-count');
-  if (el) el.textContent = `On stage: ${photo.listIds().length} mice`;
+  if (el) el.textContent = `Active mice: ${photo.listIds().length}`;
 }
 
-/** @type {Map<string, { order: number }>} */
-const order = new Map();
-let orderSeq = 0;
+const admittedIds = new Set();
 
 const photo = createStagePhoto(photoCanvas);
 const rowRiseInput = document.querySelector('#stage-row-rise');
@@ -145,11 +143,11 @@ async function admitParticipant(idHint) {
     );
     return;
   }
-  if (order.has(participant.id)) {
+  if (admittedIds.has(participant.id)) {
     setStatus(`Already on stage: ${participant.id}`);
     return;
   }
-  order.set(participant.id, { order: orderSeq++ });
+  admittedIds.add(participant.id);
   pixel.addMouse(participant.id, participant.traits.fur);
   const fig = photo.addFigure(
     participant.id,
@@ -160,7 +158,7 @@ async function admitParticipant(idHint) {
   );
   if (!fig) {
     pixel.removeMouse(participant.id);
-    order.delete(participant.id);
+    admittedIds.delete(participant.id);
     setStatus('Class photo full — cannot add more');
     return;
   }
@@ -185,19 +183,18 @@ async function handleCatEat(message) {
   }
   let targetId = message.id;
   if (targetId && !ids.includes(targetId)) {
-    setStatus(`Cat eat: unknown id ${targetId}, using next in line`);
+    setStatus(`Cat eat: unknown id ${targetId}, using closest mouse`);
     targetId = undefined;
   }
-  if (!targetId) {
-    const sorted = [...order.entries()]
-      .filter(([id]) => ids.includes(id))
-      .sort((a, b) => a[1].order - b[1].order);
-    targetId = sorted[0]?.[0] ?? ids[0];
-  }
+  if (!targetId) targetId = pixel.closestMouseId();
+  if (!targetId || !ids.includes(targetId)) targetId = ids[0];
   eating = true;
   setStatus(`Cat chasing ${targetId}…`);
-  await Promise.all([pixel.eatMouse(targetId), photo.scratchOut(targetId)]);
-  order.delete(targetId);
+  let scratchPromise = Promise.resolve(false);
+  await pixel.eatMouse(targetId, () => {
+    scratchPromise = photo.scratchOut(targetId);
+  });
+  await scratchPromise;
   updateCount();
   eating = false;
   setStatus(`Cat ate ${targetId}. Scan or press A to add more.`);

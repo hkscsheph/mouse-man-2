@@ -1,5 +1,5 @@
 /**
- * Scrollable pixel classroom with a running cat and dynamic mouse sprites.
+ * Scrollable pixel classroom with running/catching cat poses and dynamic mouse sprites.
  * Used by standalone pixel mode and main-stage mode.
  */
 
@@ -12,6 +12,7 @@ const MOUSE_FRAME_COUNT = 6;
 const MOUSE_FOOT_ROW = 20;
 const MIN_SPRITE_SCALE = 0.5;
 const MAX_SPRITE_SCALE = 5;
+const CAT_RETURN_SPEED = 600;
 
 function wrap(value, period) {
   return ((value % period) + period) % period;
@@ -42,6 +43,10 @@ export function createPixelChase(canvas, options = {}) {
 
   const catSource = new Image();
   let catRunSheet = null;
+  let catFrameWidth = CAT_FRAME_SIZE;
+  let catFrameHeight = CAT_FRAME_SIZE;
+  const catCatchRow = 1;
+  let catFootRows = [CAT_FRAME_SIZE * (CAT_FOOT_ROW / CAT_FRAME_SIZE)];
   const mouseSprite = new Image();
   const tintedMouseSprites = new Map();
   mouseSprite.src = new URL('./MouseRun.png', import.meta.url).href;
@@ -51,7 +56,7 @@ export function createPixelChase(canvas, options = {}) {
 
   let catBaseX = 18;
   let catSlide = 0;
-  /** @type {null | { id: string, fromSlide: number, toSlide: number, t: number, dur: number, phase: 'run' | 'bite' }} */
+  /** @type {null | { id: string, fromSlide: number, toSlide: number, t: number, dur: number, phase: 'run' | 'grab' | 'out' | 'return', resolve?: (value: boolean) => void, onGrab?: (id: string) => void, floorMouse: { skinColor: string | null, size: number, frame: number, x: number } | null, grabScroll: number, outScroll: number, catchTime: number }} */
   let catChase = null;
 
   const initialCount = options.initialCount ?? 0;
@@ -137,10 +142,23 @@ export function createPixelChase(canvas, options = {}) {
     }
     sheetContext.putImageData(image, 0, 0);
     catRunSheet = sheet;
+    catFrameWidth = sheet.width / CAT_FRAME_COUNT;
+    catFrameHeight = sheet.height / 2;
+    catFootRows = Array.from({ length: 2 }, (_, row) => {
+      const firstY = Math.floor(row * catFrameHeight);
+      const lastY = Math.floor((row + 1) * catFrameHeight);
+      let bottom = -1;
+      for (let y = firstY; y < lastY; y += 1) {
+        for (let x = 0; x < sheet.width; x += 1) {
+          if (data[(y * sheet.width + x) * 4 + 3] > 0) bottom = y - firstY;
+        }
+      }
+      return bottom + 1;
+    });
   }
 
   catSource.addEventListener('load', prepareCatSprite, { once: true });
-  catSource.src = new URL('./cat-run.png', import.meta.url).href;
+  catSource.src = new URL('./cat-run-actions.png', import.meta.url).href;
 
   function resize() {
     if (typeof options.getSize === 'function') {
@@ -231,7 +249,7 @@ export function createPixelChase(canvas, options = {}) {
       drawClassroomWall(groundY);
       ctx.restore();
     }
-    const cabinetY = groundY - px(27);
+    const cabinetY = groundY - px(20);
     ctx.fillStyle = '#936541';
     ctx.fillRect(0, cabinetY, width, px(23));
     ctx.fillStyle = '#c48b53';
@@ -270,11 +288,26 @@ export function createPixelChase(canvas, options = {}) {
   function mouseLayout(groundY, now) {
     const catSize = Math.round((width < 150 ? 40 : width < 240 ? 64 : 88) * spriteScale);
     const catX = px(catBaseX) + px(catSlide);
-    const mouseStart = Math.max(catX + catSize + px(5), Math.floor(width * 0.35));
+    const mouseStart = Math.max(px(catBaseX) + catSize + px(5), Math.floor(width * 0.35));
     const mouseBaseSize = Math.round(30 * spriteScale);
     const mouseSpreadX = Math.max(1, width - mouseStart - mouseBaseSize - 2);
     const mouseSpreadY = px(16);
     return { catSize, catX, mouseStart, mouseBaseSize, mouseSpreadX, mouseSpreadY, groundY, now };
+  }
+
+  function mousePosition(entry, layout) {
+    const size = layout.mouseBaseSize + Math.round(entry.sizeBias * spriteScale);
+    const movePhase = (layout.now / 1000) * mouseWanderSpeed + entry.spread * Math.PI * 2;
+    const baseX = layout.mouseStart + Math.floor(entry.spread * layout.mouseSpreadX);
+    const wander = Math.sin(movePhase) * mouseWanderRange * spriteScale;
+    const x = Math.max(
+      layout.mouseStart,
+      Math.min(layout.mouseStart + layout.mouseSpreadX, Math.round(baseX + wander)),
+    );
+    const yOffset = Math.floor(entry.ySpread * layout.mouseSpreadY)
+      + Math.round(Math.sin(movePhase * 1.6) * spriteScale);
+    const y = layout.groundY - Math.ceil((MOUSE_FOOT_ROW * size) / MOUSE_FRAME_SIZE) - yOffset;
+    return { x, y, size };
   }
 
   function indexOfMouse(id) {
@@ -304,18 +337,39 @@ export function createPixelChase(canvas, options = {}) {
     return mice.map((m) => m.id);
   }
 
+  function closestMouseId() {
+    if (!mice.length) return null;
+    const layout = mouseLayout(Math.floor(height * 0.82), performance.now());
+    const catY = layout.groundY - Math.ceil((CAT_FOOT_ROW * layout.catSize) / CAT_FRAME_SIZE);
+    const catCenterX = layout.catX + layout.catSize / 2;
+    const catCenterY = catY + layout.catSize / 2;
+    let closestId = null;
+    let closestDistance = Infinity;
+    for (let i = 0; i < mice.length; i += 1) {
+      const position = mousePosition(mice[i], layout);
+      const dx = position.x + position.size / 2 - catCenterX;
+      const dy = position.y + position.size / 2 - catCenterY;
+      const distance = dx * dx + dy * dy;
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestId = mice[i].id;
+      }
+    }
+    return closestId;
+  }
+
   /**
-   * Animate the cat running to a mouse and eating it. Returns a promise when done.
+   * Animate the cat reaching a mouse, crawling out with the background, and returning.
    */
-  function eatMouse(id) {
+  function eatMouse(id, onGrab) {
     if (catChase) return Promise.resolve(false);
-    const idx = id ? indexOfMouse(id) : 0;
+    const idx = indexOfMouse(id ?? closestMouseId());
     if (idx < 0 || !mice.length) return Promise.resolve(false);
     const target = mice[idx];
     const layout = mouseLayout(Math.floor(height * 0.82), performance.now());
-    const targetSpreadX =
-      layout.mouseStart + Math.floor(target.spread * layout.mouseSpreadX) - layout.catX;
-    const toSlide = Math.max(0, targetSpreadX / worldScale - catBaseX);
+    const position = mousePosition(target, layout);
+    const targetCatLeft = position.x + position.size / 2 - layout.catSize * 0.9;
+    const toSlide = Math.max(0, targetCatLeft / worldScale - catBaseX);
 
     return new Promise((resolve) => {
       catChase = {
@@ -326,6 +380,16 @@ export function createPixelChase(canvas, options = {}) {
         dur: 0.85,
         phase: 'run',
         resolve,
+        onGrab,
+        floorMouse: {
+          skinColor: target.skinColor,
+          size: position.size,
+          frame: 0,
+          x: position.x,
+        },
+        grabScroll: scroll,
+        outScroll: scroll,
+        catchTime: 0,
       };
     });
   }
@@ -347,22 +411,67 @@ export function createPixelChase(canvas, options = {}) {
     catRunTime += dt * catSpeed;
 
     if (catChase) {
-      catChase.t += (dt * catSpeed) / catChase.dur;
-      if (catChase.phase === 'run') {
-        const k = Math.min(1, catChase.t);
-        const eased = k * k * (3 - 2 * k);
-        catSlide = catChase.fromSlide + (catChase.toSlide - catChase.fromSlide) * eased;
-        if (k >= 1) {
-          catChase.phase = 'bite';
+      if (catChase.phase === 'grab' || catChase.phase === 'out') {
+        catChase.catchTime += dt * catSpeed;
+      }
+      if (catChase.phase === 'grab') {
+        catSlide = catChase.fromSlide - (scroll - catChase.grabScroll);
+        const catSize = Math.round((width < 150 ? 40 : width < 240 ? 64 : 88) * spriteScale);
+        const catX = px(catBaseX) + px(catSlide);
+        const mouseX = catChase.floorMouse
+          ? catChase.floorMouse.x - px(scroll - catChase.grabScroll)
+          : 0;
+        if (catX + catSize <= 0 && mouseX + (catChase.floorMouse?.size ?? 0) <= 0) {
+          catChase.phase = 'out';
           catChase.t = 0;
-          catChase.dur = 0.35;
+          catChase.dur = 0.25;
+          catChase.fromSlide = catSlide;
+          catChase.outScroll = scroll;
         }
-      } else if (catChase.phase === 'bite') {
-        if (catChase.t >= 1) {
-          removeMouse(catChase.id);
-          catChase.resolve?.(true);
-          catChase = null;
-          catSlide = 0;
+      } else {
+        catChase.t += (dt * catSpeed) / catChase.dur;
+        if (catChase.phase === 'run') {
+          const k = Math.min(1, catChase.t);
+          const eased = k * k * (3 - 2 * k);
+          catSlide = catChase.fromSlide + (catChase.toSlide - catChase.fromSlide) * eased;
+          if (k >= 1) {
+            const mouseIndex = indexOfMouse(catChase.id);
+            catChase.onGrab?.(catChase.id);
+            if (mouseIndex >= 0) {
+              const target = mice[mouseIndex];
+              const position = mousePosition(target, mouseLayout(Math.floor(height * 0.82), now));
+              if (catChase.floorMouse) catChase.floorMouse.x = position.x;
+              removeMouse(catChase.id);
+            }
+            catChase.phase = 'grab';
+            if (catChase.floorMouse) {
+              catChase.floorMouse.frame = Math.floor(now / mouseRunFrameDuration) % MOUSE_FRAME_COUNT;
+            }
+            catChase.fromSlide = catSlide;
+            catChase.toSlide = catSlide;
+            catChase.grabScroll = scroll;
+            catChase.t = 0;
+          }
+        } else if (catChase.phase === 'out') {
+          catSlide = catChase.fromSlide - (scroll - catChase.outScroll);
+          if (catChase.t >= 1) {
+            catChase.phase = 'return';
+            catChase.floorMouse = null;
+            catChase.fromSlide = catSlide;
+            catChase.toSlide = 0;
+            catChase.t = 0;
+            catChase.dur = Math.max(0.65, (Math.abs(catSlide) * worldScale) / CAT_RETURN_SPEED);
+          }
+        } else if (catChase.phase === 'return') {
+          const k = Math.min(1, catChase.t);
+          const eased = k * k * (3 - 2 * k);
+          catSlide = catChase.fromSlide + (catChase.toSlide - catChase.fromSlide) * eased;
+          if (k >= 1) {
+            const completedChase = catChase;
+            catSlide = 0;
+            catChase = null;
+            completedChase.resolve?.(true);
+          }
         }
       }
     }
@@ -371,24 +480,53 @@ export function createPixelChase(canvas, options = {}) {
     drawClassroom(groundY);
 
     const layout = mouseLayout(groundY, now);
-    const catFrame = Math.floor((catRunTime * 1000) / 110) % CAT_FRAME_COUNT;
-    const catY = groundY - Math.ceil((CAT_FOOT_ROW * layout.catSize) / CAT_FRAME_SIZE);
+    const crawling = catChase && (catChase.phase === 'grab' || catChase.phase === 'out');
+    const catFrame = crawling
+      ? Math.floor((catChase.catchTime * 1000) / 110) % CAT_FRAME_COUNT
+      : Math.floor((catRunTime * 1000) / 110) % CAT_FRAME_COUNT;
+    const catDrawHeight = layout.catSize * catFrameHeight / catFrameWidth;
+    const catRow = crawling ? catCatchRow : 0;
+    const catY = groundY - Math.ceil((catFootRows[catRow] / catFrameHeight) * catDrawHeight);
     if (catRunSheet) {
+      const sourceY = catRow * catFrameHeight;
       ctx.save();
       ctx.translate(layout.catX + layout.catSize, catY);
       ctx.scale(-1, 1);
       ctx.drawImage(
         catRunSheet,
-        catFrame * CAT_FRAME_SIZE,
-        0,
-        CAT_FRAME_SIZE,
-        CAT_FRAME_SIZE,
+        catFrame * catFrameWidth,
+        sourceY,
+        catFrameWidth,
+        catFrameHeight,
         0,
         0,
         layout.catSize,
-        layout.catSize,
+        catDrawHeight,
       );
       ctx.restore();
+    }
+
+    if (
+      catChase &&
+      (catChase.phase === 'grab' || catChase.phase === 'out') &&
+      catChase.floorMouse &&
+      mouseSprite.complete &&
+      mouseSprite.naturalWidth === MOUSE_FRAME_SIZE
+    ) {
+      const { size, skinColor, frame: mouseFrame, x } = catChase.floorMouse;
+      const mouseY = groundY - Math.ceil((MOUSE_FOOT_ROW * size) / MOUSE_FRAME_SIZE);
+      const mouseX = x - px(scroll - catChase.grabScroll);
+      ctx.drawImage(
+        getMouseSprite(skinColor),
+        0,
+        mouseFrame * MOUSE_FRAME_SIZE,
+        MOUSE_FRAME_SIZE,
+        MOUSE_FRAME_SIZE,
+        mouseX,
+        mouseY,
+        size,
+        size,
+      );
     }
 
     if (
@@ -398,51 +536,41 @@ export function createPixelChase(canvas, options = {}) {
     ) {
       for (let i = 0; i < mice.length; i += 1) {
         const entry = mice[i];
-        const size = layout.mouseBaseSize + Math.round(entry.sizeBias * spriteScale);
-          const movePhase = (now / 1000) * mouseWanderSpeed + entry.spread * Math.PI * 2;
-          const baseX = layout.mouseStart + Math.floor(entry.spread * layout.mouseSpreadX);
-          const wander = Math.sin(movePhase) * mouseWanderRange * spriteScale;
-          const x = Math.max(
-            layout.mouseStart,
-            Math.min(layout.mouseStart + layout.mouseSpreadX, Math.round(baseX + wander)),
+        const { x, y, size } = mousePosition(entry, layout);
+        const mouseFrame = Math.floor(now / mouseRunFrameDuration + i * 1.5) % MOUSE_FRAME_COUNT;
+        const sprite = getMouseSprite(entry.skinColor);
+        const catCenter = layout.catX + layout.catSize / 2;
+        const mouseCenter = x + size / 2;
+        ctx.save();
+        if (mouseCenter < catCenter) {
+          ctx.translate(x + size, y);
+          ctx.scale(-1, 1);
+          ctx.drawImage(
+            sprite,
+            0,
+            mouseFrame * MOUSE_FRAME_SIZE,
+            MOUSE_FRAME_SIZE,
+            MOUSE_FRAME_SIZE,
+            0,
+            0,
+            size,
+            size,
           );
-          const yOffset = Math.floor(entry.ySpread * layout.mouseSpreadY)
-            + Math.round(Math.sin(movePhase * 1.6) * spriteScale);
-          const y = groundY - Math.ceil((MOUSE_FOOT_ROW * size) / MOUSE_FRAME_SIZE) - yOffset;
-          const mouseFrame = Math.floor(now / mouseRunFrameDuration + i * 1.5) % MOUSE_FRAME_COUNT;
-          const sprite = getMouseSprite(entry.skinColor);
-          const catCenter = layout.catX + layout.catSize / 2;
-          const mouseCenter = x + size / 2;
-          ctx.save();
-          if (mouseCenter < catCenter) {
-            ctx.translate(x + size, y);
-            ctx.scale(-1, 1);
-            ctx.drawImage(
-              sprite,
-              0,
-              mouseFrame * MOUSE_FRAME_SIZE,
-              MOUSE_FRAME_SIZE,
-              MOUSE_FRAME_SIZE,
-              0,
-              0,
-              size,
-              size,
-            );
-          } else {
-            ctx.drawImage(
-              sprite,
-              0,
-              mouseFrame * MOUSE_FRAME_SIZE,
-              MOUSE_FRAME_SIZE,
-              MOUSE_FRAME_SIZE,
-              x,
-              y,
-              size,
-              size,
-            );
-          }
-          ctx.restore();
+        } else {
+          ctx.drawImage(
+            sprite,
+            0,
+            mouseFrame * MOUSE_FRAME_SIZE,
+            MOUSE_FRAME_SIZE,
+            MOUSE_FRAME_SIZE,
+            x,
+            y,
+            size,
+            size,
+          );
         }
+        ctx.restore();
+      }
     }
 
     raf = requestAnimationFrame(frame);
@@ -474,6 +602,7 @@ export function createPixelChase(canvas, options = {}) {
     addMouse,
     removeMouse,
     listMouseIds,
+    closestMouseId,
     eatMouse,
     stop,
   };
