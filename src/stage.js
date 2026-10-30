@@ -1,3 +1,4 @@
+import jsQR from 'jsqr';
 import { createPixelChase } from './pixel-chase.js';
 import { createStagePhoto } from './stage-photo.js';
 import { connectStageWebSocket, postStageWsMessage } from './stage-ws.js';
@@ -26,7 +27,7 @@ document.body.prepend(photoCanvas);
 const hud = document.createElement('div');
 hud.id = 'stage-hud';
 hud.innerHTML = `
-  <p id="stage-status">Scan participant QR codes (camera) or press <kbd>A</kbd> to admit demo ID.</p>
+  <p id="stage-status" data-state="idle" role="status" aria-live="polite">Scan participant QR codes (camera) or press <kbd>A</kbd> to admit demo ID.</p>
   <p id="stage-ws-status">WebSocket: connecting…</p>
   <p id="stage-count">On stage: 0 mice</p>
 `;
@@ -36,7 +37,14 @@ const scanVideo = document.createElement('video');
 scanVideo.id = 'stage-scan';
 scanVideo.playsInline = true;
 scanVideo.muted = true;
+scanVideo.setAttribute('aria-label', 'Live webcam preview for QR scanning');
+scanVideo.setAttribute('aria-keyshortcuts', 'T');
+scanVideo.title = 'Press T to hide the HUD and webcam preview';
+hud.setAttribute('aria-keyshortcuts', 'T');
 document.body.appendChild(scanVideo);
+
+const scanCanvas = document.createElement('canvas');
+const scanContext = scanCanvas.getContext('2d', { willReadFrequently: true });
 
 const admitInput = document.createElement('input');
 admitInput.id = 'stage-admit';
@@ -46,9 +54,12 @@ admitInput.autocomplete = 'off';
 admitInput.hidden = true;
 document.body.appendChild(admitInput);
 
-function setStatus(text) {
+function setStatus(text, state = 'idle') {
   const el = document.querySelector('#stage-status');
-  if (el) el.textContent = text;
+  if (el) {
+    el.textContent = text;
+    el.dataset.state = state;
+  }
 }
 
 function setWsStatus(text) {
@@ -107,6 +118,7 @@ async function admitParticipant(idHint) {
     participant.snapshot
       ? `Admitted ${participant.id} (registered face)`
       : `Admitted ${participant.id} (placeholder face)`,
+    'success',
   );
   if (gate) gate.classList.add('hidden');
 }
@@ -152,12 +164,37 @@ async function startScanCamera() {
     });
     scanVideo.srcObject = stream;
     await scanVideo.play();
-    setStatus('Point camera at participant QR codes');
     if (gate) gate.classList.add('hidden');
+    if ('BarcodeDetector' in window) {
+      try {
+        // @ts-ignore — BarcodeDetector is not in all TS libs
+        barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+      } catch (error) {
+        console.warn('Native QR scanner unavailable; using fallback', error);
+      }
+    }
+    if (!scanContext) {
+      setStatus('Unable to start QR scanning — press A to enter an ID', 'error');
+      return;
+    }
+    setStatus(
+      barcodeDetector
+        ? 'Camera ready — point it at a participant QR code'
+        : 'Camera ready — QR scanner fallback active; point it at a participant code',
+    );
     scanLoop();
   } catch (error) {
     console.warn(error);
-    setStatus('Camera unavailable — paste with A or use demo admit');
+    const denied =
+      error?.name === 'NotAllowedError' ||
+      error?.name === 'PermissionDeniedError' ||
+      error?.name === 'SecurityError';
+    setStatus(
+      denied
+        ? 'Camera access denied — allow camera permission, or press A to enter an ID'
+        : 'Camera unavailable — press A to enter an ID or D for a demo guest',
+      'error',
+    );
     if (gate) {
       gate.textContent = 'Press A to paste a QR link / mouse id';
       gate.classList.remove('hidden');
@@ -167,31 +204,43 @@ async function startScanCamera() {
 
 let lastScan = '';
 let scanCooldown = 0;
+let lastScanAttempt = 0;
+let barcodeDetector = null;
 
 async function scanLoop() {
   if (!scanVideo.srcObject) return;
   const now = performance.now();
+  if (now - lastScanAttempt < 120) {
+    requestAnimationFrame(scanLoop);
+    return;
+  }
+  lastScanAttempt = now;
   if (now < scanCooldown) {
     requestAnimationFrame(scanLoop);
     return;
   }
 
-  if ('BarcodeDetector' in window) {
-    try {
-      // @ts-ignore — BarcodeDetector is not in all TS libs
-      const detector = new BarcodeDetector({ formats: ['qr_code'] });
-      const codes = await detector.detect(scanVideo);
-      if (codes.length) {
-        const raw = codes[0].rawValue;
-        if (raw && raw !== lastScan) {
-          lastScan = raw;
-          scanCooldown = now + 2500;
-          await admitParticipant(raw);
-        }
+  try {
+    let raw = '';
+    if (barcodeDetector) {
+      const codes = await barcodeDetector.detect(scanVideo);
+      raw = codes[0]?.rawValue ?? '';
+    } else if (scanVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      if (scanCanvas.width !== scanVideo.videoWidth || scanCanvas.height !== scanVideo.videoHeight) {
+        scanCanvas.width = scanVideo.videoWidth;
+        scanCanvas.height = scanVideo.videoHeight;
       }
-    } catch (error) {
-      console.warn('QR detect failed', error);
+      scanContext.drawImage(scanVideo, 0, 0, scanCanvas.width, scanCanvas.height);
+      const image = scanContext.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+      raw = jsQR(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' })?.data ?? '';
     }
+    if (raw && raw !== lastScan) {
+      lastScan = raw;
+      scanCooldown = now + 2500;
+      await admitParticipant(raw);
+    }
+  } catch (error) {
+    console.warn('QR detect failed', error);
   }
 
   requestAnimationFrame(scanLoop);
@@ -217,6 +266,22 @@ admitInput.addEventListener('blur', () => {
 
 window.addEventListener('keydown', (event) => {
   if (event.repeat) return;
+  if ((event.key === 't' || event.key === 'T') && document.activeElement !== admitInput) {
+    event.preventDefault();
+    const hideOverlay = !hud.hidden;
+    hud.hidden = hideOverlay;
+    scanVideo.hidden = hideOverlay;
+    scanVideo.title = hideOverlay
+      ? 'Press T to show the HUD and webcam preview'
+      : 'Press T to hide the HUD and webcam preview';
+    scanVideo.setAttribute(
+      'aria-label',
+      hideOverlay
+        ? 'Webcam preview hidden; QR scanning continues'
+        : 'Live webcam preview for QR scanning',
+    );
+    return;
+  }
   if (event.key === 'a' || event.key === 'A') {
     event.preventDefault();
     openAdmitPrompt();

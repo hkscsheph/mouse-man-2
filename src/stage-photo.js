@@ -26,7 +26,7 @@ export function createStagePhoto(canvas) {
   scene.fog = new THREE.Fog(0xe8dcc8, 8, 22);
 
   const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 50);
-  camera.position.set(0, 1.05, 4.2);
+  camera.position.set(0, 1.05, 5.2);
   camera.lookAt(0, 0.85, 0.2);
 
   scene.add(new THREE.HemisphereLight(0xfff0d8, 0x6a5040, 0.72));
@@ -35,7 +35,7 @@ export function createStagePhoto(canvas) {
   scene.add(key);
 
   const backdrop = new THREE.Mesh(
-    new THREE.PlaneGeometry(8.5, 4.2),
+    new THREE.PlaneGeometry(14, 6),
     new THREE.MeshStandardMaterial({ color: 0xd9cbb0, roughness: 0.92 }),
   );
   backdrop.position.set(0, 1.05, -0.6);
@@ -101,6 +101,7 @@ export function createStagePhoto(canvas) {
     scene.add(mesh);
     const entry = { id, mesh, slot, scratching: false };
     roster.push(entry);
+    frame();
     return entry;
   }
 
@@ -143,12 +144,17 @@ export function createStagePhoto(canvas) {
       function tick(now) {
         const t = Math.min(1, (now - start) / dur);
         drawScratches(cx, cy, t);
-        entry.mesh.visible = t < 0.92;
+        const visible = t < 0.92;
+        if (entry.mesh.visible !== visible) {
+          entry.mesh.visible = visible;
+          frame();
+        }
         if (t >= 1) {
           scene.remove(entry.mesh);
           disposeMouse(entry.mesh);
           const idx = roster.indexOf(entry);
           if (idx >= 0) roster.splice(idx, 1);
+          frame();
           resolve(true);
           return;
         }

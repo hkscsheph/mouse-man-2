@@ -1,4 +1,5 @@
 import { canvasesFromSnapshot, fetchSnapshot, newMouseId } from './persist.js';
+import { createMouseTraits } from './mouse.js';
 
 /** Fixed school-uniform palette merged into saved traits when present. */
 export const UNIFORM_TRAITS = {
@@ -96,7 +97,7 @@ export function parseMouseIdFromQrText(text) {
 export async function resolveParticipant(idHint) {
   const id = idHint || newMouseId();
   let canvases = placeholderFaceCanvases(Math.random());
-  let traits = { ...UNIFORM_TRAITS };
+  let traits = { ...createMouseTraits(), ...UNIFORM_TRAITS };
   let snapshot = null;
 
   if (idHint) {

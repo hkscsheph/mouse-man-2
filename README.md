@@ -17,8 +17,9 @@ Legacy demo mice on the default route still work with `?stage` (without `mode=st
 ## Main stage (`?mode=stage`)
 
 Split screen: **class photo** (3D mice in uniform) on top, **pixel chase** on the bottom.
+The live QR-scanning camera preview appears in the lower-right corner, and the stage status reports when scanning is ready, a participant is admitted, or camera access is denied.
 
-1. Operators scan participant QR codes (camera uses `BarcodeDetector` when available).
+1. Operators scan participant QR codes (uses native `BarcodeDetector` when available and a `jsQR` fallback otherwise).
 2. Each admit adds one pixel mouse and one 3D figure (face from saved snapshot when the QR/`?m=` id resolves; otherwise a placeholder face; body uses a fixed school-uniform trait preset).
 3. A WebSocket client listens for cat-eat commands and runs the pixel cat eat animation plus a scratch-out on the matching photo figure.
 
@@ -29,6 +30,7 @@ Split screen: **class photo** (3D mice in uniform) on top, **pixel chase** on th
 | `A` | Paste / type a QR URL or mouse id |
 | `D` | Admit a random demo guest (placeholder face) |
 | `E` | Broadcast `{ "type": "catEat" }` via `postMessage` (same handler as WebSocket) |
+| `T` | Hide / show the HUD and webcam thumbnail; QR scanning continues |
 
 ### WebSocket URL
 
@@ -92,3 +94,8 @@ The nostril-size slider scales the nose face patch independently of eyes and mou
 The eye-position slider moves both eyes vertically without moving the mouth or nose.
 Generated nose patches place nostrils near the bottom of the nose.
 Live face patches follow the tracked head tilt as a single face.
+
+## Workflow
+1. (TODO) At registration, a group of users scan their faces one by one each generating a QR code for printing, their faces will be captured for generating a class photo in 大逃殺 style 
+2. In a room, current default mode will be used for single player live interaction
+3. (Ongoing) In main stage, users show their QR one by one. Each will add a mouse to the pixel mode, and add a 3D model to a class photo style with uniform clothing. This mode will subscribe to a websocket and upon message received the pixel cat approaches the pixel mouses and eat one scratching out one 3D model in the class photo

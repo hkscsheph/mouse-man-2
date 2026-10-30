@@ -527,7 +527,7 @@ function pickAccessories() {
 }
 
 /** One-off look for each visitor mouse. */
-function makeTraits() {
+export function createMouseTraits() {
   const fitness = rand(0, 1);
   const accessories = pickAccessories();
   return {
@@ -1006,7 +1006,7 @@ function addAccessories(head, torso, mats, traits, ears) {
 
 export function createMouse(canvases, options = {}) {
   buildShared();
-  const traits = options.traits ? hydrateTraits(options.traits) : makeTraits();
+  const traits = options.traits ? hydrateTraits(options.traits) : createMouseTraits();
   const mats = clonePalette(traits);
   const ownGeometries = [];
 
