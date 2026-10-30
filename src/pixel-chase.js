@@ -10,6 +10,8 @@ const CAT_FOOT_ROW = 50;
 const MOUSE_FRAME_SIZE = 32;
 const MOUSE_FRAME_COUNT = 6;
 const MOUSE_FOOT_ROW = 20;
+const MIN_SPRITE_SCALE = 0.5;
+const MAX_SPRITE_SCALE = 5;
 
 function wrap(value, period) {
   return ((value % period) + period) % period;
@@ -24,6 +26,7 @@ export function createPixelChase(canvas, options = {}) {
   let width = BASE_WIDTH;
   let height = 200;
   let worldScale = 1;
+  let spriteScale = 1;
   let lastFrame = performance.now();
   let scroll = 0;
   let running = true;
@@ -214,10 +217,10 @@ export function createPixelChase(canvas, options = {}) {
   }
 
   function mouseLayout(groundY, now) {
-    const catSize = width < 150 ? 40 : width < 240 ? 64 : 88;
+    const catSize = Math.round((width < 150 ? 40 : width < 240 ? 64 : 88) * spriteScale);
     const catX = px(catBaseX) + px(catSlide);
     const mouseStart = Math.max(catX + catSize + px(5), Math.floor(width * 0.35));
-    const mouseBaseSize = 30;
+    const mouseBaseSize = Math.round(30 * spriteScale);
     const mouseSpreadX = Math.max(1, width - mouseStart - mouseBaseSize - 2);
     const mouseSpreadY = px(16);
     return { catSize, catX, mouseStart, mouseBaseSize, mouseSpreadX, mouseSpreadY, groundY, now };
@@ -341,7 +344,7 @@ export function createPixelChase(canvas, options = {}) {
     ) {
       for (let i = 0; i < mice.length; i += 1) {
         const entry = mice[i];
-        const size = layout.mouseBaseSize + entry.sizeBias;
+        const size = layout.mouseBaseSize + Math.round(entry.sizeBias * spriteScale);
         const mouseFrame = Math.floor(now / 105 + i * 1.5) % MOUSE_FRAME_COUNT;
         const x = layout.mouseStart + Math.floor(entry.spread * layout.mouseSpreadX);
         const yOffset = Math.floor(entry.ySpread * layout.mouseSpreadY);
@@ -380,6 +383,12 @@ export function createPixelChase(canvas, options = {}) {
 
   return {
     resize,
+    adjustSpriteScale(delta) {
+      spriteScale = Math.round(
+        Math.min(MAX_SPRITE_SCALE, Math.max(MIN_SPRITE_SCALE, spriteScale + delta)) * 10,
+      ) / 10;
+      return spriteScale;
+    },
     addMouse,
     removeMouse,
     listMouseIds,

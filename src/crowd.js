@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import { captureFaceCanvases } from './persist.js';
-import { createMouse, disposeMouse, refitFacePlanes, refreshLiveFace, retargetFace } from './mouse.js';
+import {
+  applyMousePartTuning,
+  createMouse,
+  DEFAULT_PART_TUNING,
+  disposeMouse,
+  refitFacePlanes,
+  refreshLiveFace,
+  retargetFace,
+} from './mouse.js';
 
 const LIVE = { x: 0.05, z: 1.55, ry: 0.02, s: 1.06 };
 const MAX_FROZEN = 30;
@@ -93,33 +101,13 @@ export function createCrowd(scene) {
   const actors = [];
   let live = null;
   let onFrontChange = null;
-  const partTuning = {
-    chestPositionX: 0,
-    chestPositionY: 0,
-    chestPositionZ: -0.1,
-    chestTilt: (30 * Math.PI) / 180,
-    earPosition: 0.1,
-    earTilt: (-25 * Math.PI) / 180,
-  };
+  const partTuning = { ...DEFAULT_PART_TUNING };
 
-  function applyPartTuning(mesh) {
-    const { chest, body, ears } = mesh.userData.tuneParts;
-    chest.position.set(
-      chest.userData.tuneBaseX + partTuning.chestPositionX * body.scale.x,
-      chest.userData.tuneBaseY + partTuning.chestPositionY * body.scale.y,
-      chest.userData.tuneBaseZ + partTuning.chestPositionZ * body.scale.z,
-    );
-    chest.rotation.x = chest.userData.tuneBaseRotationX + partTuning.chestTilt;
-    for (const ear of ears) {
-      ear.position.z = ear.userData.tuneBaseZ + partTuning.earPosition;
-      ear.rotation.x = ear.userData.tuneBaseRotationX + partTuning.earTilt;
-    }
-  }
-
-  function createTunedMouse(canvases, options) {
-    const mesh = createMouse(canvases, options);
-    applyPartTuning(mesh);
-    return mesh;
+  function createTunedMouse(canvases, options = {}) {
+    return createMouse(canvases, {
+      ...options,
+      partTuning: options.partTuning ?? partTuning,
+    });
   }
 
   function removeActor(actor) {
@@ -341,7 +329,7 @@ export function createCrowd(scene) {
     },
     setPartTuning(values) {
       Object.assign(partTuning, values);
-      for (const actor of actors) applyPartTuning(actor.mesh);
+      for (const actor of actors) applyMousePartTuning(actor.mesh, partTuning);
     },
     update(dt, time) {
       for (const actor of [...actors]) {

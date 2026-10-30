@@ -89,11 +89,17 @@ export function createStagePhoto(canvas) {
     };
   }
 
-  function addFigure(id, canvases, traits) {
+  function addFigure(id, canvases, traits, faceSettings, partTuning) {
     if (roster.find((r) => r.id === id)) return null;
     if (roster.length >= MAX) return null;
     const slot = roster.length;
-    const mesh = createMouse(canvases, { traits, id, staticFace: true });
+    const mesh = createMouse(canvases, {
+      traits,
+      faceSettings,
+      partTuning,
+      id,
+      staticFace: true,
+    });
     const pose = slotPose(slot);
     mesh.position.set(pose.x, pose.y, pose.z);
     mesh.rotation.y = pose.ry;

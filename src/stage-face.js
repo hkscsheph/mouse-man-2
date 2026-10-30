@@ -1,5 +1,5 @@
 import { canvasesFromSnapshot, fetchSnapshot, newMouseId } from './persist.js';
-import { createMouseTraits } from './mouse.js';
+import { createMouseTraits, DEFAULT_PART_TUNING } from './mouse.js';
 
 /** Fixed school-uniform palette merged into saved traits when present. */
 export const UNIFORM_TRAITS = {
@@ -98,6 +98,8 @@ export async function resolveParticipant(idHint) {
   const id = idHint || newMouseId();
   let canvases = placeholderFaceCanvases(Math.random());
   let traits = { ...createMouseTraits(), ...UNIFORM_TRAITS };
+  let partTuning = { ...DEFAULT_PART_TUNING };
+  let faceSettings = null;
   let snapshot = null;
 
   if (idHint) {
@@ -105,10 +107,16 @@ export async function resolveParticipant(idHint) {
       snapshot = await fetchSnapshot(idHint);
       canvases = await canvasesFromSnapshot(snapshot);
       traits = { ...UNIFORM_TRAITS, ...snapshot.traits };
+      faceSettings = {
+        featureScale: snapshot.featureScale,
+        nostrilScale: snapshot.nostrilScale,
+        eyePosition: snapshot.eyePosition,
+      };
+      partTuning = { ...DEFAULT_PART_TUNING, ...snapshot.partTuning };
     } catch (error) {
       console.warn('stage: no snapshot for id, using placeholder', idHint, error);
     }
   }
 
-  return { id, canvases, traits, snapshot };
+  return { id, canvases, traits, faceSettings, partTuning, snapshot };
 }

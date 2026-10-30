@@ -343,6 +343,7 @@ async function loadSharedMouse(id) {
     const actor = crowd.spawnLive(canvases, {
       traits: snapshot.traits,
       id: snapshot.id,
+      partTuning: snapshot.partTuning,
       locked: true,
       staticFace: true,
       replaceLocked: true,

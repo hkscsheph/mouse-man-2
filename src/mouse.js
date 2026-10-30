@@ -42,6 +42,37 @@ export function setNostrilScale(value) {
   nostrilScale = THREE.MathUtils.clamp(Number(value) || 1, 2, 3.6);
 }
 
+function boundedFaceSetting(value, min, max) {
+  if (value == null) return undefined;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? THREE.MathUtils.clamp(numeric, min, max) : undefined;
+}
+
+export const DEFAULT_PART_TUNING = Object.freeze({
+  chestPositionX: 0,
+  chestPositionY: 0,
+  chestPositionZ: -0.1,
+  chestTilt: (30 * Math.PI) / 180,
+  earPosition: 0.1,
+  earTilt: (-25 * Math.PI) / 180,
+});
+
+export function applyMousePartTuning(mouse, tuning = DEFAULT_PART_TUNING) {
+  const settings = { ...DEFAULT_PART_TUNING, ...tuning };
+  const { chest, body, ears } = mouse.userData.tuneParts;
+  chest.position.set(
+    chest.userData.tuneBaseX + settings.chestPositionX * body.scale.x,
+    chest.userData.tuneBaseY + settings.chestPositionY * body.scale.y,
+    chest.userData.tuneBaseZ + settings.chestPositionZ * body.scale.z,
+  );
+  chest.rotation.x = chest.userData.tuneBaseRotationX + settings.chestTilt;
+  for (const ear of ears) {
+    ear.position.z = ear.userData.tuneBaseZ + settings.earPosition;
+    ear.rotation.x = ear.userData.tuneBaseRotationX + settings.earTilt;
+  }
+  mouse.userData.partTuning = settings;
+}
+
 function feltNormal() {
   const size = 64;
   const canvas = document.createElement('canvas');
@@ -1117,7 +1148,19 @@ export function createMouse(canvases, options = {}) {
     nose: addFacePlane(head, canvases.nose, 'nose', new THREE.Vector3(0, -0.15, 0.6), 0.12, 0.16, 3, ownGeometries, snoutSurface),
   };
   root.userData.planes = planes;
+  if (options.faceSettings) {
+    const faceSettings = {
+      featureScale: boundedFaceSetting(options.faceSettings.featureScale, 2, 3.6),
+      nostrilScale: boundedFaceSetting(options.faceSettings.nostrilScale, 2, 3.6),
+      eyePosition: boundedFaceSetting(options.faceSettings.eyePosition, -0.15, 0.15),
+    };
+    for (const plane of Object.values(planes)) {
+      plane.userData.faceSettings = faceSettings;
+    }
+    refitFacePlanes(root);
+  }
   addAccessories(head, torso, mats, traits, ears);
+  applyMousePartTuning(root, options.partTuning);
   // staticFace = restored / QR mouse — never wire webcam patch canvases.
   root.userData.liveCanvases = options.staticFace ? null : canvases;
   return root;
@@ -1250,8 +1293,16 @@ function updateFaceSurface(plane) {
 function fitPlane(plane, aspect, snap) {
   const safeAspect = THREE.MathUtils.clamp(aspect, 0.55, 2.6);
   const key = plane.userData.key;
-  if (EYE_PATCHES.has(key)) plane.userData.centerY = plane.userData.baseCenterY + eyePosition;
-  const boost = SCALED_PATCHES.has(key) ? featureScale : key === 'nose' ? nostrilScale : 1;
+  const faceSettings = plane.userData.faceSettings;
+  if (EYE_PATCHES.has(key)) {
+    plane.userData.centerY =
+      plane.userData.baseCenterY + (faceSettings?.eyePosition ?? eyePosition);
+  }
+  const boost = SCALED_PATCHES.has(key)
+    ? faceSettings?.featureScale ?? featureScale
+    : key === 'nose'
+      ? faceSettings?.nostrilScale ?? nostrilScale
+      : 1;
   const height = plane.userData.height * boost;
   const maxWidth = plane.userData.maxWidth * boost;
   let width = Math.min(height * safeAspect, maxWidth);

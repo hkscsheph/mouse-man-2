@@ -125,6 +125,7 @@ export function snapshotFromMouse(mouse, { id, featureScale, nostrilScale, eyePo
     nostrilScale: nostrilScale ?? 1,
     eyePosition: eyePosition ?? 0,
     traits: serializeTraits(mouse.userData.traits),
+    partTuning: mouse.userData.partTuning ? { ...mouse.userData.partTuning } : undefined,
     patches,
   };
 }

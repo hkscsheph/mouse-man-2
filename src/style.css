@@ -213,7 +213,7 @@ body.pixel-mode #share {
 body.stage-mode {
   background: #84d8f2;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
 }
 
 body.stage-mode #gate {
@@ -323,6 +323,11 @@ body.stage-mode #share {
 
 #stage-scan[hidden] {
   display: none;
+}
+
+body.stage-mode #stage-scan {
+  top: 12px;
+  bottom: auto;
 }
 
 #stage-admit {

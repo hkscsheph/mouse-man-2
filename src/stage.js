@@ -30,6 +30,7 @@ hud.innerHTML = `
   <p id="stage-status" data-state="idle" role="status" aria-live="polite">Scan participant QR codes (camera) or press <kbd>A</kbd> to admit demo ID.</p>
   <p id="stage-ws-status">WebSocket: connecting…</p>
   <p id="stage-count">On stage: 0 mice</p>
+  <p id="stage-scale">Pixel cat &amp; mice: 100% (<kbd>+</kbd>/<kbd>-</kbd> to resize)</p>
 `;
 document.body.appendChild(hud);
 
@@ -106,7 +107,13 @@ async function admitParticipant(idHint) {
   }
   order.set(participant.id, { order: orderSeq++ });
   pixel.addMouse(participant.id);
-  const fig = photo.addFigure(participant.id, participant.canvases, participant.traits);
+  const fig = photo.addFigure(
+    participant.id,
+    participant.canvases,
+    participant.traits,
+    participant.faceSettings,
+    participant.partTuning,
+  );
   if (!fig) {
     pixel.removeMouse(participant.id);
     order.delete(participant.id);
@@ -266,6 +273,20 @@ admitInput.addEventListener('blur', () => {
 
 window.addEventListener('keydown', (event) => {
   if (event.repeat) return;
+  const scaleDelta =
+    event.key === '+' || event.code === 'NumpadAdd'
+      || event.key === '=' || event.code === 'Equal'
+      ? 0.1
+      : event.key === '-' || event.code === 'NumpadSubtract'
+        ? -0.1
+        : 0;
+  if (scaleDelta && document.activeElement !== admitInput) {
+    event.preventDefault();
+    const scale = pixel.adjustSpriteScale(scaleDelta);
+    const el = document.querySelector('#stage-scale');
+    if (el) el.textContent = `Pixel cat & mice: ${Math.round(scale * 100)}%`;
+    return;
+  }
   if ((event.key === 't' || event.key === 'T') && document.activeElement !== admitInput) {
     event.preventDefault();
     const hideOverlay = !hud.hidden;

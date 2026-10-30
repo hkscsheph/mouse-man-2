@@ -16,11 +16,11 @@ Legacy demo mice on the default route still work with `?stage` (without `mode=st
 
 ## Main stage (`?mode=stage`)
 
-Split screen: **class photo** (3D mice in uniform) on top, **pixel chase** on the bottom.
-The live QR-scanning camera preview appears in the lower-right corner, and the stage status reports when scanning is ready, a participant is admitted, or camera access is denied.
+Split screen: **pixel chase** on top, **class photo** (3D mice in uniform) on the bottom.
+The live QR-scanning camera preview appears in the upper-right corner, and the stage status reports when scanning is ready, a participant is admitted, or camera access is denied.
 
 1. Operators scan participant QR codes (uses native `BarcodeDetector` when available and a `jsQR` fallback otherwise).
-2. Each admit adds one pixel mouse and one 3D figure (face from saved snapshot when the QR/`?m=` id resolves; otherwise a placeholder face; body uses a fixed school-uniform trait preset).
+2. Each admit adds one pixel mouse and one 3D figure. A resolved QR/`?m=` snapshot restores the original mouse traits, face, face tuning, and part tuning; missing snapshots use a placeholder face with the stage uniform palette.
 3. A WebSocket client listens for cat-eat commands and runs the pixel cat eat animation plus a scratch-out on the matching photo figure.
 
 ### Keyboard (local demo without WebSocket)
@@ -31,6 +31,7 @@ The live QR-scanning camera preview appears in the lower-right corner, and the s
 | `D` | Admit a random demo guest (placeholder face) |
 | `E` | Broadcast `{ "type": "catEat" }` via `postMessage` (same handler as WebSocket) |
 | `T` | Hide / show the HUD and webcam thumbnail; QR scanning continues |
+| `+` / `-` | Enlarge / shrink the pixel cat and mice |
 
 ### WebSocket URL
 
