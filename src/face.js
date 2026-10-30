@@ -274,6 +274,61 @@ function updateMirror(video) {
   mirrorCtx.restore();
 }
 
+function boundsFromLandmarks(landmarks) {
+  const xs = landmarks.map((point) => point.x);
+  const ys = landmarks.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const padX = (maxX - minX) * 0.2;
+  const padY = (maxY - minY) * 0.25;
+  const left = Math.max(0, minX - padX);
+  const top = Math.max(0, minY - padY);
+  const right = Math.min(1, maxX + padX);
+  const bottom = Math.min(1, maxY + padY);
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+export function captureFacePortrait(video, bounds) {
+  if (!bounds || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+    throw new Error('A tracked face is required to capture a portrait');
+  }
+  updateMirror(video);
+  const sourceX = bounds.x * mirror.width;
+  const sourceY = bounds.y * mirror.height;
+  const sourceWidth = bounds.width * mirror.width;
+  const sourceHeight = bounds.height * mirror.height;
+  const targetAspect = 4 / 5;
+  const sourceAspect = sourceWidth / sourceHeight;
+  let cropX = sourceX;
+  let cropY = sourceY;
+  let cropWidth = sourceWidth;
+  let cropHeight = sourceHeight;
+  if (sourceAspect > targetAspect) {
+    cropWidth = sourceHeight * targetAspect;
+    cropX += (sourceWidth - cropWidth) / 2;
+  } else {
+    cropHeight = sourceWidth / targetAspect;
+    cropY += (sourceHeight - cropHeight) / 2;
+  }
+
+  const portrait = document.createElement('canvas');
+  portrait.width = 256;
+  portrait.height = 320;
+  portrait.getContext('2d').drawImage(
+    mirror,
+    cropX,
+    cropY,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    portrait.width,
+    portrait.height,
+  );
+  return portrait;
+}
 
 export function readFace(video, now) {
   if (!landmarker || video.readyState < 2) return { present: false };
@@ -293,6 +348,7 @@ export function readFace(video, now) {
   }
 
   const lm = raw.map((point) => ({ x: 1 - point.x, y: point.y, z: point.z }));
+  const bounds = boundsFromLandmarks(lm);
   const left = lm[33];
   const right = lm[263];
   const center = {
@@ -312,6 +368,7 @@ export function readFace(video, now) {
       present: true,
       jumped: true,
       eyeSpan,
+      bounds,
       yaw: pose.yaw,
       pitch: pose.pitch,
       roll: pose.roll,
@@ -334,6 +391,7 @@ export function readFace(video, now) {
     present: true,
     jumped: false,
     eyeSpan,
+    bounds,
     yaw: pose.yaw,
     pitch: pose.pitch,
     roll: pose.roll,

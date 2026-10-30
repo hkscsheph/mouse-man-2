@@ -49,6 +49,19 @@
       </div>
       <p id="share-hint">Hold still to save your mouse</p>
     </aside>
+    <main id="registration" hidden>
+      <canvas id="registration-photo" aria-label="Class photo with unregistered faces masked"></canvas>
+      <section id="registration-panel" aria-label="Participant registration">
+        <h1>Class registration</h1>
+        <p id="registration-status" role="status">Starting camera…</p>
+        <div class="registration-actions">
+          <button id="registration-capture" type="button" disabled>Capture participant &amp; create QR</button>
+          <button id="registration-print" type="button">Print QR codes</button>
+        </div>
+        <p id="registration-count">0 participants registered</p>
+        <div id="registration-cards"></div>
+      </section>
+    </main>
     <script type="module" src="./src/entry.js"></script>
   </body>
 </html>

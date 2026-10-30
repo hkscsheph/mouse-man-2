@@ -1,5 +1,5 @@
 import { createCrowd } from './crowd.js';
-import { initFace, readFace, resetFaceTracking } from './face.js';
+import { captureFacePortrait, initFace, readFace, resetFaceTracking } from './face.js';
 import {
   bindLiveFeatures,
   getEyePosition,
@@ -19,6 +19,7 @@ import {
   snapshotFromMouse,
 } from './persist.js';
 import { renderShareQr } from './qr.js';
+import { createRegistrationPhoto } from './registration.js';
 import { createScene } from './scene.js';
 
 const SETTLE_MS = 600;
@@ -53,6 +54,13 @@ const earTiltValue = document.querySelector('#ear-tilt-value');
 const sharePanel = document.querySelector('#share');
 const shareQr = document.querySelector('#share-qr');
 const shareHint = document.querySelector('#share-hint');
+const registrationRoot = document.querySelector('#registration');
+const registrationStatus = document.querySelector('#registration-status');
+const registrationCapture = document.querySelector('#registration-capture');
+const registrationPrint = document.querySelector('#registration-print');
+const registrationCount = document.querySelector('#registration-count');
+const registrationCards = document.querySelector('#registration-cards');
+const registrationPhotoCanvas = document.querySelector('#registration-photo');
 
 const { scene, camera, renderer, rotateCamera } = createScene(view);
 const crowd = createCrowd(scene);
@@ -72,8 +80,16 @@ let suppressNextClick = false;
 let lastPointerX = 0;
 let lastPointerY = 0;
 let dragDistance = 0;
+let latestFace = null;
+let registrationBusy = false;
+let registrationMessage = '';
+let registrationHudVisible = true;
 const urlParams = new URLSearchParams(location.search);
 const mode = !urlParams.has('m') && urlParams.get('mode') === 'random' ? 'random' : 'default';
+const registrationMode = !urlParams.has('m') && urlParams.get('mode') === 'reg';
+const registrationPhoto = registrationMode ? createRegistrationPhoto(registrationPhotoCanvas) : null;
+document.body.classList.toggle('registration-mode', registrationMode);
+registrationRoot.hidden = !registrationMode;
 let showcaseMode = Boolean(urlParams.get('m'));
 
 function showGate(text) {
@@ -171,6 +187,146 @@ async function persistLiveMouse(actor) {
     }
   } finally {
     saving = false;
+  }
+}
+
+function updateRegistrationControls(face = latestFace) {
+  const ready = Boolean(
+    face?.present &&
+    !face.jumped &&
+    face.eyeSpan >= MIN_EYE_SPAN &&
+    face.bounds &&
+    crowd.getLive() &&
+    !registrationBusy &&
+    registrationPhoto.count < registrationPhoto.capacity,
+  );
+  registrationCapture.disabled = !ready;
+  if (registrationBusy) return;
+  if (registrationPhoto.failed) {
+    registrationStatus.textContent = 'Could not load the class photo. Check the image asset and reload.';
+    registrationCapture.disabled = true;
+    return;
+  }
+  if (registrationMessage) {
+    registrationStatus.textContent = registrationMessage;
+    return;
+  }
+  if (registrationPhoto.count >= registrationPhoto.capacity) {
+    registrationStatus.textContent = 'All class photo places are registered.';
+  } else if (ready) {
+    registrationStatus.textContent = 'Face ready. Capture to save the participant and create a printable QR.';
+  } else if (face?.present && face.eyeSpan < MIN_EYE_SPAN) {
+    registrationStatus.textContent = 'Move closer to the camera and look toward it.';
+  } else if (state === 'settling') {
+    registrationStatus.textContent = 'Hold still while your face is captured…';
+  } else if (face?.present) {
+    registrationStatus.textContent = 'Keep still and face the camera.';
+  } else {
+    registrationStatus.textContent = 'Waiting for the next participant…';
+  }
+}
+
+function onRegistrationFace(face, now) {
+  if (!face.present) {
+    if (state === 'settling') {
+      if (!absentSince) absentSince = now;
+      if (now - absentSince > SETTLE_GAP_MS) setIdle();
+    }
+    updateRegistrationControls(face);
+    return;
+  }
+  absentSince = 0;
+  if (face.jumped) {
+    if (state === 'settling') settleStart = now;
+    updateRegistrationControls(face);
+    return;
+  }
+  if (state === 'idle') {
+    state = 'settling';
+    settleStart = now;
+  }
+  if (state === 'settling') {
+    if (face.eyeSpan >= MIN_EYE_SPAN && now - settleStart >= SETTLE_MS) {
+      const actor = crowd.spawnLive(face.patches);
+      actor.mesh.userData.liveCanvases = face.patches;
+      state = 'live';
+      liveSince = now;
+    } else {
+      updateRegistrationControls(face);
+      return;
+    }
+  }
+  if (state === 'live') {
+    const live = crowd.getLive();
+    if (live?.mesh.userData.liveCanvases) crowd.updateLive(face);
+    else trackHeadOnly(face);
+  }
+  updateRegistrationControls(face);
+}
+
+async function registerParticipant() {
+  if (!registrationMode || registrationBusy) return;
+  const actor = crowd.getLive();
+  const face = latestFace;
+  if (
+    !actor ||
+    !face?.present ||
+    face.jumped ||
+    face.eyeSpan < MIN_EYE_SPAN ||
+    !face.bounds ||
+    registrationPhoto.count >= registrationPhoto.capacity
+  ) return;
+
+  registrationMessage = '';
+  registrationBusy = true;
+  updateRegistrationControls(face);
+  let portrait;
+  try {
+    portrait = captureFacePortrait(video, face.bounds);
+    lockFaceSnapshot(actor);
+    registrationStatus.textContent = 'Saving participant and creating QR…';
+    await persistLiveMouse(actor);
+    if (!actor.saved || !actor.mesh.userData.mouseId) {
+      registrationMessage = 'Could not save this participant. Keep still and try again.';
+      return;
+    }
+
+    const id = actor.mesh.userData.mouseId;
+    const qrUrl = shareUrlForId(id, colorToHex(actor.mesh.userData.traits.fur));
+    const card = document.createElement('article');
+    card.className = 'registration-card';
+    const label = document.createElement('p');
+    label.textContent = `Participant ${registrationPhoto.count + 1}`;
+    const qrCanvas = document.createElement('canvas');
+    qrCanvas.width = 132;
+    qrCanvas.height = 132;
+    card.append(label, qrCanvas);
+    try {
+      await renderShareQr(qrCanvas, qrUrl);
+    } catch (error) {
+      console.error(error);
+      registrationMessage = 'Participant saved, but QR generation failed.';
+      return;
+    }
+    if (!registrationPhoto.addPortrait(portrait)) {
+      registrationMessage = 'The class photo is full.';
+      return;
+    }
+    registrationCards.prepend(card);
+    registrationCount.textContent = `${registrationPhoto.count} participant${registrationPhoto.count === 1 ? '' : 's'} registered`;
+    crowd.freeze();
+    setIdle();
+    resetFaceTracking();
+    latestFace = null;
+    registrationMessage = '';
+    await showShareForActor(null);
+    updateRegistrationControls(null);
+  } catch (error) {
+    console.error(error);
+    registrationMessage = 'Could not register this participant. Please try again.';
+  } finally {
+    registrationBusy = false;
+    updateRegistrationControls(latestFace);
   }
 }
 
@@ -320,7 +476,11 @@ function onFace(face, now) {
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  if (tracking) onFace(readFace(video, now), now);
+  if (tracking) {
+    latestFace = readFace(video, now);
+    if (registrationMode) onRegistrationFace(latestFace, now);
+    else onFace(latestFace, now);
+  }
   crowd.update(dt, now / 1000);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
@@ -374,6 +534,9 @@ async function boot() {
   } else if (mode === 'random') {
     startRandomMode();
     return;
+  } else if (registrationMode) {
+    showcaseMode = false;
+    showGate('Starting camera…');
   } else {
     showcaseMode = false;
     showGate('Starting…');
@@ -383,6 +546,7 @@ async function boot() {
     await initFace();
   } catch (error) {
     if (!sharedId) showGate('The face tracker could not start');
+    if (registrationMode) registrationStatus.textContent = 'The face tracker could not start.';
     console.error(error);
     if (!sharedId) return;
   }
@@ -391,18 +555,22 @@ async function boot() {
     await startCamera();
     tracking = true;
     if (!sharedId) hideGate();
+    if (registrationMode) updateRegistrationControls(null);
   } catch (error) {
     console.error(error);
     if (sharedId) return;
     showGate('Click to allow the camera');
+    if (registrationMode) registrationStatus.textContent = 'Allow camera access to begin registration.';
     const retry = async () => {
       try {
         await startCamera();
         tracking = true;
         hideGate();
+        if (registrationMode) updateRegistrationControls(null);
       } catch (retryError) {
         console.error(retryError);
         showGate('Camera permission is needed');
+        if (registrationMode) registrationStatus.textContent = 'Camera permission is needed to register participants.';
       }
     };
     document.body.addEventListener('pointerdown', retry, { once: true });
@@ -462,6 +630,13 @@ function applyPartTuning() {
 tuneToggle.addEventListener('click', () => {
   setTuneOpen(tune.hidden);
 });
+
+registrationCapture.addEventListener('click', registerParticipant);
+registrationPrint.addEventListener('click', () => window.print());
+if (registrationMode) {
+  registrationCount.textContent = `0 participants registered`;
+  updateRegistrationControls(null);
+}
 
 featureScale.addEventListener('input', () => {
   applyFeatureScale(featureScale.value);
@@ -530,9 +705,14 @@ view.addEventListener('click', (event) => {
 
 window.addEventListener('keydown', (event) => {
   if (event.repeat) return;
+  if (registrationMode && (event.key === 't' || event.key === 'T')) {
+    registrationHudVisible = !registrationHudVisible;
+    document.body.classList.toggle('registration-hud-hidden', !registrationHudVisible);
+    return;
+  }
   if (event.code === 'Space' || event.key === ' ') {
     event.preventDefault();
-    if (mode !== 'random') initWebcamMouse();
+    if (!registrationMode && mode !== 'random') initWebcamMouse();
     return;
   }
   if (event.key === 'f' || event.key === 'F') {
@@ -541,6 +721,7 @@ window.addEventListener('keydown', (event) => {
   }
   if (event.key === 'r' || event.key === 'R') {
     if (mode === 'random') startRandomMode();
+    else if (registrationMode) return;
     else {
       endShowcase();
       crowd.clear();

@@ -3,6 +3,7 @@
 ## Materials
 - Pixel Mouse https://ikoiku.itch.io/16-x-16-pixel-art-character-mouse
 - Pixel Cat https://opengameart.org/content/pixel-cat-0
+- https://www.spritefusion.com/pixel-snapper
 
 ## Modes
 
@@ -11,8 +12,13 @@
 | `/` (default) | Single-player webcam crowd |
 | `?mode=pixel` | Pixel cat chase (demo loop) |
 | `?mode=stage` | **Main stage** — QR admit + class photo + WebSocket cat eat |
+| `?mode=reg` | **Registration** — capture participants into the class photo and print their QR codes |
 
 Legacy demo mice on the default route still work with `?stage` (without `mode=stage`).
+
+## Registration (`?mode=reg`)
+
+Participants stand in front of the webcam one at a time. When a face is detected and steady, choose **Capture participant & create QR** to save their mouse using the default mode's snapshot and share-QR flow. Their captured portrait replaces the next red question mark in `br_class.jpg`; each generated QR is kept in the print panel so the operator can print the registered participants' codes together. The class photo starts with every student face masked by a red question mark; the black cat-headed teacher remains visible. Press **T** to toggle the registration panel and webcam thumbnail.
 
 ## Main stage (`?mode=stage`)
 
@@ -100,6 +106,6 @@ Generated nose patches place nostrils near the bottom of the nose.
 Live face patches follow the tracked head tilt as a single face.
 
 ## Workflow
-1. (TODO) At registration, a group of users scan their faces one by one each generating a QR code for printing, their faces will be captured for generating a class photo in 大逃殺 style 
+1. In registration mode, a group of users is captured one by one, each generating a QR code for printing and taking their place in the class photo.
 2. In a room, current default mode will be used for single player live interaction
-3. (Ongoing) In main stage, users show their QR one by one. Each will add a mouse to the pixel mode, and add a 3D model to a class photo style with uniform clothing. This mode will subscribe to a websocket and upon message received the pixel cat approaches the pixel mouses and eat one scratching out one 3D model in the class photo
+3. In main stage, users show their QR one by one. Each will add a mouse to the pixel mode, and add a 3D model to a class photo style with uniform clothing. This mode will subscribe to a websocket and upon message received the pixel cat approaches the pixel mouses and eat one scratching out one 3D model in the class photo (TODO: mouses wear school uniforms and stand in the same position)
