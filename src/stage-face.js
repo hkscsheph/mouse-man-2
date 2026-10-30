@@ -1,7 +1,7 @@
 import { canvasesFromSnapshot, fetchSnapshot, newMouseId } from './persist.js';
 import { createMouseTraits, DEFAULT_PART_TUNING } from './mouse.js';
 
-/** Fixed school-uniform palette merged into saved traits when present. */
+/** Fallback palette for demo guests without a saved mouse. */
 export const UNIFORM_TRAITS = {
   fur: '#3d4f6a',
   belly: '#e8e2d6',
@@ -125,20 +125,18 @@ export async function resolveParticipant(idHint, furColorHint = null) {
   let snapshot = null;
 
   if (idHint) {
-    try {
-      snapshot = await fetchSnapshot(idHint);
-      canvases = await canvasesFromSnapshot(snapshot);
-      traits = { ...UNIFORM_TRAITS, ...snapshot.traits };
-      if (!snapshot.traits.fur && furColorHint) traits.fur = furColorHint;
-      faceSettings = {
-        featureScale: snapshot.featureScale,
-        nostrilScale: snapshot.nostrilScale,
-        eyePosition: snapshot.eyePosition,
-      };
-      partTuning = { ...DEFAULT_PART_TUNING, ...snapshot.partTuning };
-    } catch (error) {
-      console.warn('stage: no snapshot for id, using placeholder', idHint, error);
+    snapshot = await fetchSnapshot(idHint);
+    canvases = await canvasesFromSnapshot(snapshot);
+    traits = snapshot.traits;
+    if (!snapshot.traits.fur && furColorHint) {
+      traits = { ...snapshot.traits, fur: furColorHint };
     }
+    faceSettings = {
+      featureScale: snapshot.featureScale,
+      nostrilScale: snapshot.nostrilScale,
+      eyePosition: snapshot.eyePosition,
+    };
+    partTuning = { ...DEFAULT_PART_TUNING, ...snapshot.partTuning };
   }
 
   return { id, canvases, traits, faceSettings, partTuning, snapshot };

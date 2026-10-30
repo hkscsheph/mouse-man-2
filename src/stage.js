@@ -109,7 +109,17 @@ async function admitParticipant(idHint) {
   const parsed = idHint ? parseMouseIdFromQrText(idHint) ?? idHint : null;
   const furColor = idHint ? parseMouseFurColorFromQrText(idHint) : null;
   setStatus(parsed ? `Loading ${parsed}…` : 'Adding guest…');
-  const participant = await resolveParticipant(parsed, furColor);
+  let participant;
+  try {
+    participant = await resolveParticipant(parsed, furColor);
+  } catch (error) {
+    console.error('stage: failed to restore saved mouse', parsed, error);
+    setStatus(
+      parsed ? `Could not load saved mouse ${parsed}` : 'Could not add guest',
+      'error',
+    );
+    return;
+  }
   if (order.has(participant.id)) {
     setStatus(`Already on stage: ${participant.id}`);
     return;

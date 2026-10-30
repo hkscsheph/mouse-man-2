@@ -19,8 +19,10 @@ Legacy demo mice on the default route still work with `?stage` (without `mode=st
 Split screen: **pixel chase** on top, **class photo** (3D mice in uniform) on the bottom. The HUD and live QR-scanning camera thumbnail start hidden.
 
 1. Operators scan participant QR codes (uses native `BarcodeDetector` when available and a `jsQR` fallback otherwise).
-2. Each admit adds one pixel mouse and one 3D figure. A resolved QR/`?m=` snapshot restores the original mouse traits, face, face tuning, and part tuning. The `m` value also carries the saved fur color, so the pixel mouse still matches if the full snapshot is unavailable; missing snapshots use a placeholder face with the stage uniform palette.
+2. Each QR admit restores the original 3D mouse from its persisted traits, captured eyes/nose/mouth, face tuning, and part tuning. If its snapshot cannot be loaded, the stage reports an error instead of showing a different mouse. The `m` value also carries the saved fur color for the pixel mouse. `D` adds a demo guest with a placeholder face.
 3. A WebSocket client listens for cat-eat commands and runs the pixel cat eat animation plus a scratch-out on the matching photo figure.
+
+`npm run dev` and `npm run preview` provide a local `/api/mouse` backed by ignored `.dev-data/mice/` files, so saved QR snapshots can be retrieved across browser sessions using the same server origin.
 
 ### Keyboard (local demo without WebSocket)
 
@@ -30,7 +32,7 @@ Split screen: **pixel chase** on top, **class photo** (3D mice in uniform) on th
 | `D` | Admit a random demo guest (placeholder face) |
 | `E` | Broadcast `{ "type": "catEat" }` via `postMessage` (same handler as WebSocket) |
 | `T` | Show / hide the HUD and webcam thumbnail; QR scanning continues |
-| `+` / `-` | Enlarge / shrink the pixel cat and mice (starts at 300%) |
+| `+=` / `-` | Enlarge / shrink the pixel cat and mice (starts at 300%) |
 
 ### WebSocket URL
 
