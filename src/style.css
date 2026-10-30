@@ -265,7 +265,7 @@ body.stage-mode #share {
   color: rgba(255, 236, 220, 0.92);
   font: 13px/1.45 "Segoe UI", sans-serif;
   backdrop-filter: blur(8px);
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 #stage-hud[hidden] {
@@ -285,6 +285,23 @@ body.stage-mode #share {
 
 #stage-hud p:last-child {
   margin-bottom: 0;
+}
+
+#stage-row-height,
+#stage-camera-height {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+#stage-row-rise,
+#stage-camera {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 0;
+  accent-color: #e3944a;
 }
 
 #stage-status::before {

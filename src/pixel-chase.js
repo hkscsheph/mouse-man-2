@@ -30,8 +30,13 @@ export function createPixelChase(canvas, options = {}) {
   let spriteScale = Number.isFinite(requestedSpriteScale)
     ? Math.round(Math.min(MAX_SPRITE_SCALE, Math.max(MIN_SPRITE_SCALE, requestedSpriteScale)) * 10) / 10
     : 1;
+  const mouseWanderSpeed = Math.max(0, Number(options.mouseWanderSpeed) || 0);
+  const mouseWanderRange = Math.max(0, Number(options.mouseWanderRange) || 0);
+  const mouseRunFrameDuration = Math.max(1, Number(options.mouseRunFrameDuration) || 105);
+  const catSpeedVariation = Math.min(0.5, Math.max(0, Number(options.catSpeedVariation) || 0));
   let lastFrame = performance.now();
   let scroll = 0;
+  let catRunTime = 0;
   let running = true;
   let raf = 0;
 
@@ -337,10 +342,12 @@ export function createPixelChase(canvas, options = {}) {
     if (!running) return;
     const dt = Math.min(0.05, (now - lastFrame) / 1000);
     lastFrame = now;
-    scroll += dt * 64;
+    const catSpeed = 1 + catSpeedVariation * Math.sin(now * 0.0005);
+    scroll += dt * 64 * catSpeed;
+    catRunTime += dt * catSpeed;
 
     if (catChase) {
-      catChase.t += dt / catChase.dur;
+      catChase.t += (dt * catSpeed) / catChase.dur;
       if (catChase.phase === 'run') {
         const k = Math.min(1, catChase.t);
         const eased = k * k * (3 - 2 * k);
@@ -364,7 +371,7 @@ export function createPixelChase(canvas, options = {}) {
     drawClassroom(groundY);
 
     const layout = mouseLayout(groundY, now);
-    const catFrame = Math.floor(now / 110) % CAT_FRAME_COUNT;
+    const catFrame = Math.floor((catRunTime * 1000) / 110) % CAT_FRAME_COUNT;
     const catY = groundY - Math.ceil((CAT_FOOT_ROW * layout.catSize) / CAT_FRAME_SIZE);
     if (catRunSheet) {
       ctx.save();
@@ -392,22 +399,50 @@ export function createPixelChase(canvas, options = {}) {
       for (let i = 0; i < mice.length; i += 1) {
         const entry = mice[i];
         const size = layout.mouseBaseSize + Math.round(entry.sizeBias * spriteScale);
-        const mouseFrame = Math.floor(now / 105 + i * 1.5) % MOUSE_FRAME_COUNT;
-        const x = layout.mouseStart + Math.floor(entry.spread * layout.mouseSpreadX);
-        const yOffset = Math.floor(entry.ySpread * layout.mouseSpreadY);
-        const y = groundY - Math.ceil((MOUSE_FOOT_ROW * size) / MOUSE_FRAME_SIZE) - yOffset;
-        ctx.drawImage(
-          getMouseSprite(entry.skinColor),
-          0,
-          mouseFrame * MOUSE_FRAME_SIZE,
-          MOUSE_FRAME_SIZE,
-          MOUSE_FRAME_SIZE,
-          x,
-          y,
-          size,
-          size,
-        );
-      }
+          const movePhase = (now / 1000) * mouseWanderSpeed + entry.spread * Math.PI * 2;
+          const baseX = layout.mouseStart + Math.floor(entry.spread * layout.mouseSpreadX);
+          const wander = Math.sin(movePhase) * mouseWanderRange * spriteScale;
+          const x = Math.max(
+            layout.mouseStart,
+            Math.min(layout.mouseStart + layout.mouseSpreadX, Math.round(baseX + wander)),
+          );
+          const yOffset = Math.floor(entry.ySpread * layout.mouseSpreadY)
+            + Math.round(Math.sin(movePhase * 1.6) * spriteScale);
+          const y = groundY - Math.ceil((MOUSE_FOOT_ROW * size) / MOUSE_FRAME_SIZE) - yOffset;
+          const mouseFrame = Math.floor(now / mouseRunFrameDuration + i * 1.5) % MOUSE_FRAME_COUNT;
+          const sprite = getMouseSprite(entry.skinColor);
+          const catCenter = layout.catX + layout.catSize / 2;
+          const mouseCenter = x + size / 2;
+          ctx.save();
+          if (mouseCenter < catCenter) {
+            ctx.translate(x + size, y);
+            ctx.scale(-1, 1);
+            ctx.drawImage(
+              sprite,
+              0,
+              mouseFrame * MOUSE_FRAME_SIZE,
+              MOUSE_FRAME_SIZE,
+              MOUSE_FRAME_SIZE,
+              0,
+              0,
+              size,
+              size,
+            );
+          } else {
+            ctx.drawImage(
+              sprite,
+              0,
+              mouseFrame * MOUSE_FRAME_SIZE,
+              MOUSE_FRAME_SIZE,
+              MOUSE_FRAME_SIZE,
+              x,
+              y,
+              size,
+              size,
+            );
+          }
+          ctx.restore();
+        }
     }
 
     raf = requestAnimationFrame(frame);

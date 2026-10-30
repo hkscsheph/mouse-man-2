@@ -37,6 +37,15 @@ hud.innerHTML = `
   <p id="stage-ws-status">WebSocket: connecting…</p>
   <p id="stage-count">On stage: 0 mice</p>
   <p id="stage-scale">Pixel cat &amp; mice: ${Math.round(initialPixelSpriteScale * 100)}% (<kbd>+</kbd>/<kbd>-</kbd> to resize)</p>
+  <div id="stage-row-height">
+    <label for="stage-row-rise">3D row rise: <output id="stage-row-rise-value">0.80</output></label>
+    <input id="stage-row-rise" type="range" min="0.2" max="0.9" step="0.02" value="0.8" aria-label="3D row rise">
+  </div>
+  <div id="stage-camera-height">
+    <label for="stage-camera">Camera height: <output id="stage-camera-value">1.80</output></label>
+    <input id="stage-camera" type="range" min="0.3" max="2.5" step="0.05" value="1.8" aria-label="3D camera height">
+  </div>
+  <p>Arrow keys move the camera left/right and closer/farther; hold Space + Up/Down to pan vertically.</p>
 `;
 document.body.appendChild(hud);
 
@@ -85,9 +94,25 @@ const order = new Map();
 let orderSeq = 0;
 
 const photo = createStagePhoto(photoCanvas);
+const rowRiseInput = document.querySelector('#stage-row-rise');
+const rowRiseValue = document.querySelector('#stage-row-rise-value');
+rowRiseInput.addEventListener('input', () => {
+  const rowRise = photo.setRowRise(rowRiseInput.value);
+  rowRiseValue.value = rowRise.toFixed(2);
+});
+const cameraHeightInput = document.querySelector('#stage-camera');
+const cameraHeightValue = document.querySelector('#stage-camera-value');
+cameraHeightInput.addEventListener('input', () => {
+  const cameraHeight = photo.setCameraHeight(cameraHeightInput.value);
+  cameraHeightValue.value = cameraHeight.toFixed(2);
+});
 const pixel = createPixelChase(pixelCanvas, {
   initialCount: 0,
   initialSpriteScale: initialPixelSpriteScale,
+  mouseWanderSpeed: 0.45,
+  mouseWanderRange: 10,
+  mouseRunFrameDuration: 150,
+  catSpeedVariation: 0.3,
   getSize: () => ({
     width: pixelCanvas.clientWidth || window.innerWidth,
     height: pixelCanvas.clientHeight || Math.floor(window.innerHeight * 0.52),
@@ -290,7 +315,35 @@ admitInput.addEventListener('blur', () => {
   admitInput.hidden = true;
 });
 
+let spacePressed = false;
+
 window.addEventListener('keydown', (event) => {
+  const activeElement = document.activeElement;
+  const isEditingControl = activeElement instanceof HTMLElement
+    && activeElement.matches('input, textarea, select, [contenteditable="true"]');
+  if (event.code === 'Space' || event.key === ' ') {
+    if (!isEditingControl) {
+      spacePressed = true;
+      event.preventDefault();
+    }
+    return;
+  }
+  if (!isEditingControl) {
+    const moveStep = 0.01;
+    const movement = {
+      ArrowLeft: [-moveStep, 0],
+      ArrowRight: [moveStep, 0],
+      ArrowUp: spacePressed ? [0, 0, moveStep] : [0, -moveStep, 0],
+      ArrowDown: spacePressed ? [0, 0, -moveStep] : [0, moveStep, 0],
+    }[event.key];
+    if (movement) {
+      event.preventDefault();
+      const cameraHeight = photo.moveCamera(...movement);
+      cameraHeightInput.value = String(cameraHeight);
+      cameraHeightValue.value = cameraHeight.toFixed(2);
+      return;
+    }
+  }
   if (event.repeat) return;
   const scaleDelta =
     event.key === '+' || event.code === 'NumpadAdd'
@@ -336,6 +389,14 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault();
     void admitParticipant(null);
   }
+});
+
+window.addEventListener('keyup', (event) => {
+  if (event.code === 'Space' || event.key === ' ') spacePressed = false;
+});
+
+window.addEventListener('blur', () => {
+  spacePressed = false;
 });
 
 if (gate) {

@@ -16,7 +16,7 @@ Legacy demo mice on the default route still work with `?stage` (without `mode=st
 
 ## Main stage (`?mode=stage`)
 
-Split screen: **pixel chase** on top, **class photo** (3D mice in uniform) on the bottom. The HUD and live QR-scanning camera thumbnail start hidden.
+Split screen: **pixel chase** on top, **class photo** (3D mice in uniform) on the bottom. Stage pixel mice wander slowly and face away from the cat; the cat smoothly varies its run speed. The standalone pixel mode keeps its existing movement. The class photo shows up to 30 standing 3D mice center-out in three stepped rows of ten; use the HUD sliders to adjust row rise (default `0.8`) and camera height (default `1.8`). The HUD and live QR-scanning camera thumbnail start hidden.
 
 1. Operators scan participant QR codes (uses native `BarcodeDetector` when available and a `jsQR` fallback otherwise).
 2. Each QR admit restores the original 3D mouse from its persisted traits, captured eyes/nose/mouth, face tuning, and part tuning. If its snapshot cannot be loaded, the stage reports an error instead of showing a different mouse. The `m` value also carries the saved fur color for the pixel mouse. `D` adds a demo guest with a placeholder face.
@@ -33,6 +33,8 @@ Split screen: **pixel chase** on top, **class photo** (3D mice in uniform) on th
 | `E` | Broadcast `{ "type": "catEat" }` via `postMessage` (same handler as WebSocket) |
 | `T` | Show / hide the HUD and webcam thumbnail; QR scanning continues |
 | `+=` / `-` | Enlarge / shrink the pixel cat and mice (starts at 300%) |
+| Arrow keys | Move the 3D camera left/right and closer/farther |
+| `Space` + `↑` / `↓` | Pan the 3D camera upward / downward |
 
 ### WebSocket URL
 
