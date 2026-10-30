@@ -26,7 +26,10 @@ export function createPixelChase(canvas, options = {}) {
   let width = BASE_WIDTH;
   let height = 200;
   let worldScale = 1;
-  let spriteScale = 1;
+  const requestedSpriteScale = Number(options.initialSpriteScale ?? 1);
+  let spriteScale = Number.isFinite(requestedSpriteScale)
+    ? Math.round(Math.min(MAX_SPRITE_SCALE, Math.max(MIN_SPRITE_SCALE, requestedSpriteScale)) * 10) / 10
+    : 1;
   let lastFrame = performance.now();
   let scroll = 0;
   let running = true;
@@ -35,9 +38,10 @@ export function createPixelChase(canvas, options = {}) {
   const catSource = new Image();
   let catRunSheet = null;
   const mouseSprite = new Image();
+  const tintedMouseSprites = new Map();
   mouseSprite.src = new URL('./MouseRun.png', import.meta.url).href;
 
-  /** @type {{ id: string, spread: number, ySpread: number, sizeBias: number }[]} */
+  /** @type {{ id: string, spread: number, ySpread: number, sizeBias: number, skinColor: string | null }[]} */
   const mice = [];
 
   let catBaseX = 18;
@@ -50,6 +54,48 @@ export function createPixelChase(canvas, options = {}) {
 
   function px(value) {
     return Math.round(value * worldScale);
+  }
+
+  function getMouseSprite(skinColor) {
+    const color = typeof skinColor === 'string'
+      ? skinColor
+      : skinColor && typeof skinColor.getHexString === 'function'
+        ? `#${skinColor.getHexString()}`
+        : '';
+    const match = /^#?([0-9a-f]{6})$/i.exec(color);
+    if (!match || !mouseSprite.complete || !mouseSprite.naturalWidth) return mouseSprite;
+    const key = match[1].toLowerCase();
+    if (tintedMouseSprites.has(key)) return tintedMouseSprites.get(key);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = mouseSprite.naturalWidth;
+    canvas.height = mouseSprite.naturalHeight;
+    const spriteContext = canvas.getContext('2d', { willReadFrequently: true });
+    spriteContext.drawImage(mouseSprite, 0, 0);
+    const image = spriteContext.getImageData(0, 0, canvas.width, canvas.height);
+    const red = parseInt(key.slice(0, 2), 16);
+    const green = parseInt(key.slice(2, 4), 16);
+    const blue = parseInt(key.slice(4, 6), 16);
+    for (let i = 0; i < image.data.length; i += 4) {
+      const sourceRed = image.data[i];
+      const sourceGreen = image.data[i + 1];
+      const sourceBlue = image.data[i + 2];
+      if (
+        sourceRed > 180 &&
+        sourceGreen > 70 &&
+        sourceRed > sourceGreen * 1.25 &&
+        sourceGreen > sourceBlue * 1.2 &&
+        sourceBlue < 130
+      ) {
+        const shade = sourceRed > 225 ? 1.18 : 1;
+        image.data[i] = Math.min(255, Math.round(red * shade));
+        image.data[i + 1] = Math.min(255, Math.round(green * shade));
+        image.data[i + 2] = Math.min(255, Math.round(blue * shade));
+      }
+    }
+    spriteContext.putImageData(image, 0, 0);
+    tintedMouseSprites.set(key, canvas);
+    return canvas;
   }
 
   function prepareCatSprite() {
@@ -230,13 +276,14 @@ export function createPixelChase(canvas, options = {}) {
     return mice.findIndex((m) => m.id === id);
   }
 
-  function addMouse(id) {
+  function addMouse(id, skinColor = null) {
     if (indexOfMouse(id) >= 0) return false;
     mice.push({
       id,
       spread: seedRandom(),
       ySpread: seedRandom(),
       sizeBias: mice.length % 3,
+      skinColor,
     });
     return true;
   }
@@ -350,7 +397,7 @@ export function createPixelChase(canvas, options = {}) {
         const yOffset = Math.floor(entry.ySpread * layout.mouseSpreadY);
         const y = groundY - Math.ceil((MOUSE_FOOT_ROW * size) / MOUSE_FRAME_SIZE) - yOffset;
         ctx.drawImage(
-          mouseSprite,
+          getMouseSprite(entry.skinColor),
           0,
           mouseFrame * MOUSE_FRAME_SIZE,
           MOUSE_FRAME_SIZE,

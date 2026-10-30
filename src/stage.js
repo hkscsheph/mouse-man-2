@@ -2,7 +2,11 @@ import jsQR from 'jsqr';
 import { createPixelChase } from './pixel-chase.js';
 import { createStagePhoto } from './stage-photo.js';
 import { connectStageWebSocket, postStageWsMessage } from './stage-ws.js';
-import { parseMouseIdFromQrText, resolveParticipant } from './stage-face.js';
+import {
+  parseMouseFurColorFromQrText,
+  parseMouseIdFromQrText,
+  resolveParticipant,
+} from './stage-face.js';
 
 document.title = 'Main Stage — Mouse Exhibition';
 document.body.classList.add('stage-mode');
@@ -18,6 +22,7 @@ const sharePanel = document.querySelector('#share');
 
 const pixelCanvas = document.querySelector('#view');
 pixelCanvas.classList.add('pixelated', 'stage-pixel');
+const initialPixelSpriteScale = 3;
 
 const photoCanvas = document.createElement('canvas');
 photoCanvas.id = 'stage-photo';
@@ -26,11 +31,12 @@ document.body.prepend(photoCanvas);
 
 const hud = document.createElement('div');
 hud.id = 'stage-hud';
+hud.hidden = true;
 hud.innerHTML = `
   <p id="stage-status" data-state="idle" role="status" aria-live="polite">Scan participant QR codes (camera) or press <kbd>A</kbd> to admit demo ID.</p>
   <p id="stage-ws-status">WebSocket: connecting…</p>
   <p id="stage-count">On stage: 0 mice</p>
-  <p id="stage-scale">Pixel cat &amp; mice: 100% (<kbd>+</kbd>/<kbd>-</kbd> to resize)</p>
+  <p id="stage-scale">Pixel cat &amp; mice: ${Math.round(initialPixelSpriteScale * 100)}% (<kbd>+</kbd>/<kbd>-</kbd> to resize)</p>
 `;
 document.body.appendChild(hud);
 
@@ -38,9 +44,10 @@ const scanVideo = document.createElement('video');
 scanVideo.id = 'stage-scan';
 scanVideo.playsInline = true;
 scanVideo.muted = true;
-scanVideo.setAttribute('aria-label', 'Live webcam preview for QR scanning');
+scanVideo.hidden = true;
+scanVideo.setAttribute('aria-label', 'Webcam preview hidden; QR scanning continues');
 scanVideo.setAttribute('aria-keyshortcuts', 'T');
-scanVideo.title = 'Press T to hide the HUD and webcam preview';
+scanVideo.title = 'Press T to show the HUD and webcam preview';
 hud.setAttribute('aria-keyshortcuts', 'T');
 document.body.appendChild(scanVideo);
 
@@ -80,6 +87,7 @@ let orderSeq = 0;
 const photo = createStagePhoto(photoCanvas);
 const pixel = createPixelChase(pixelCanvas, {
   initialCount: 0,
+  initialSpriteScale: initialPixelSpriteScale,
   getSize: () => ({
     width: pixelCanvas.clientWidth || window.innerWidth,
     height: pixelCanvas.clientHeight || Math.floor(window.innerHeight * 0.52),
@@ -99,14 +107,15 @@ layoutStage();
 
 async function admitParticipant(idHint) {
   const parsed = idHint ? parseMouseIdFromQrText(idHint) ?? idHint : null;
+  const furColor = idHint ? parseMouseFurColorFromQrText(idHint) : null;
   setStatus(parsed ? `Loading ${parsed}…` : 'Adding guest…');
-  const participant = await resolveParticipant(parsed);
+  const participant = await resolveParticipant(parsed, furColor);
   if (order.has(participant.id)) {
     setStatus(`Already on stage: ${participant.id}`);
     return;
   }
   order.set(participant.id, { order: orderSeq++ });
-  pixel.addMouse(participant.id);
+  pixel.addMouse(participant.id, participant.traits.fur);
   const fig = photo.addFigure(
     participant.id,
     participant.canvases,

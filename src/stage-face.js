@@ -83,21 +83,43 @@ export function placeholderFaceCanvases(seed = Math.random()) {
 export function parseMouseIdFromQrText(text) {
   const trimmed = String(text || '').trim();
   if (!trimmed) return null;
+  let mouseValue = trimmed;
+  let queryValue = false;
   try {
     const url = new URL(trimmed);
-    const fromQuery = url.searchParams.get('m') || url.searchParams.get('id');
-    if (fromQuery) return fromQuery;
+    mouseValue = url.searchParams.get('m') || url.searchParams.get('id') || '';
+    queryValue = Boolean(mouseValue);
   } catch {
     /* not a URL */
   }
-  if (/^[a-z0-9]{8,32}$/i.test(trimmed)) return trimmed;
+  const composite = /^([a-z0-9]{8,32})~[0-9a-f]{6}$/i.exec(mouseValue);
+  if (composite) return composite[1];
+  if (queryValue) return mouseValue;
+  if (/^[a-z0-9]{8,32}$/i.test(mouseValue)) return mouseValue;
   return null;
 }
 
-export async function resolveParticipant(idHint) {
+export function parseMouseFurColorFromQrText(text) {
+  try {
+    const url = new URL(String(text || '').trim());
+    const mouseValue = url.searchParams.get('m') || url.searchParams.get('id') || '';
+    const composite = /^[a-z0-9]{8,32}~([0-9a-f]{6})$/i.exec(mouseValue);
+    if (composite) return `#${composite[1]}`;
+    const color = url.searchParams.get('fur');
+    return color && /^#[0-9a-f]{6}$/i.test(color) ? color : null;
+  } catch {
+    const composite = /^([a-z0-9]{8,32})~([0-9a-f]{6})$/i.exec(String(text || '').trim());
+    return composite ? `#${composite[2]}` : null;
+  }
+}
+
+export async function resolveParticipant(idHint, furColorHint = null) {
   const id = idHint || newMouseId();
   let canvases = placeholderFaceCanvases(Math.random());
   let traits = { ...createMouseTraits(), ...UNIFORM_TRAITS };
+  if (furColorHint && /^#[0-9a-f]{6}$/i.test(furColorHint)) {
+    traits.fur = furColorHint;
+  }
   let partTuning = { ...DEFAULT_PART_TUNING };
   let faceSettings = null;
   let snapshot = null;
@@ -107,6 +129,7 @@ export async function resolveParticipant(idHint) {
       snapshot = await fetchSnapshot(idHint);
       canvases = await canvasesFromSnapshot(snapshot);
       traits = { ...UNIFORM_TRAITS, ...snapshot.traits };
+      if (!snapshot.traits.fur && furColorHint) traits.fur = furColorHint;
       faceSettings = {
         featureScale: snapshot.featureScale,
         nostrilScale: snapshot.nostrilScale,

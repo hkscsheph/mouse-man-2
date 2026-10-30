@@ -12,6 +12,7 @@ import {
 import {
   canvasesFromSnapshot,
   captureFaceCanvases,
+  colorToHex,
   fetchSnapshot,
   publishSnapshot,
   shareUrlForId,
@@ -108,7 +109,10 @@ async function showShareForActor(actor) {
     sharePanel.classList.add('empty');
     return;
   }
-  currentShareUrl = shareUrlForId(actor.mesh.userData.mouseId);
+  currentShareUrl = shareUrlForId(
+    actor.mesh.userData.mouseId,
+    colorToHex(actor.mesh.userData.traits.fur),
+  );
   setShareLoading(true, 'Preparing QR…');
   try {
     await renderShareQr(shareQr, currentShareUrl);
@@ -363,7 +367,7 @@ async function loadSharedMouse(id) {
 }
 
 async function boot() {
-  const sharedId = urlParams.get('m');
+  const sharedId = urlParams.get('m')?.split('~')[0];
   if (sharedId) {
     showcaseMode = true;
     await loadSharedMouse(sharedId);

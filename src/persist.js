@@ -235,10 +235,11 @@ export async function fetchSnapshot(id) {
   throw new Error('Mouse not found');
 }
 
-export function shareUrlForId(id) {
+export function shareUrlForId(id, furColor) {
   const url = new URL(location.href);
   url.search = '';
   url.hash = '';
-  url.searchParams.set('m', id);
+  const color = /^#?([0-9a-f]{6})$/i.exec(furColor || '');
+  url.searchParams.set('m', color ? `${id}~${color[1]}` : id);
   return url.toString();
 }
