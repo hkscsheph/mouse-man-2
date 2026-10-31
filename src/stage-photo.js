@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createMouse, disposeMouse, setMouseUniform, UNIFORM_COLORS } from './mouse.js';
+import { createScratchStyle, drawScratches } from './stage-scratch.js';
 
 const COLS = 10;
 const ROWS = 3;
@@ -107,28 +108,6 @@ export function createStagePhoto(canvas) {
   const scratchCanvas = document.createElement('canvas');
   scratchCanvas.className = 'stage-scratch-layer';
   canvas.insertAdjacentElement('afterend', scratchCanvas);
-
-  /** @type {{ angle: number, centerX: number, centerY: number, halfLength: number, spacing: number, shadowWidth: number, highlightWidth: number, opacity: number, highlightColor: string, slashes: { offset: number, lengthScale: number, curve: number }[] }} */
-  function createScratchStyle() {
-    const randomBetween = (min, max) => min + Math.random() * (max - min);
-    const spacing = randomBetween(8, 12);
-    return {
-      angle: -Math.PI / 4 + randomBetween(-0.18, 0.18),
-      centerX: randomBetween(-5, 5),
-      centerY: randomBetween(-5, 5),
-      halfLength: randomBetween(20, 28),
-      spacing,
-      shadowWidth: randomBetween(6, 8),
-      highlightWidth: randomBetween(2.5, 3.8),
-      opacity: randomBetween(0.8, 1),
-      highlightColor: ['#f52330', '#ff4556', '#e71e3d'][Math.floor(Math.random() * 3)],
-      slashes: Array.from({ length: 3 }, (_, i) => ({
-        offset: (i - 1) * spacing + randomBetween(-1.5, 1.5),
-        lengthScale: randomBetween(0.78, 1.12),
-        curve: randomBetween(-5, 5),
-      })),
-    };
-  }
 
   /** @type {{ id: string, mesh: THREE.Group, slot: number, scratching: boolean, eaten: boolean, scratchProgress: number, scratchStyle: ReturnType<typeof createScratchStyle> | null }[]} */
   const roster = [];
@@ -265,49 +244,6 @@ export function createStagePhoto(canvas) {
     return entry;
   }
 
-  function drawScratches(cx, cy, progress, style) {
-    const ctx = scratchCanvas.getContext('2d');
-    const dpr = devicePixelRatio;
-    cx += style.centerX * dpr;
-    cy += style.centerY * dpr;
-    const halfLength = style.halfLength * dpr * (0.35 + progress * 0.65);
-    const angle = style.angle;
-    const alongX = Math.cos(angle);
-    const alongY = Math.sin(angle);
-    const acrossX = -alongY;
-    const acrossY = alongX;
-    ctx.save();
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    for (const slash of style.slashes) {
-      const offset = slash.offset * dpr;
-      const curve = slash.curve * dpr;
-      const length = halfLength * slash.lengthScale;
-      const startX = cx + acrossX * offset - alongX * length;
-      const startY = cy + acrossY * offset - alongY * length;
-      const endX = cx + acrossX * offset + alongX * length;
-      const endY = cy + acrossY * offset + alongY * length;
-      const controlX = cx + acrossX * offset + acrossX * curve;
-      const controlY = cy + acrossY * offset + acrossY * curve;
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.quadraticCurveTo(controlX, controlY, endX, endY);
-      ctx.strokeStyle = '#69000c';
-      ctx.globalAlpha = (0.55 + progress * 0.4) * style.opacity;
-      ctx.lineWidth = style.shadowWidth * dpr;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.quadraticCurveTo(controlX, controlY, endX, endY);
-      ctx.strokeStyle = style.highlightColor;
-      ctx.globalAlpha = (0.55 + progress * 0.45) * style.opacity;
-      ctx.lineWidth = style.highlightWidth * dpr;
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
   function renderScratchOverlay() {
     const ctx = scratchCanvas.getContext('2d');
     ctx.clearRect(0, 0, scratchCanvas.width, scratchCanvas.height);
@@ -315,10 +251,12 @@ export function createStagePhoto(canvas) {
       if (entry.scratchProgress <= 0) continue;
       const center = projectSlotCenterFixed(entry.slot);
       drawScratches(
+        ctx,
         center.x * devicePixelRatio,
         center.y * devicePixelRatio,
         entry.scratchProgress,
         entry.scratchStyle,
+        devicePixelRatio,
       );
     }
   }
@@ -355,7 +293,7 @@ export function createStagePhoto(canvas) {
 
     return new Promise((resolve) => {
       const start = performance.now();
-      const dur = 650;
+      const dur = 250;
       function tick(now) {
         const t = Math.min(1, (now - start) / dur);
         entry.scratchProgress = t;

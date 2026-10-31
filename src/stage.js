@@ -1,6 +1,7 @@
 import { createPixelChase } from './pixel-chase.js';
 import { createStagePhoto, DEFAULT_STAGE_UNIFORM_ENABLED } from './stage-photo.js';
 import { createFallbackQrScanner } from './stage-qr-scanner.js';
+import { createScratchSound } from './stage-sound.js';
 import { connectStageWebSocket, postStageWsMessage } from './stage-ws.js';
 import {
   parseMouseFurColorFromQrText,
@@ -49,6 +50,33 @@ hud.innerHTML = `
   <p>Arrow keys move the camera left/right and closer/farther; hold Space + Up/Down to pan vertically.</p>
 `;
 document.body.appendChild(hud);
+
+const soundNotice = document.createElement('div');
+soundNotice.id = 'stage-sound-notice';
+soundNotice.hidden = true;
+soundNotice.innerHTML = `
+  <span role="status" aria-live="polite"></span>
+  <button type="button">Enable sound</button>
+`;
+document.body.appendChild(soundNotice);
+const soundMessage = soundNotice.querySelector('span');
+const soundButton = soundNotice.querySelector('button');
+const scratchSound = createScratchSound({
+  onStatus(status) {
+    soundNotice.hidden = status === 'ready';
+    soundButton.hidden = status !== 'blocked';
+    soundMessage.textContent = status === 'blocked'
+      ? 'Scratch sound blocked by browser.'
+      : status === 'loading'
+        ? 'Scratch sound is loading.'
+        : status === 'error'
+          ? 'Scratch sound unavailable.'
+          : '';
+  },
+});
+soundButton.addEventListener('click', () => void scratchSound.unlock());
+document.addEventListener('pointerdown', () => void scratchSound.unlock());
+document.addEventListener('keydown', () => void scratchSound.unlock());
 
 const scanVideo = document.createElement('video');
 scanVideo.id = 'stage-scan';
@@ -193,6 +221,7 @@ async function handleCatEat(message) {
   setStatus(`Cat chasing ${targetId}…`);
   let scratchPromise = Promise.resolve(false);
   await pixel.eatMouse(targetId, () => {
+    scratchSound.play();
     scratchPromise = photo.scratchOut(targetId);
   });
   await scratchPromise;
