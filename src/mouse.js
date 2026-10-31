@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 
 const PATCH_KEYS = ['leftEye', 'rightEye', 'nose', 'mouth'];
 const CURVED_PATCHES = new Set(PATCH_KEYS);
@@ -110,6 +111,51 @@ function feltNormal() {
   return tex;
 }
 
+function fabricNormal() {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const image = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const i = (y * size + x) * 4;
+      image.data[i] = 128 + 16 * Math.cos(x * Math.PI / 2);
+      image.data[i + 1] = 128 + 16 * Math.cos(y * Math.PI / 2);
+      image.data[i + 2] = 252;
+      image.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(3, 3);
+  return texture;
+}
+
+function uniformBadgeMaterial() {
+  if (!shared.uniformBadgeMaterial) {
+    const texture = new THREE.TextureLoader().load(
+      new URL('./school-badge.png', import.meta.url).href,
+      undefined,
+      undefined,
+      (error) => console.error('Could not load the school badge texture', error),
+    );
+    texture.colorSpace = THREE.SRGBColorSpace;
+    shared.uniformBadgeMaterial = new THREE.MeshStandardMaterial({
+      map: texture,
+      roughness: 0.9,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+  }
+  return shared.uniformBadgeMaterial;
+}
+
 function taperedTube(curve, segments, radiusAt, radial) {
   const frames = curve.computeFrenetFrames(segments, false);
   const points = curve.getSpacedPoints(segments);
@@ -163,6 +209,7 @@ function limbRadius(start, end, bulgeT, bulge) {
 function buildShared() {
   if (shared.ready) return shared;
   const normalMap = feltNormal();
+  const uniformNormalMap = fabricNormal();
   shared.fur = new THREE.MeshStandardMaterial({
     color: 0xe3944a,
     roughness: 0.78,
@@ -174,6 +221,20 @@ function buildShared() {
     color: 0xf3d2b8,
     roughness: 0.62,
     metalness: 0,
+  });
+  shared.uniformShirt = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.86,
+    metalness: 0,
+    normalMap: uniformNormalMap,
+    normalScale: new THREE.Vector2(0.35, 0.35),
+  });
+  shared.uniformPants = new THREE.MeshStandardMaterial({
+    color: 0x25272a,
+    roughness: 0.88,
+    metalness: 0,
+    normalMap: uniformNormalMap,
+    normalScale: new THREE.Vector2(0.25, 0.25),
   });
   shared.ear = new THREE.MeshStandardMaterial({
     color: 0xf0b0c0,
@@ -238,6 +299,46 @@ function buildShared() {
     ],
     36,
   );
+  shared.uniformShirtGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.525, 0.3),
+      new THREE.Vector2(0.535, 0.36),
+      new THREE.Vector2(0.54, 0.46),
+      new THREE.Vector2(0.525, 0.5),
+      new THREE.Vector2(0.515, 0.55),
+      new THREE.Vector2(0.45, 0.78),
+      new THREE.Vector2(0.41, 0.95),
+      new THREE.Vector2(0.37, 1.08),
+      new THREE.Vector2(0.255, 1.18),
+      new THREE.Vector2(0.115, 1.24),
+    ],
+    36,
+  );
+  shared.uniformHemGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.529, 0.3),
+      new THREE.Vector2(0.536, 0.33),
+    ],
+    36,
+  );
+  shared.uniformCollarGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.26, 1.18),
+      new THREE.Vector2(0.158, 1.225),
+    ],
+    36,
+  );
+  shared.uniformPantsGeo = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(0.02, 0),
+      new THREE.Vector2(0.33, 0.03),
+      new THREE.Vector2(0.47, 0.14),
+      new THREE.Vector2(0.53, 0.34),
+      new THREE.Vector2(0.53, 0.46),
+      new THREE.Vector2(0.51, 0.5),
+    ],
+    36,
+  );
   // Flat belly patch — sits on the pear face instead of a sphere that escapes the silhouette.
   shared.bellyGeo = new THREE.SphereGeometry(0.33, 28, 18);
   shared.snout = new THREE.SphereGeometry(0.2, 28, 20);
@@ -249,7 +350,7 @@ function buildShared() {
   shared.toe = new THREE.CapsuleGeometry(0.022, 0.08, 4, 8);
   // Arms bend around the pear, with a soft elbow and a tapered wrist.
   const armRadius = limbRadius(0.112, 0.062, 0.38, 0.018);
-  shared.armL = taperedTube(
+  const armCurves = [
     new THREE.CatmullRomCurve3([
       new THREE.Vector3(0.08, 0.02, 0.0),
       new THREE.Vector3(-0.025, -0.08, 0.035),
@@ -257,11 +358,6 @@ function buildShared() {
       new THREE.Vector3(-0.085, -0.31, 0.095),
       new THREE.Vector3(-0.035, -0.46, 0.11),
     ]),
-    20,
-    armRadius,
-    12,
-  );
-  shared.armR = taperedTube(
     new THREE.CatmullRomCurve3([
       new THREE.Vector3(-0.08, 0.02, 0.0),
       new THREE.Vector3(0.025, -0.08, 0.035),
@@ -269,9 +365,24 @@ function buildShared() {
       new THREE.Vector3(0.085, -0.31, 0.095),
       new THREE.Vector3(0.035, -0.46, 0.11),
     ]),
-    20,
-    armRadius,
-    12,
+  ];
+  [shared.armL, shared.armR] = armCurves.map((curve) => taperedTube(curve, 20, armRadius, 12));
+  [shared.sleeveL, shared.sleeveR] = armCurves.map((curve) => {
+    const sleeve = taperedTube(curve, 20, (t) => armRadius(t) + 0.012, 12);
+    sleeve.setDrawRange(0, 11 * 12 * 6);
+    return sleeve;
+  });
+  [shared.cuffL, shared.cuffR] = armCurves.map((curve) => {
+    const cuff = taperedTube(curve, 20, (t) => armRadius(t) + 0.014, 12);
+    cuff.setDrawRange(10 * 12 * 6, 12 * 6);
+    return cuff;
+  });
+  const badgeSleeve = new THREE.Mesh(shared.sleeveR);
+  shared.uniformBadgeGeo = new DecalGeometry(
+    badgeSleeve,
+    new THREE.Vector3(0.145, -0.1, 0.13),
+    new THREE.Euler(0, Math.PI / 4, 0),
+    new THREE.Vector3(0.105, 0.105, 0.08),
   );
   // Short legs that emerge from the pear base rather than propping it up.
   const legRadius = limbRadius(0.13, 0.07, 0.4, 0.01);
@@ -626,7 +737,7 @@ export function hydrateTraits(data) {
   };
 }
 
-function clonePalette(traits) {
+function clonePalette(traits, uniformColor) {
   const fur = shared.fur.clone();
   fur.color.copy(asColor(traits.fur));
   const arm = shared.fur.clone();
@@ -647,7 +758,15 @@ function clonePalette(traits) {
   const metal = shared.metal.clone();
   metal.color.copy(asColor(traits.metal));
   const lens = shared.lens.clone();
-  return { fur, arm, belly, ear, nose, whisker, accent, metal, lens };
+  const palette = { fur, arm, belly, ear, nose, whisker, accent, metal, lens };
+  if (uniformColor !== undefined) {
+    palette.shirt = shared.uniformShirt.clone();
+    palette.shirt.color.set(uniformColor);
+    palette.uniformTrim = palette.shirt.clone();
+    palette.uniformTrim.color.multiplyScalar(0.8);
+    palette.pants = shared.uniformPants.clone();
+  }
+  return palette;
 }
 
 function addFacePlane(parent, canvas, key, position, height, maxWidth, order, ownGeometries, surface = HEAD_SURFACE) {
@@ -721,6 +840,20 @@ function addArm(parent, side, mats, traits) {
   const armMesh = new THREE.Mesh(side < 0 ? shared.armL : shared.armR, mats.arm);
   armMesh.renderOrder = 1;
   root.add(armMesh);
+  if (mats.shirt) {
+    const sleeve = new THREE.Mesh(side < 0 ? shared.sleeveL : shared.sleeveR, mats.shirt);
+    sleeve.renderOrder = 2;
+    root.add(sleeve);
+    const cuff = new THREE.Mesh(side < 0 ? shared.cuffL : shared.cuffR, mats.uniformTrim);
+    cuff.renderOrder = 3;
+    root.add(cuff);
+    if (side > 0) {
+      const badge = new THREE.Mesh(shared.uniformBadgeGeo, uniformBadgeMaterial());
+      badge.name = 'school-badge';
+      badge.renderOrder = 4;
+      root.add(badge);
+    }
+  }
 
   const hand = new THREE.Group();
   hand.position.set(0.04 * side, -0.5, 0.12);
@@ -770,7 +903,7 @@ function addLeg(parent, side, mats) {
   root.rotation.set(0.02, 0.02 * side, -0.01 * side);
   parent.add(root);
 
-  root.add(new THREE.Mesh(side < 0 ? shared.legL : shared.legR, mats.fur));
+  root.add(new THREE.Mesh(side < 0 ? shared.legL : shared.legR, mats.pants || mats.fur));
 
   const foot = new THREE.Group();
   foot.position.set(0, -0.3, 0.08);
@@ -1038,7 +1171,7 @@ function addAccessories(head, torso, mats, traits, ears) {
 export function createMouse(canvases, options = {}) {
   buildShared();
   const traits = options.traits ? hydrateTraits(options.traits) : createMouseTraits();
-  const mats = clonePalette(traits);
+  const mats = clonePalette(traits, options.uniformColor);
   const ownGeometries = [];
 
   const root = new THREE.Group();
@@ -1074,6 +1207,28 @@ export function createMouse(canvases, options = {}) {
   body.renderOrder = 0;
   torso.add(body);
 
+  if (mats.shirt) {
+    const pants = new THREE.Mesh(shared.uniformPantsGeo, mats.pants);
+    pants.scale.copy(body.scale);
+    pants.position.copy(body.position);
+    pants.renderOrder = 1;
+    torso.add(pants);
+
+    const uniformShirt = new THREE.Mesh(shared.uniformShirtGeo, mats.shirt);
+    uniformShirt.scale.copy(body.scale);
+    uniformShirt.position.copy(body.position);
+    uniformShirt.renderOrder = 2;
+    torso.add(uniformShirt);
+
+    for (const geometry of [shared.uniformHemGeo, shared.uniformCollarGeo]) {
+      const trim = new THREE.Mesh(geometry, mats.uniformTrim);
+      trim.scale.copy(body.scale);
+      trim.position.copy(body.position);
+      trim.renderOrder = 3;
+      torso.add(trim);
+    }
+  }
+
   // Cream patch flush on the pear front — mostly inside the body outline.
   const belly = new THREE.Mesh(shared.bellyGeo, mats.belly);
   const bellyDepth = 0.18 + fitness * 0.08;
@@ -1089,6 +1244,7 @@ export function createMouse(canvases, options = {}) {
   belly.userData.tuneBaseY = belly.position.y;
   belly.userData.tuneBaseZ = belly.position.z;
   belly.userData.tuneBaseRotationX = belly.rotation.x;
+  belly.visible = !mats.shirt;
   root.userData.tuneParts = { chest: belly, body, ears: [] };
   belly.renderOrder = 1;
   torso.add(belly);
@@ -1159,7 +1315,7 @@ export function createMouse(canvases, options = {}) {
     }
     refitFacePlanes(root);
   }
-  addAccessories(head, torso, mats, traits, ears);
+  if (!mats.shirt) addAccessories(head, torso, mats, traits, ears);
   applyMousePartTuning(root, options.partTuning);
   // staticFace = restored / QR mouse — never wire webcam patch canvases.
   root.userData.liveCanvases = options.staticFace ? null : canvases;

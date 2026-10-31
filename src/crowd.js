@@ -12,6 +12,7 @@ import {
 
 const LIVE = { x: 0.05, z: 1.55, ry: 0.02, s: 1.06 };
 const MAX_FROZEN = 30;
+const UNIFORM_COLORS = [0x171719, 0xe9e9e3, 0x66764f, 0x651e30, 0x3e376d];
 
 function buildSlots(count) {
   // Flank the live spot in clear arcs so frozen mice stay on-camera.
@@ -97,15 +98,19 @@ function randomWalkTarget() {
   };
 }
 
-export function createCrowd(scene) {
+export function createCrowd(scene, { uniformMode = false } = {}) {
   const actors = [];
   let live = null;
   let onFrontChange = null;
   const partTuning = { ...DEFAULT_PART_TUNING };
+  let uniformColorIndex = 0;
 
   function createTunedMouse(canvases, options = {}) {
     return createMouse(canvases, {
       ...options,
+      uniformColor: uniformMode
+        ? options.uniformColor ?? UNIFORM_COLORS[uniformColorIndex++ % UNIFORM_COLORS.length]
+        : undefined,
       partTuning: options.partTuning ?? partTuning,
     });
   }

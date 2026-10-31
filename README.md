@@ -10,11 +10,14 @@
 | URL | Mode |
 | --- | --- |
 | `/` (default) | Single-player webcam crowd |
+| `?mode=uniform` | Default webcam crowd with mice in five school-uniform colors |
 | `?mode=pixel` | Pixel cat chase (demo loop) |
 | `?mode=stage` | **Main stage** — QR admit + class photo + WebSocket cat eat |
 | `?mode=reg` | **Registration** — capture participants into the class photo and print their QR codes |
 
 Legacy demo mice on the default route still work with `?stage` (without `mode=stage`).
+
+Uniform mode uses textured, short-sleeved shirts with the school badge on the left sleeve, and dark trousers. Shirts follow the torso and sleeves follow the arms; the chest-tuning controls still adjust the underlying belly patch rather than displacing the clothing.
 
 ## Registration (`?mode=reg`)
 
@@ -22,7 +25,7 @@ Registration starts with the black-cat teacher alone in the class scene. Each ca
 
 ## Main stage (`?mode=stage`)
 
-Split screen: **pixel chase** on top, **class photo** (3D mice in uniform) on the bottom. Stage pixel mice wander slowly and face away from the cat; the cat smoothly varies its run speed. The standalone pixel mode keeps its existing movement. The class photo shows up to 30 standing 3D mice center-out in three stepped rows of ten; use the HUD sliders to adjust row rise (default `0.8`) and camera height (default `1.8`). The HUD and live QR-scanning camera thumbnail start hidden.
+Split screen: **pixel chase** on top, **class photo** (3D mice) on the bottom. Stage pixel mice wander slowly and face away from the cat; the cat smoothly varies its run speed. The standalone pixel mode keeps its existing movement. The class photo shows up to 30 standing 3D mice center-out in three stepped rows of ten; use the HUD sliders to adjust row rise (default `0.8`) and camera height (default `1.8`). The HUD and live QR-scanning camera thumbnail start hidden.
 
 1. Operators scan participant QR codes (uses native `BarcodeDetector` when available and a `jsQR` fallback otherwise).
 2. Each QR admit restores the original 3D mouse from its persisted traits, captured eyes/nose/mouth, face tuning, and part tuning. If its snapshot cannot be loaded, the stage reports an error instead of showing a different mouse. The `m` value also carries the saved fur color for the pixel mouse. `D` adds a demo guest with a placeholder face.
@@ -107,5 +110,5 @@ Live face patches follow the tracked head tilt as a single face.
 
 ## Workflow
 1. In registration mode, a group of users is captured one by one, each generating a QR code for printing and taking their place in the class photo.
-2. In a room, current default mode will be used for single player live interaction
-3. In main stage, users show their QR one by one. Each will add a mouse to the pixel mode, and add a 3D model to a class photo style with uniform clothing. This mode will subscribe to a websocket and upon message received the pixel cat approaches the pixel mouses and eat one scratching out one 3D model in the class photo (TODO: mouses wear school uniforms and stand in the same position)
+2. In a room, default mode is used for single-player live interaction; `?mode=uniform` adds school uniforms in black, white, olive, burgundy, and indigo.
+3. In main stage, users show their QR one by one. Each adds a mouse to pixel mode and a 3D model to the class photo. The stage subscribes to a WebSocket; on a message, the pixel cat approaches and eats a mouse while its 3D model is scratched out of the photo.

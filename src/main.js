@@ -63,8 +63,9 @@ const registrationCount = document.querySelector('#registration-count');
 const registrationCards = document.querySelector('#registration-cards');
 const registrationPhotoCanvas = document.querySelector('#registration-photo');
 
+const uniformMode = new URLSearchParams(location.search).get('mode') === 'uniform';
 const { scene, camera, renderer, rotateCamera } = createScene(view);
-const crowd = createCrowd(scene);
+const crowd = createCrowd(scene, { uniformMode });
 
 let state = 'idle';
 let settleStart = 0;
