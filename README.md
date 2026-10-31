@@ -18,7 +18,7 @@ Legacy demo mice on the default route still work with `?stage` (without `mode=st
 
 ## Registration (`?mode=reg`)
 
-Participants stand in front of the webcam one at a time. When a face is detected and steady, choose **Capture participant & create QR** to save their mouse using the default mode's snapshot and share-QR flow. Their captured portrait replaces the next red question mark in `br_class.jpg`; each generated QR is kept in the print panel so the operator can print the registered participants' codes together. The class photo starts with every student face masked by a red question mark; the black cat-headed teacher remains visible. Press **T** to toggle the registration panel and webcam thumbnail.
+Registration starts with the black-cat teacher alone in the class scene. Each capture adds one student from the girls' class-photo template by default and replaces the student's face with the captured portrait. Face appearance is not used to infer gender. After adding a participant, **Switch last participant to…** changes that person's template and updates the class photo and QR card label. Student silhouettes are clipped to the manual polygon annotations in `polygons_girl.json` and `polygons_boy.json`. Press **Q** to capture and **W** to switch the latest participant's template; press **T** to toggle the registration panel and webcam thumbnail. The existing mouse-saving and printable QR-card flow is preserved.
 
 ## Main stage (`?mode=stage`)
 

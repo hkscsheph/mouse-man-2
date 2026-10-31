@@ -58,6 +58,7 @@ const registrationRoot = document.querySelector('#registration');
 const registrationStatus = document.querySelector('#registration-status');
 const registrationCapture = document.querySelector('#registration-capture');
 const registrationPrint = document.querySelector('#registration-print');
+const registrationSwitchGroup = document.querySelector('#registration-switch-group');
 const registrationCount = document.querySelector('#registration-count');
 const registrationCards = document.querySelector('#registration-cards');
 const registrationPhotoCanvas = document.querySelector('#registration-photo');
@@ -114,6 +115,10 @@ function setShareLoading(on, hint = 'Saving your mouse…') {
     sharePanel.classList.remove('empty');
     shareHint.textContent = hint;
   }
+}
+
+function formatRegistrationGroup(group) {
+  return group === 'girls' ? 'Girls’' : 'Boys’';
 }
 
 async function showShareForActor(actor) {
@@ -191,19 +196,30 @@ async function persistLiveMouse(actor) {
 }
 
 function updateRegistrationControls(face = latestFace) {
-  const ready = Boolean(
+  const faceReady = Boolean(
     face?.present &&
     !face.jumped &&
     face.eyeSpan >= MIN_EYE_SPAN &&
     face.bounds &&
     crowd.getLive() &&
+    registrationPhoto.ready &&
     !registrationBusy &&
     registrationPhoto.count < registrationPhoto.capacity,
   );
-  registrationCapture.disabled = !ready;
+  registrationCapture.disabled = !faceReady;
+  const lastGroup = registrationPhoto.lastGroup;
+  registrationSwitchGroup.disabled = registrationBusy || !lastGroup;
+  registrationSwitchGroup.textContent = lastGroup
+    ? `Switch last participant to ${lastGroup === 'girls' ? 'boys’' : 'girls’'} class`
+    : 'Switch last participant';
   if (registrationBusy) return;
   if (registrationPhoto.failed) {
-    registrationStatus.textContent = 'Could not load the class photo. Check the image asset and reload.';
+    registrationStatus.textContent = 'Could not load a class-photo image. Check the image assets and reload.';
+    registrationCapture.disabled = true;
+    return;
+  }
+  if (!registrationPhoto.ready) {
+    registrationStatus.textContent = 'Loading class-photo images…';
     registrationCapture.disabled = true;
     return;
   }
@@ -213,8 +229,8 @@ function updateRegistrationControls(face = latestFace) {
   }
   if (registrationPhoto.count >= registrationPhoto.capacity) {
     registrationStatus.textContent = 'All class photo places are registered.';
-  } else if (ready) {
-    registrationStatus.textContent = 'Face ready. Capture to save the participant and create a printable QR.';
+  } else if (faceReady) {
+    registrationStatus.textContent = 'Face ready. Capture to add the participant and create a printable QR.';
   } else if (face?.present && face.eyeSpan < MIN_EYE_SPAN) {
     registrationStatus.textContent = 'Move closer to the camera and look toward it.';
   } else if (state === 'settling') {
@@ -268,6 +284,7 @@ async function registerParticipant() {
   if (!registrationMode || registrationBusy) return;
   const actor = crowd.getLive();
   const face = latestFace;
+  const group = registrationPhoto.nextGroup;
   if (
     !actor ||
     !face?.present ||
@@ -282,7 +299,7 @@ async function registerParticipant() {
   updateRegistrationControls(face);
   let portrait;
   try {
-    portrait = captureFacePortrait(video, face.bounds);
+    portrait = captureFacePortrait(video, face.bounds, face.outline);
     lockFaceSnapshot(actor);
     registrationStatus.textContent = 'Saving participant and creating QR…';
     await persistLiveMouse(actor);
@@ -296,7 +313,7 @@ async function registerParticipant() {
     const card = document.createElement('article');
     card.className = 'registration-card';
     const label = document.createElement('p');
-    label.textContent = `Participant ${registrationPhoto.count + 1}`;
+    label.textContent = `Participant ${registrationPhoto.count + 1} — ${formatRegistrationGroup(group)} class`;
     const qrCanvas = document.createElement('canvas');
     qrCanvas.width = 132;
     qrCanvas.height = 132;
@@ -308,7 +325,7 @@ async function registerParticipant() {
       registrationMessage = 'Participant saved, but QR generation failed.';
       return;
     }
-    if (!registrationPhoto.addPortrait(portrait)) {
+    if (!registrationPhoto.addPortrait(portrait, group)) {
       registrationMessage = 'The class photo is full.';
       return;
     }
@@ -632,6 +649,21 @@ tuneToggle.addEventListener('click', () => {
 });
 
 registrationCapture.addEventListener('click', registerParticipant);
+function switchLastRegisteredGroup() {
+  if (registrationBusy) return;
+  const group = registrationPhoto.switchLastGroup();
+  if (!group) return;
+  const label = registrationCards.firstElementChild?.querySelector('p');
+  if (label) {
+    label.textContent = `Participant ${registrationPhoto.count} — ${formatRegistrationGroup(group)} class`;
+  }
+  registrationMessage = '';
+  updateRegistrationControls();
+}
+registrationSwitchGroup.addEventListener('click', () => {
+  if (registrationBusy) return;
+  switchLastRegisteredGroup();
+});
 registrationPrint.addEventListener('click', () => window.print());
 if (registrationMode) {
   registrationCount.textContent = `0 participants registered`;
@@ -705,6 +737,23 @@ view.addEventListener('click', (event) => {
 
 window.addEventListener('keydown', (event) => {
   if (event.repeat) return;
+  const target = event.target;
+  if (
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)))
+  ) return;
+  if (registrationMode && event.key.toLowerCase() === 'q') {
+    event.preventDefault();
+    void registerParticipant();
+    return;
+  }
+  if (registrationMode && event.key.toLowerCase() === 'w') {
+    event.preventDefault();
+    switchLastRegisteredGroup();
+    return;
+  }
   if (registrationMode && (event.key === 't' || event.key === 'T')) {
     registrationHudVisible = !registrationHudVisible;
     document.body.classList.toggle('registration-hud-hidden', !registrationHudVisible);

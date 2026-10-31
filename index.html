@@ -50,10 +50,12 @@
       <p id="share-hint">Hold still to save your mouse</p>
     </aside>
     <main id="registration" hidden>
-      <canvas id="registration-photo" aria-label="Class photo with unregistered faces masked"></canvas>
+      <canvas id="registration-photo" aria-label="Class photo with the black-cat teacher and registered participants"></canvas>
       <section id="registration-panel" aria-label="Participant registration">
         <h1>Class registration</h1>
         <p id="registration-status" role="status">Starting camera…</p>
+        <button id="registration-switch-group" type="button" disabled>Switch last participant to boys’ class</button>
+        <p id="registration-group-hint">New participants start with the girls’ class template. Switch the last participant after adding if needed. Press Q to capture and W to switch.</p>
         <div class="registration-actions">
           <button id="registration-capture" type="button" disabled>Capture participant &amp; create QR</button>
           <button id="registration-print" type="button">Print QR codes</button>

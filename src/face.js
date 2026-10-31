@@ -83,6 +83,7 @@ export async function initFace() {
       ...FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS,
     ]),
     mouth: uniq(FaceLandmarker.FACE_LANDMARKS_LIPS),
+    faceOval: uniq(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL),
     nose: NOSE,
   };
   for (const key of ['leftEye', 'rightEye', 'nose', 'mouth']) {
@@ -290,8 +291,8 @@ function boundsFromLandmarks(landmarks) {
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
-export function captureFacePortrait(video, bounds) {
-  if (!bounds || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+export function captureFacePortrait(video, bounds, outline) {
+  if (!bounds || !outline?.length || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
     throw new Error('A tracked face is required to capture a portrait');
   }
   updateMirror(video);
@@ -316,7 +317,18 @@ export function captureFacePortrait(video, bounds) {
   const portrait = document.createElement('canvas');
   portrait.width = 256;
   portrait.height = 320;
-  portrait.getContext('2d').drawImage(
+  const context = portrait.getContext('2d');
+  context.save();
+  context.beginPath();
+  outline.forEach((point, index) => {
+    const x = ((point.x * mirror.width) - cropX) / cropWidth * portrait.width;
+    const y = ((point.y * mirror.height) - cropY) / cropHeight * portrait.height;
+    if (index === 0) context.moveTo(x, y);
+    else context.lineTo(x, y);
+  });
+  context.closePath();
+  context.clip();
+  context.drawImage(
     mirror,
     cropX,
     cropY,
@@ -327,6 +339,7 @@ export function captureFacePortrait(video, bounds) {
     portrait.width,
     portrait.height,
   );
+  context.restore();
   return portrait;
 }
 
@@ -348,7 +361,8 @@ export function readFace(video, now) {
   }
 
   const lm = raw.map((point) => ({ x: 1 - point.x, y: point.y, z: point.z }));
-  const bounds = boundsFromLandmarks(lm);
+  const outline = indices.faceOval.map((id) => ({ x: lm[id].x, y: lm[id].y }));
+  const bounds = boundsFromLandmarks(outline);
   const left = lm[33];
   const right = lm[263];
   const center = {
@@ -369,6 +383,7 @@ export function readFace(video, now) {
       jumped: true,
       eyeSpan,
       bounds,
+      outline,
       yaw: pose.yaw,
       pitch: pose.pitch,
       roll: pose.roll,
@@ -392,6 +407,7 @@ export function readFace(video, now) {
     jumped: false,
     eyeSpan,
     bounds,
+    outline,
     yaw: pose.yaw,
     pitch: pose.pitch,
     roll: pose.roll,

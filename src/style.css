@@ -429,6 +429,30 @@ body.registration-mode.registration-hud-hidden #cam {
   margin: 0 0 10px;
 }
 
+#registration-group-hint {
+  margin: -4px 0 12px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+#registration-switch-group {
+  width: 100%;
+  margin: 0 0 12px;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: #6d554b;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#registration-switch-group:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .registration-actions {
   display: flex;
   flex-wrap: wrap;
@@ -493,6 +517,8 @@ body.registration-mode.registration-hud-hidden #cam {
   body.registration-mode #registration-photo,
   body.registration-mode #cam,
   body.registration-mode #registration-status,
+  body.registration-mode #registration-switch-group,
+  body.registration-mode #registration-group-hint,
   body.registration-mode .registration-actions,
   body.registration-mode #registration-count {
     display: none;
