@@ -6,6 +6,8 @@ const CURVED_PATCHES = new Set(PATCH_KEYS);
 const SCALED_PATCHES = new Set(['leftEye', 'rightEye', 'mouth']);
 const EYE_PATCHES = new Set(['leftEye', 'rightEye']);
 
+export const UNIFORM_COLORS = Object.freeze([0x171719, 0xe9e9e3, 0x66764f, 0x651e30, 0x3e376d]);
+
 const HEAD_SURFACE = { centerX: 0, centerY: 0, centerZ: 0, x: 0.46 * 1.02, y: 0.46 * 0.98, z: 0.46 * 0.96 };
 const FACE_SURFACE_OFFSET = 0.004;
 const shared = {
@@ -140,7 +142,7 @@ function uniformBadgeMaterial() {
   if (!shared.uniformBadgeMaterial) {
     const texture = new THREE.TextureLoader().load(
       new URL('./school-badge.png', import.meta.url).href,
-      undefined,
+      (loadedTexture) => loadedTexture.dispatchEvent({ type: 'load' }),
       undefined,
       (error) => console.error('Could not load the school badge texture', error),
     );
@@ -826,7 +828,7 @@ function mesh(geometry, material, position, scale, rotation) {
   return part;
 }
 
-function addArm(parent, side, mats, traits) {
+function addArm(parent, side, mats, traits, uniformParts) {
   const root = new THREE.Group();
   // Attach on the pear’s side surface so the body hides only the stub, not half the arm.
   root.position.set(
@@ -847,11 +849,13 @@ function addArm(parent, side, mats, traits) {
     const cuff = new THREE.Mesh(side < 0 ? shared.cuffL : shared.cuffR, mats.uniformTrim);
     cuff.renderOrder = 3;
     root.add(cuff);
+    if (uniformParts) uniformParts.push(sleeve, cuff);
     if (side > 0) {
       const badge = new THREE.Mesh(shared.uniformBadgeGeo, uniformBadgeMaterial());
       badge.name = 'school-badge';
       badge.renderOrder = 4;
       root.add(badge);
+      if (uniformParts) uniformParts.push(badge);
     }
   }
 
@@ -1171,7 +1175,10 @@ function addAccessories(head, torso, mats, traits, ears) {
 export function createMouse(canvases, options = {}) {
   buildShared();
   const traits = options.traits ? hydrateTraits(options.traits) : createMouseTraits();
-  const mats = clonePalette(traits, options.uniformColor);
+  const switchableUniform = options.switchableUniformColor !== undefined;
+  const uniformEnabled = options.uniformColor !== undefined;
+  const mats = clonePalette(traits, options.uniformColor ?? options.switchableUniformColor);
+  const uniformParts = switchableUniform ? [] : null;
   const ownGeometries = [];
 
   const root = new THREE.Group();
@@ -1213,12 +1220,14 @@ export function createMouse(canvases, options = {}) {
     pants.position.copy(body.position);
     pants.renderOrder = 1;
     torso.add(pants);
+    if (uniformParts) uniformParts.push(pants);
 
     const uniformShirt = new THREE.Mesh(shared.uniformShirtGeo, mats.shirt);
     uniformShirt.scale.copy(body.scale);
     uniformShirt.position.copy(body.position);
     uniformShirt.renderOrder = 2;
     torso.add(uniformShirt);
+    if (uniformParts) uniformParts.push(uniformShirt);
 
     for (const geometry of [shared.uniformHemGeo, shared.uniformCollarGeo]) {
       const trim = new THREE.Mesh(geometry, mats.uniformTrim);
@@ -1226,6 +1235,7 @@ export function createMouse(canvases, options = {}) {
       trim.position.copy(body.position);
       trim.renderOrder = 3;
       torso.add(trim);
+      if (uniformParts) uniformParts.push(trim);
     }
   }
 
@@ -1244,7 +1254,7 @@ export function createMouse(canvases, options = {}) {
   belly.userData.tuneBaseY = belly.position.y;
   belly.userData.tuneBaseZ = belly.position.z;
   belly.userData.tuneBaseRotationX = belly.rotation.x;
-  belly.visible = !mats.shirt;
+  belly.visible = !uniformEnabled;
   root.userData.tuneParts = { chest: belly, body, ears: [] };
   belly.renderOrder = 1;
   torso.add(belly);
@@ -1252,7 +1262,10 @@ export function createMouse(canvases, options = {}) {
   torso.add(new THREE.Mesh(shared.tail, mats.fur));
 
   // Arms after the body so only the outer sleeve shows past the pear.
-  root.userData.arms = [addArm(torso, -1, mats, traits), addArm(torso, 1, mats, traits)];
+  root.userData.arms = [
+    addArm(torso, -1, mats, traits, uniformParts),
+    addArm(torso, 1, mats, traits, uniformParts),
+  ];
 
   const bob = new THREE.Group();
   torso.add(bob);
@@ -1315,11 +1328,36 @@ export function createMouse(canvases, options = {}) {
     }
     refitFacePlanes(root);
   }
-  if (!mats.shirt) addAccessories(head, torso, mats, traits, ears);
+  if (!uniformEnabled || switchableUniform) {
+    if (switchableUniform) {
+      const parents = [head, torso, ...ears];
+      const counts = parents.map((parent) => parent.children.length);
+      addAccessories(head, torso, mats, traits, ears);
+      root.userData.uniformParts = {
+        clothes: uniformParts,
+        accessories: parents.flatMap((parent, index) => parent.children.slice(counts[index])),
+        fur: mats.fur,
+        pants: mats.pants,
+        belly,
+      };
+      setMouseUniform(root, uniformEnabled);
+    } else {
+      addAccessories(head, torso, mats, traits, ears);
+    }
+  }
   applyMousePartTuning(root, options.partTuning);
   // staticFace = restored / QR mouse — never wire webcam patch canvases.
   root.userData.liveCanvases = options.staticFace ? null : canvases;
   return root;
+}
+
+export function setMouseUniform(mouse, enabled) {
+  const parts = mouse.userData.uniformParts;
+  if (!parts) throw new Error('Mouse was not created with a switchable uniform');
+  for (const part of parts.clothes) part.visible = enabled;
+  for (const part of parts.accessories) part.visible = !enabled;
+  for (const leg of mouse.userData.legs) leg.children[0].material = enabled ? parts.pants : parts.fur;
+  parts.belly.visible = !enabled;
 }
 
 export function retargetFace(mouse, canvases, { copy }) {

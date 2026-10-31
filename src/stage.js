@@ -1,6 +1,6 @@
 import jsQR from 'jsqr';
 import { createPixelChase } from './pixel-chase.js';
-import { createStagePhoto } from './stage-photo.js';
+import { createStagePhoto, DEFAULT_STAGE_UNIFORM_ENABLED } from './stage-photo.js';
 import { connectStageWebSocket, postStageWsMessage } from './stage-ws.js';
 import {
   parseMouseFurColorFromQrText,
@@ -37,6 +37,7 @@ hud.innerHTML = `
   <p id="stage-ws-status">WebSocket: connecting…</p>
   <p id="stage-count">Active mice: 0</p>
   <p id="stage-scale">Pixel cat &amp; mice: ${Math.round(initialPixelSpriteScale * 100)}% (<kbd>+</kbd>/<kbd>-</kbd> to resize)</p>
+  <p id="stage-uniform" aria-live="polite">3D uniforms: ${DEFAULT_STAGE_UNIFORM_ENABLED ? 'on' : 'off'} (<kbd>U</kbd> to toggle)</p>
   <div id="stage-row-height">
     <label for="stage-row-rise">3D row rise: <output id="stage-row-rise-value">0.80</output></label>
     <input id="stage-row-rise" type="range" min="0.2" max="0.9" step="0.02" value="0.8" aria-label="3D row rise">
@@ -313,6 +314,7 @@ admitInput.addEventListener('blur', () => {
 });
 
 let spacePressed = false;
+let uniformsEnabled = DEFAULT_STAGE_UNIFORM_ENABLED;
 
 window.addEventListener('keydown', (event) => {
   const activeElement = document.activeElement;
@@ -342,6 +344,13 @@ window.addEventListener('keydown', (event) => {
     }
   }
   if (event.repeat) return;
+  if ((event.key === 'u' || event.key === 'U') && !isEditingControl) {
+    event.preventDefault();
+    uniformsEnabled = photo.setUniformEnabled(!uniformsEnabled);
+    document.querySelector('#stage-uniform').textContent =
+      `3D uniforms: ${uniformsEnabled ? 'on' : 'off'} (U to toggle)`;
+    return;
+  }
   const scaleDelta =
     event.key === '+' || event.code === 'NumpadAdd'
       || event.key === '=' || event.code === 'Equal'

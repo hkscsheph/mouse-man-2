@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createMouse, disposeMouse } from './mouse.js';
+import { createMouse, disposeMouse, setMouseUniform, UNIFORM_COLORS } from './mouse.js';
 
 const COLS = 10;
 const ROWS = 3;
@@ -16,6 +16,25 @@ const MAX_CAMERA_X = 4;
 const MIN_CAMERA_DEPTH_OFFSET = -2;
 const MAX_CAMERA_DEPTH_OFFSET = 10;
 const COLUMN_SPACING = 0.64;
+export const DEFAULT_STAGE_UNIFORM_ENABLED = true;
+
+const [black, white, olive, burgundy, indigo] = UNIFORM_COLORS;
+// Front to back, left to right; purple and navy share the five-color indigo.
+const UNIFORM_ROWS = [
+  [black, white, olive, olive, burgundy, indigo, olive, white, indigo, olive],
+  [black, white, black, burgundy, indigo, indigo, olive, burgundy, indigo, indigo],
+  [black, white, olive, burgundy, indigo, indigo, indigo, olive, burgundy, indigo],
+];
+
+export function stageUniformColor(slot) {
+  if (!Number.isInteger(slot) || slot < 0 || slot >= MAX) {
+    throw new RangeError('Stage uniform slot must be an integer from 0 to 29');
+  }
+  const seat = slot % COLS;
+  const offset = Math.floor(seat / 2);
+  const column = seat % 2 === 0 ? COLS / 2 - 1 - offset : COLS / 2 + offset;
+  return UNIFORM_ROWS[Math.floor(slot / COLS)][column];
+}
 
 function slotPose(index, rowRise) {
   const seat = index % COLS;
@@ -34,6 +53,8 @@ export function createStagePhoto(canvas) {
   let cameraX = 0;
   let cameraDepthOffset = 0;
   let cameraTargetOffsetY = 0;
+  let uniformEnabled = DEFAULT_STAGE_UNIFORM_ENABLED;
+  let badgeTexture = null;
   const cameraTarget = new THREE.Vector3(0, 0.85, 0.2);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
@@ -210,7 +231,13 @@ export function createStagePhoto(canvas) {
       partTuning,
       id,
       staticFace: true,
+      switchableUniformColor: stageUniformColor(slot),
     });
+    if (!badgeTexture) {
+      badgeTexture = mesh.getObjectByName('school-badge').material.map;
+      badgeTexture.addEventListener('load', frame);
+    }
+    setMouseUniform(mesh, uniformEnabled);
     const pose = slotPose(slot, rowRise);
     mesh.position.set(pose.x, pose.y, pose.z);
     mesh.rotation.y = pose.ry;
@@ -294,10 +321,21 @@ export function createStagePhoto(canvas) {
       material.emissive?.set(0x000000);
     }
     entry.mesh.traverse((child) => {
+      if (child.name === 'school-badge') child.visible = false;
       if (!child.isMesh || !child.userData.isFace) return;
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       for (const material of materials) material.color?.set(0x000000);
     });
+  }
+
+  function setUniformEnabled(enabled) {
+    uniformEnabled = enabled;
+    for (const entry of roster) {
+      setMouseUniform(entry.mesh, enabled);
+      if (entry.eaten) blackOutFigure(entry);
+    }
+    frame();
+    return uniformEnabled;
   }
 
   function scratchOut(id) {
@@ -347,6 +385,7 @@ export function createStagePhoto(canvas) {
     setRowRise,
     setCameraHeight,
     moveCamera,
+    setUniformEnabled,
     frame,
     destroy() {
       for (const entry of [...roster]) {
@@ -357,6 +396,7 @@ export function createStagePhoto(canvas) {
       for (const step of rowSteps) scene.remove(step);
       stepGeometry.dispose();
       stepMaterial.dispose();
+      badgeTexture?.removeEventListener('load', frame);
       scratchCanvas.remove();
       renderer.dispose();
     },

@@ -8,11 +8,11 @@ import {
   refitFacePlanes,
   refreshLiveFace,
   retargetFace,
+  UNIFORM_COLORS,
 } from './mouse.js';
 
 const LIVE = { x: 0.05, z: 1.55, ry: 0.02, s: 1.06 };
 const MAX_FROZEN = 30;
-const UNIFORM_COLORS = [0x171719, 0xe9e9e3, 0x66764f, 0x651e30, 0x3e376d];
 
 function buildSlots(count) {
   // Flank the live spot in clear arcs so frozen mice stay on-camera.

@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Scene } from 'three';
 import { createCrowd } from '../src/crowd.js';
-import { applyMousePartTuning, createMouse, disposeMouse } from '../src/mouse.js';
+import {
+  applyMousePartTuning,
+  createMouse,
+  createMouseTraits,
+  disposeMouse,
+  setMouseUniform,
+} from '../src/mouse.js';
 
 globalThis.document = {
   createElementNS(namespace, type) {
@@ -127,6 +133,41 @@ test('school badge is textured and attached only to the left uniform sleeve', ()
   const plainMouse = createMouse(patches);
   assert.equal(plainMouse.getObjectByName('school-badge'), undefined);
   disposeMouse(plainMouse);
+});
+
+test('switchable uniforms preserve the mouse, face, and accessories across toggles', () => {
+  const traits = {
+    ...createMouseTraits(),
+    accessoryNeck: 'tie',
+    accessoryHead: 'hat',
+    accessoryEyes: 'glasses',
+    accessoryEarrings: true,
+  };
+  const mouse = createMouse(patches, { traits, switchableUniformColor: 0xe9e9e3 });
+  const parts = mouse.userData.uniformParts;
+  const faceTexture = mouse.userData.planes.leftEye.material.map;
+  const badge = mouse.getObjectByName('school-badge');
+  assert.ok(parts.accessories.length >= 5);
+  assert.ok(parts.clothes.every((part) => !part.visible));
+  assert.ok(parts.accessories.every((part) => part.visible));
+  assert.equal(mouse.userData.tuneParts.chest.visible, true);
+  assert.ok(mouse.userData.legs.every((leg) => leg.children[0].material === parts.fur));
+
+  setMouseUniform(mouse, true);
+  assert.ok(parts.clothes.every((part) => part.visible));
+  assert.ok(parts.accessories.every((part) => !part.visible));
+  assert.equal(badge.visible, true);
+  assert.equal(mouse.userData.tuneParts.chest.visible, false);
+  assert.ok(mouse.userData.legs.every((leg) => leg.children[0].material === parts.pants));
+  assert.equal(mouse.userData.planes.leftEye.material.map, faceTexture);
+
+  setMouseUniform(mouse, false);
+  assert.ok(parts.clothes.every((part) => !part.visible));
+  assert.ok(parts.accessories.every((part) => part.visible));
+  assert.equal(mouse.userData.tuneParts.chest.visible, true);
+  assert.ok(mouse.userData.legs.every((leg) => leg.children[0].material === parts.fur));
+  assert.equal(mouse.userData.planes.leftEye.material.map, faceTexture);
+  disposeMouse(mouse);
 });
 
 test('uniform crowd cycles through the five shirt colors', () => {
