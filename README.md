@@ -33,6 +33,8 @@ Shirt colors follow the corresponding front, middle, and back positions in `br_c
 2. Each QR admit restores the original 3D mouse from its persisted traits, captured eyes/nose/mouth, face tuning, and part tuning. If its snapshot cannot be loaded, the stage reports an error instead of showing a different mouse. The `m` value also carries the saved fur color for the pixel mouse. `D` adds a demo guest with a placeholder face.
 3. Pressing `E` (or sending a `catEat` WebSocket message without an ID) targets the closest active pixel mouse. The cat runs to it, then uses the second row of `cat-run-actions.png` while crawling away; the mouse stays on the floor as both drift left with the scrolling background until off-screen, and the cat returns to its starting position. Its 3D figure stays in the photo blacked out with randomized red claw slashes and is no longer counted as active. Messages with an ID target that specific mouse.
 
+The stage requests a high-performance WebGL device when available. Hardware acceleration depends on browser and driver settings. When native QR scanning is unavailable, supported browsers decode camera frames in a worker to keep the animation responsive; other browsers use the main-thread fallback.
+
 `npm run dev` and `npm run preview` provide a local `/api/mouse` backed by ignored `.dev-data/mice/` files, so saved QR snapshots can be retrieved across browser sessions using the same server origin.
 
 ### Keyboard (local demo without WebSocket)

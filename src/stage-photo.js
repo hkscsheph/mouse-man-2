@@ -56,8 +56,12 @@ export function createStagePhoto(canvas) {
   let uniformEnabled = DEFAULT_STAGE_UNIFORM_ENABLED;
   let badgeTexture = null;
   const cameraTarget = new THREE.Vector3(0, 0.85, 0.2);
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  const renderer = new THREE.WebGLRenderer({
+    canvas, antialias: true, alpha: true, powerPreference: 'high-performance',
+  });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  let renderWidth = 0;
+  let renderHeight = 0;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
@@ -155,7 +159,11 @@ export function createStagePhoto(canvas) {
     camera.position.set(cameraX, cameraHeight, Math.max(3.5, baseDistance + cameraDepthOffset));
     camera.lookAt(cameraTarget);
     camera.updateProjectionMatrix();
-    renderer.setSize(w, h, false);
+    if (w !== renderWidth || h !== renderHeight) {
+      renderer.setSize(w, h, false);
+      renderWidth = w;
+      renderHeight = h;
+    }
     layoutScratchCanvas();
     renderer.render(scene, camera);
     renderScratchOverlay();

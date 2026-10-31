@@ -1,6 +1,6 @@
-import jsQR from 'jsqr';
 import { createPixelChase } from './pixel-chase.js';
 import { createStagePhoto, DEFAULT_STAGE_UNIFORM_ENABLED } from './stage-photo.js';
+import { createFallbackQrScanner } from './stage-qr-scanner.js';
 import { connectStageWebSocket, postStageWsMessage } from './stage-ws.js';
 import {
   parseMouseFurColorFromQrText,
@@ -255,6 +255,12 @@ let lastScan = '';
 let scanCooldown = 0;
 let lastScanAttempt = 0;
 let barcodeDetector = null;
+let fallbackScanner = null;
+
+async function scanWithFallback() {
+  if (!fallbackScanner) fallbackScanner = createFallbackQrScanner(scanCanvas, scanContext);
+  return fallbackScanner.detect(scanVideo);
+}
 
 async function scanLoop() {
   if (!scanVideo.srcObject) return;
@@ -271,17 +277,20 @@ async function scanLoop() {
 
   try {
     let raw = '';
-    if (barcodeDetector) {
-      const codes = await barcodeDetector.detect(scanVideo);
-      raw = codes[0]?.rawValue ?? '';
-    } else if (scanVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-      if (scanCanvas.width !== scanVideo.videoWidth || scanCanvas.height !== scanVideo.videoHeight) {
-        scanCanvas.width = scanVideo.videoWidth;
-        scanCanvas.height = scanVideo.videoHeight;
+    if (barcodeDetector && scanVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      try {
+        const codes = await barcodeDetector.detect(scanVideo);
+        raw = codes[0]?.rawValue ?? '';
+      } catch (error) {
+        console.warn('Native QR scanner failed; using fallback', error);
+        barcodeDetector = null;
+        setStatus('Camera ready — QR scanner fallback active; point it at a participant code');
+        if (scanVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          raw = await scanWithFallback();
+        }
       }
-      scanContext.drawImage(scanVideo, 0, 0, scanCanvas.width, scanCanvas.height);
-      const image = scanContext.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
-      raw = jsQR(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' })?.data ?? '';
+    } else if (!barcodeDetector && scanVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      raw = await scanWithFallback();
     }
     if (raw && raw !== lastScan) {
       lastScan = raw;
