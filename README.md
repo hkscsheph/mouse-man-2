@@ -18,7 +18,7 @@
 
 眼睛、嘴巴貼在頭骨上，並跟著頭部傾斜一起動。鼻子貼片與 3D 鼻子沿著吻部。可調五官大小、眼睛高低、鼻孔、胸口與耳朵。隨機配件會配合每隻老鼠的身體與耳朵尺寸。
 
-報到預設使用女生班剪影，不依臉判斷性別。加入後可把最後一位改成男生班剪影；剪影來自 `polygons_girl.json` 與 `polygons_boy.json`。
+報到預設使用女生班剪影，不依臉判斷性別。加入後可把最後一位改成男生班剪影；剪影來自 `polygons_girl.json` 與 `polygons_boy.json`。`P` 開關印表機模式。開啟時，每次報到成功會印一張：第一行是「竄」加上本機時間 `yyyymmdd hhMM`，第二行是滿版 QR，第三行是 🐭🐁🪤🐀🐹🧀。印表機要能從 `npm run dev` 連到 `192.168.0.191:9100`。
 
 | 按鍵 | 動作 |
 | --- | --- |
@@ -71,7 +71,7 @@ Uniform mode uses textured, short-sleeved shirts with the school badge on the le
 
 ## Registration (`?mode=reg`)
 
-Registration starts with the black-cat teacher alone in the class scene. Each capture adds one student from the girls' class-photo template by default and replaces the student's face with the captured portrait. Face appearance is not used to infer gender. After adding a participant, **Switch last participant to…** changes that person's template and updates the class photo and QR card label. Student silhouettes are clipped to the manual polygon annotations in `polygons_girl.json` and `polygons_boy.json`. Press **Q** to capture and **W** to switch the latest participant's template; press **T** to toggle the registration panel and webcam thumbnail. The existing mouse-saving and printable QR-card flow is preserved.
+Registration starts with the black-cat teacher alone in the class scene. Each capture adds one student from the girls' class-photo template by default and replaces the student's face with the captured portrait. Face appearance is not used to infer gender. After adding a participant, **Switch last participant to…** changes that person's template and updates the class photo and QR card label. Student silhouettes are clipped to the manual polygon annotations in `polygons_girl.json` and `polygons_boy.json`. Press **Q** to capture and **W** to switch the latest participant's template; press **T** to toggle the registration panel and webcam thumbnail. Press **P** to toggle printer mode. While it is on, each successful registration prints a slip on the LAN printer (`192.168.0.191:9100`, override with `PRINTER_HOST`): line 1 is `竄` plus the local time as `yyyymmdd hhMM`, line 2 is a full-width QR code, and line 3 is 🐭🐁🪤🐀🐹🧀. The dev server must be running so the page can reach that port. The existing mouse-saving and printable QR-card flow is preserved.
 
 ## Main stage (`?mode=stage`)
 

@@ -18,6 +18,7 @@ import {
   shareUrlForId,
   snapshotFromMouse,
 } from './persist.js';
+import { printRegistrationSlip, printerStatusText } from './registration-print.js';
 import { renderShareQr } from './qr.js';
 import { createRegistrationPhoto } from './registration.js';
 import { createScene } from './scene.js';
@@ -56,6 +57,7 @@ const shareQr = document.querySelector('#share-qr');
 const shareHint = document.querySelector('#share-hint');
 const registrationRoot = document.querySelector('#registration');
 const registrationStatus = document.querySelector('#registration-status');
+const registrationPrinter = document.querySelector('#registration-printer');
 const registrationCapture = document.querySelector('#registration-capture');
 const registrationPrint = document.querySelector('#registration-print');
 const registrationSwitchGroup = document.querySelector('#registration-switch-group');
@@ -86,6 +88,8 @@ let latestFace = null;
 let registrationBusy = false;
 let registrationMessage = '';
 let registrationHudVisible = true;
+let printerMode = false;
+let printerReachable = null;
 const urlParams = new URLSearchParams(location.search);
 const mode = !urlParams.has('m') && urlParams.get('mode') === 'random' ? 'random' : 'default';
 const registrationMode = !urlParams.has('m') && urlParams.get('mode') === 'reg';
@@ -243,6 +247,20 @@ function updateRegistrationControls(face = latestFace) {
   }
 }
 
+function showPrinterStatus() {
+  if (!registrationPrinter) return;
+  registrationPrinter.textContent = printerStatusText(printerMode, printerReachable);
+}
+
+async function refreshPrinterStatus() {
+  try {
+    printerReachable = (await fetch('/api/print')).ok;
+  } catch {
+    printerReachable = false;
+  }
+  showPrinterStatus();
+}
+
 function onRegistrationFace(face, now) {
   if (!face.present) {
     if (state === 'settling') {
@@ -337,6 +355,18 @@ async function registerParticipant() {
     resetFaceTracking();
     latestFace = null;
     registrationMessage = '';
+    if (printerMode) {
+      try {
+        registrationStatus.textContent = 'Printing…';
+        await printRegistrationSlip(qrUrl);
+        printerReachable = true;
+      } catch (error) {
+        console.error(error);
+        printerReachable = false;
+        registrationMessage = 'Registered, but printing failed.';
+      }
+      showPrinterStatus();
+    }
     await showShareForActor(null);
     updateRegistrationControls(null);
   } catch (error) {
@@ -669,6 +699,8 @@ registrationPrint.addEventListener('click', () => window.print());
 if (registrationMode) {
   registrationCount.textContent = `0 participants registered`;
   updateRegistrationControls(null);
+  void refreshPrinterStatus();
+  setInterval(() => void refreshPrinterStatus(), 5000);
 }
 
 featureScale.addEventListener('input', () => {
@@ -753,6 +785,14 @@ window.addEventListener('keydown', (event) => {
   if (registrationMode && event.key.toLowerCase() === 'w') {
     event.preventDefault();
     switchLastRegisteredGroup();
+    return;
+  }
+  if (registrationMode && event.key.toLowerCase() === 'p') {
+    event.preventDefault();
+    printerMode = !printerMode;
+    registrationMessage = '';
+    showPrinterStatus();
+    updateRegistrationControls();
     return;
   }
   if (registrationMode && (event.key === 't' || event.key === 'T')) {

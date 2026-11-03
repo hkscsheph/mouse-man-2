@@ -447,6 +447,7 @@ body.registration-mode.registration-hud-hidden #cam {
 }
 
 #registration-status,
+#registration-printer,
 #registration-count {
   margin: 0 0 10px;
 }

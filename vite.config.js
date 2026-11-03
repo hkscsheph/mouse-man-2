@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import net from 'node:net';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -90,6 +91,61 @@ async function localMouseApi(req, res) {
   sendJson(res, 405, { error: 'method not allowed' });
 }
 
+function printerTarget() {
+  // shortcut: this RP80 is on the LAN; set PRINTER_HOST when it moves
+  return {
+    host: process.env.PRINTER_HOST || '192.168.0.191',
+    port: Number(process.env.PRINTER_PORT || 9100),
+  };
+}
+
+function connectPrinter(timeoutMs) {
+  const { host, port } = printerTarget();
+  return new Promise((resolvePromise, reject) => {
+    const socket = net.connect(port, host, () => resolvePromise(socket));
+    socket.setTimeout(timeoutMs, () => socket.destroy(new Error('timeout')));
+    socket.on('error', reject);
+  });
+}
+
+async function localPrintApi(req, res) {
+  if (req.method === 'OPTIONS') {
+    sendJson(res, 204, {});
+    return;
+  }
+  if (req.method === 'GET') {
+    const socket = await connectPrinter(2000);
+    socket.end();
+    sendJson(res, 200, { ok: true, ...printerTarget() });
+    return;
+  }
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'method not allowed' });
+    return;
+  }
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 1024 * 1024) {
+      sendJson(res, 413, { error: 'too large' });
+      return;
+    }
+    chunks.push(chunk);
+  }
+  const payload = Buffer.concat(chunks);
+  if (!payload.length) {
+    sendJson(res, 400, { error: 'empty' });
+    return;
+  }
+  const socket = await connectPrinter(5000);
+  await new Promise((resolvePromise, reject) => {
+    socket.on('error', reject);
+    socket.end(payload, () => resolvePromise());
+  });
+  sendJson(res, 200, { ok: true });
+}
+
 function localMouseApiPlugin() {
   function register(server) {
     server.middlewares.use('/api/mouse', (req, res, next) => {
@@ -100,6 +156,16 @@ function localMouseApiPlugin() {
           return;
         }
         sendJson(res, 500, { error: 'storage request failed' });
+      });
+    });
+    server.middlewares.use('/api/print', (req, res, next) => {
+      localPrintApi(req, res).catch((error) => {
+        console.error('local print failed', error);
+        if (res.headersSent) {
+          next(error);
+          return;
+        }
+        sendJson(res, 502, { error: 'printer unavailable' });
       });
     });
   }
