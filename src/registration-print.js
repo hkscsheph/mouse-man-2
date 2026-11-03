@@ -1,6 +1,6 @@
 import { formatRegistrationStamp, qrGrid, slipJob } from './registration-slip.js';
 
-const EMOJI_LINE = '🐭🐁🪤🐀🐹🧀';
+const EMOJI_LINE = ["🐭","🐁","🪤","🐀","🐹","🧀"];
 
 function bitsFromPixels(data, width, height, dither) {
   const bits = new Uint8Array(width * height);
@@ -40,11 +40,18 @@ function drawBits(width, height, dither, draw) {
 }
 
 function textLineBits(text) {
-  return drawBits(576, 72, false, (ctx, width, height) => {
-    ctx.fillStyle = '#000';
-    ctx.font = '56px "Microsoft JhengHei", "PingFang TC", "Noto Sans CJK TC", sans-serif';
+  return drawBits(576, 80, true, (ctx, width, height) => {
+    const family = '"Microsoft JhengHei", "PingFang TC", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+    let size = 52;
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, 8, height / 2);
+    ctx.fillStyle = '#000';
+    ctx.font = `${size}px ${family}`;
+    while (size > 28 && ctx.measureText(text).width > width - 16) {
+      size -= 2;
+      ctx.font = `${size}px ${family}`;
+    }
+    ctx.fillText(text, width / 2, height / 2);
   });
 }
 
@@ -53,7 +60,7 @@ function emojiLineBits() {
     ctx.font = '64px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(EMOJI_LINE, width / 2, height / 2);
+    ctx.fillText(EMOJI_LINE.sort(()=>0.5-Math.random()).join(''), width / 2, height / 2);
   });
 }
 

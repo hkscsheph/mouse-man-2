@@ -4,25 +4,29 @@ export const PRINTER_HEAD = 576;
 
 export function formatRegistrationStamp(date) {
   const pad = (value) => String(value).padStart(2, '0');
-  return `竄${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())} ${pad(date.getHours())}${pad(date.getMinutes())}`;
+  const stamp = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())} ${pad(date.getHours())}${pad(date.getMinutes())}`;
+  return `竄 ${stamp} 😼`;
 }
 
-export function qrGrid(text, width = PRINTER_HEAD) {
+export function qrGrid(text, width = PRINTER_HEAD / 2) {
   if (!text) throw new Error('empty qr');
   const qr = QRCode.create(text, { errorCorrectionLevel: 'M' });
   const modules = qr.modules.size;
   const span = modules + 8;
-  const bits = new Uint8Array(width * width);
+  const symbol = width;
+  const head = Math.max(symbol, PRINTER_HEAD);
+  const left = Math.floor((head - symbol) / 2);
+  const bits = new Uint8Array(head * symbol);
   const data = qr.modules.data;
-  for (let y = 0; y < width; y += 1) {
-    const my = Math.floor((y * span) / width) - 4;
-    for (let x = 0; x < width; x += 1) {
-      const mx = Math.floor((x * span) / width) - 4;
+  for (let y = 0; y < symbol; y += 1) {
+    const my = Math.floor((y * span) / symbol) - 4;
+    for (let x = 0; x < symbol; x += 1) {
+      const mx = Math.floor((x * span) / symbol) - 4;
       if (mx < 0 || my < 0 || mx >= modules || my >= modules) continue;
-      if (data[my * modules + mx]) bits[y * width + x] = 1;
+      if (data[my * modules + mx]) bits[y * head + left + x] = 1;
     }
   }
-  return { width, height: width, bits };
+  return { width: head, height: symbol, bits };
 }
 
 export function slipJob(rasters) {

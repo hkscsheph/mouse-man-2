@@ -10,18 +10,20 @@ test('printer status names the toggle and the link', () => {
   assert.equal(printerStatusText(false, false), 'Printer off. Not connected.');
 });
 
-test('stamp is 竄 plus local yyyymmdd hhMM', () => {
-  assert.equal(formatRegistrationStamp(new Date(2026, 10, 3, 8, 19)), '竄20261103 0819');
+test('stamp is 竄 plus local yyyymmdd hhMM plus a cat', () => {
+  assert.equal(formatRegistrationStamp(new Date(2026, 10, 3, 8, 19)), '竄 20261103 0819 😼');
 });
 
-test('registration slip is three rasters and the QR fills the head', () => {
+test('registration slip is three rasters and the QR is half the head', () => {
   const qr = qrGrid('https://example.test/?m=abc123');
   assert.equal(qr.width, 576);
-  assert.equal(qr.height, 576);
+  assert.equal(qr.height, 288);
   assert.equal(qr.bits[0], 0);
   const span = QRCode.create('https://example.test/?m=abc123', { errorCorrectionLevel: 'M' }).modules.size + 8;
-  const inside = Math.floor((5 * 576) / span) - 1;
-  assert.equal(qr.bits[inside * 576 + inside], 1);
+  const inside = Math.floor((5 * 288) / span) - 1;
+  const x = 144 + inside;
+  assert.equal(qr.bits[inside * 576 + x], 1);
+  assert.equal(qr.bits[inside * 576 + 8], 0);
 
   const line = { width: 8, height: 1, bits: Uint8Array.of(1, 1, 1, 1, 1, 1, 1, 1) };
   const job = slipJob([line, qr, line]);
