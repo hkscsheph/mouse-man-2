@@ -66,8 +66,8 @@ JSON text frames only.
 
 | Field | Type | Required | Meaning |
 | --- | --- | --- | --- |
-| `type` | string | yes | Must be `"catEat"` |
-| `id` | string | no | Mouse id to remove; omit to eat the oldest admit (FIFO) |
+| `type` | string | yes | `"catEat"` eats one mouse. `"catSweep"` eats every mouse still alive, one after another. A `catEat` that arrives during a chase waits in a queue. |
+| `id` | string | no | On `catEat`, the mouse to remove. Omit it and the closest mouse is taken. |
 
 Examples:
 

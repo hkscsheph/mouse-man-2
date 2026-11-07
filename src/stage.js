@@ -201,36 +201,82 @@ async function admitParticipant(idHint) {
   if (gate) gate.classList.add('hidden');
 }
 
+const eatQueue = [];
 let eating = false;
+let sweeping = false;
 
-async function handleCatEat(message) {
-  if (eating) return;
+async function eatOne(message) {
   const ids = photo.listIds();
   if (!ids.length) {
     setStatus('Cat eat ignored — no mice on stage');
-    return;
+    return false;
   }
-  let targetId = message.id;
+  let targetId = message?.id;
   if (targetId && !ids.includes(targetId)) {
     setStatus(`Cat eat: unknown id ${targetId}, using closest mouse`);
     targetId = undefined;
   }
   if (!targetId) targetId = pixel.closestMouseId();
   if (!targetId || !ids.includes(targetId)) targetId = ids[0];
-  eating = true;
-  setStatus(`Cat chasing ${targetId}…`);
+  setStatus(sweeping ? `Cat clearing ${targetId}…` : `Cat chasing ${targetId}…`);
   let scratchPromise = Promise.resolve(false);
-  await pixel.eatMouse(targetId, () => {
+  const ate = await pixel.eatMouse(targetId, () => {
     scratchSound.play();
     scratchPromise = photo.scratchOut(targetId);
   });
   await scratchPromise;
   updateCount();
-  eating = false;
-  setStatus(`Cat ate ${targetId}. Scan or press A to add more.`);
+  if (!ate) {
+    setStatus('Cat eat ignored — no mice on stage');
+    return false;
+  }
+  setStatus(`Cat ate ${targetId}.`);
+  return true;
 }
 
-connectStageWebSocket((msg) => handleCatEat(msg), {
+async function pumpEats() {
+  if (eating) return;
+  eating = true;
+  try {
+    while (sweeping || eatQueue.length) {
+      if (sweeping) {
+        if (!photo.listIds().length) {
+          sweeping = false;
+          eatQueue.length = 0;
+          setStatus('Every mouse is dead.');
+          break;
+        }
+        const ate = await eatOne({});
+        if (!ate) break;
+        continue;
+      }
+      const next = eatQueue.shift();
+      if (!photo.listIds().length) {
+        eatQueue.length = 0;
+        setStatus('Cat eat ignored — no mice on stage');
+        break;
+      }
+      const ate = await eatOne(next);
+      if (!ate) break;
+    }
+  } finally {
+    eating = false;
+  }
+}
+
+function handleStageMessage(message) {
+  if (message?.type === 'catSweep') {
+    sweeping = true;
+    eatQueue.length = 0;
+    setStatus('Time is up. The cat is clearing the stage.');
+    void pumpEats();
+    return;
+  }
+  eatQueue.push(message || { type: 'catEat' });
+  void pumpEats();
+}
+
+connectStageWebSocket((msg) => handleStageMessage(msg), {
   onStatus: setWsStatus,
 });
 
