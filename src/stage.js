@@ -158,6 +158,7 @@ window.addEventListener('resize', layoutStage);
 layoutStage();
 
 async function admitParticipant(idHint) {
+  const ticket = epoch;
   const parsed = idHint ? parseMouseIdFromQrText(idHint) ?? idHint : null;
   const furColor = idHint ? parseMouseFurColorFromQrText(idHint) : null;
   setStatus(parsed ? `Loading ${parsed}…` : 'Adding guest…');
@@ -165,6 +166,7 @@ async function admitParticipant(idHint) {
   try {
     participant = await resolveParticipant(parsed, furColor);
   } catch (error) {
+    if (ticket !== epoch) return;
     console.error('stage: failed to restore saved mouse', parsed, error);
     setStatus(
       parsed ? `Could not load saved mouse ${parsed}` : 'Could not add guest',
@@ -172,6 +174,7 @@ async function admitParticipant(idHint) {
     );
     return;
   }
+  if (ticket !== epoch) return;
   if (admittedIds.has(participant.id)) {
     setStatus(`Already on stage: ${participant.id}`);
     return;
@@ -204,8 +207,10 @@ async function admitParticipant(idHint) {
 const eatQueue = [];
 let eating = false;
 let sweeping = false;
+let epoch = 0;
 
 async function eatOne(message) {
+  const ticket = epoch;
   const ids = photo.listIds();
   if (!ids.length) {
     setStatus('Cat eat ignored — no mice on stage');
@@ -221,10 +226,13 @@ async function eatOne(message) {
   setStatus(sweeping ? `Cat clearing ${targetId}…` : `Cat chasing ${targetId}…`);
   let scratchPromise = Promise.resolve(false);
   const ate = await pixel.eatMouse(targetId, () => {
+    if (ticket !== epoch) return;
     scratchSound.play();
     scratchPromise = photo.scratchOut(targetId);
   });
+  if (ticket !== epoch) return false;
   await scratchPromise;
+  if (ticket !== epoch) return false;
   updateCount();
   if (!ate) {
     setStatus('Cat eat ignored — no mice on stage');
@@ -237,8 +245,9 @@ async function eatOne(message) {
 async function pumpEats() {
   if (eating) return;
   eating = true;
+  const ticket = epoch;
   try {
-    while (sweeping || eatQueue.length) {
+    while (ticket === epoch && (sweeping || eatQueue.length)) {
       if (sweeping) {
         if (!photo.listIds().length) {
           sweeping = false;
@@ -261,10 +270,28 @@ async function pumpEats() {
     }
   } finally {
     eating = false;
+    if (ticket !== epoch && (sweeping || eatQueue.length)) void pumpEats();
   }
 }
 
+function restartStage() {
+  epoch += 1;
+  sweeping = false;
+  eatQueue.length = 0;
+  pixel.clearMice();
+  photo.clearRoster();
+  admittedIds.clear();
+  lastScan = '';
+  scanCooldown = 0;
+  updateCount();
+  setStatus('Stage restarted. Scan a QR code to admit mice.');
+}
+
 function handleStageMessage(message) {
+  if (message?.type === 'restartAll') {
+    restartStage();
+    return;
+  }
   if (message?.type === 'catSweep') {
     sweeping = true;
     eatQueue.length = 0;

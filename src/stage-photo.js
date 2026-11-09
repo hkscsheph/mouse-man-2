@@ -295,6 +295,10 @@ export function createStagePhoto(canvas) {
       const start = performance.now();
       const dur = 250;
       function tick(now) {
+        if (!roster.includes(entry)) {
+          resolve(false);
+          return;
+        }
         const t = Math.min(1, (now - start) / dur);
         entry.scratchProgress = t;
         renderScratchOverlay();
@@ -320,12 +324,23 @@ export function createStagePhoto(canvas) {
     return roster.filter((r) => !r.eaten).map((r) => r.id);
   }
 
+  function clearRoster() {
+    for (const entry of roster) {
+      scene.remove(entry.mesh);
+      disposeMouse(entry.mesh);
+    }
+    roster.length = 0;
+    renderScratchOverlay();
+    frame();
+  }
+
   window.addEventListener('resize', frame);
   frame();
 
   return {
     addFigure,
     scratchOut,
+    clearRoster,
     indexOf,
     listIds,
     setRowRise,

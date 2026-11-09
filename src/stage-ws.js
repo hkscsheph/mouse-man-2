@@ -10,7 +10,7 @@ export function resolveStageWsUrl() {
 }
 
 /**
- * @typedef {{ type: 'catEat' | 'catSweep', id?: string }} StageWsMessage
+ * @typedef {{ type: 'catEat' | 'catSweep' | 'restartAll', id?: string }} StageWsMessage
  */
 
 /**
@@ -30,7 +30,7 @@ export function connectStageWebSocket(onMessage, options = {}) {
       options.onStatus?.('Ignored non-JSON WebSocket payload');
       return;
     }
-    if (msg?.type === 'catEat' || msg?.type === 'catSweep') {
+    if (msg?.type === 'catEat' || msg?.type === 'catSweep' || msg?.type === 'restartAll') {
       onMessage({ type: msg.type, id: msg.id });
       return;
     }

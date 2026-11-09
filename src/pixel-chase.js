@@ -333,6 +333,16 @@ export function createPixelChase(canvas, options = {}) {
     return true;
   }
 
+  function clearMice() {
+    if (catChase) {
+      const pending = catChase;
+      catChase = null;
+      pending.resolve?.(false);
+    }
+    catSlide = 0;
+    mice.length = 0;
+  }
+
   function listMouseIds() {
     return mice.map((m) => m.id);
   }
@@ -601,6 +611,7 @@ export function createPixelChase(canvas, options = {}) {
     },
     addMouse,
     removeMouse,
+    clearMice,
     listMouseIds,
     closestMouseId,
     eatMouse,
