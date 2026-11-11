@@ -158,6 +158,7 @@ window.addEventListener('resize', layoutStage);
 layoutStage();
 
 async function admitParticipant(idHint) {
+  const ticket = epoch;
   const parsed = idHint ? parseMouseIdFromQrText(idHint) ?? idHint : null;
   const furColor = idHint ? parseMouseFurColorFromQrText(idHint) : null;
   setStatus(parsed ? `Loading ${parsed}…` : 'Adding guest…');
@@ -165,6 +166,7 @@ async function admitParticipant(idHint) {
   try {
     participant = await resolveParticipant(parsed, furColor);
   } catch (error) {
+    if (ticket !== epoch) return;
     console.error('stage: failed to restore saved mouse', parsed, error);
     setStatus(
       parsed ? `Could not load saved mouse ${parsed}` : 'Could not add guest',
@@ -172,6 +174,7 @@ async function admitParticipant(idHint) {
     );
     return;
   }
+  if (ticket !== epoch) return;
   if (admittedIds.has(participant.id)) {
     setStatus(`Already on stage: ${participant.id}`);
     return;
@@ -201,36 +204,106 @@ async function admitParticipant(idHint) {
   if (gate) gate.classList.add('hidden');
 }
 
+const eatQueue = [];
 let eating = false;
+let sweeping = false;
+let epoch = 0;
 
-async function handleCatEat(message) {
-  if (eating) return;
+async function eatOne(message) {
+  const ticket = epoch;
   const ids = photo.listIds();
   if (!ids.length) {
     setStatus('Cat eat ignored — no mice on stage');
-    return;
+    return false;
   }
-  let targetId = message.id;
+  let targetId = message?.id;
   if (targetId && !ids.includes(targetId)) {
     setStatus(`Cat eat: unknown id ${targetId}, using closest mouse`);
     targetId = undefined;
   }
   if (!targetId) targetId = pixel.closestMouseId();
   if (!targetId || !ids.includes(targetId)) targetId = ids[0];
-  eating = true;
-  setStatus(`Cat chasing ${targetId}…`);
+  setStatus(sweeping ? `Cat clearing ${targetId}…` : `Cat chasing ${targetId}…`);
   let scratchPromise = Promise.resolve(false);
-  await pixel.eatMouse(targetId, () => {
+  const ate = await pixel.eatMouse(targetId, () => {
+    if (ticket !== epoch) return;
     scratchSound.play();
     scratchPromise = photo.scratchOut(targetId);
   });
+  if (ticket !== epoch) return false;
   await scratchPromise;
+  if (ticket !== epoch) return false;
   updateCount();
-  eating = false;
-  setStatus(`Cat ate ${targetId}. Scan or press A to add more.`);
+  if (!ate) {
+    setStatus('Cat eat ignored — no mice on stage');
+    return false;
+  }
+  setStatus(`Cat ate ${targetId}.`);
+  return true;
 }
 
-connectStageWebSocket((msg) => handleCatEat(msg), {
+async function pumpEats() {
+  if (eating) return;
+  eating = true;
+  const ticket = epoch;
+  try {
+    while (ticket === epoch && (sweeping || eatQueue.length)) {
+      if (sweeping) {
+        if (!photo.listIds().length) {
+          sweeping = false;
+          eatQueue.length = 0;
+          setStatus('Every mouse is dead.');
+          break;
+        }
+        const ate = await eatOne({});
+        if (!ate) break;
+        continue;
+      }
+      const next = eatQueue.shift();
+      if (!photo.listIds().length) {
+        eatQueue.length = 0;
+        setStatus('Cat eat ignored — no mice on stage');
+        break;
+      }
+      const ate = await eatOne(next);
+      if (!ate) break;
+    }
+  } finally {
+    eating = false;
+    if (ticket !== epoch && (sweeping || eatQueue.length)) void pumpEats();
+  }
+}
+
+function restartStage() {
+  epoch += 1;
+  sweeping = false;
+  eatQueue.length = 0;
+  pixel.clearMice();
+  photo.clearRoster();
+  admittedIds.clear();
+  lastScan = '';
+  scanCooldown = 0;
+  updateCount();
+  setStatus('Stage restarted. Scan a QR code to admit mice.');
+}
+
+function handleStageMessage(message) {
+  if (message?.type === 'restartAll') {
+    restartStage();
+    return;
+  }
+  if (message?.type === 'catSweep') {
+    sweeping = true;
+    eatQueue.length = 0;
+    setStatus('Time is up. The cat is clearing the stage.');
+    void pumpEats();
+    return;
+  }
+  eatQueue.push(message || { type: 'catEat' });
+  void pumpEats();
+}
+
+connectStageWebSocket((msg) => handleStageMessage(msg), {
   onStatus: setWsStatus,
 });
 
