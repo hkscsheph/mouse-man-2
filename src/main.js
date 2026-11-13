@@ -17,11 +17,14 @@ import {
   publishSnapshot,
   shareUrlForId,
   snapshotFromMouse,
+  timestampId,
 } from './persist.js';
 import { printRegistrationSlip, printerStatusText } from './registration-print.js';
 import { renderShareQr } from './qr.js';
 import { createRegistrationPhoto } from './registration.js';
-import { publishTransferRecord } from './transfer-folder.js';
+import { publishTransferPhoto, publishTransferRecord } from './transfer-folder.js';
+import { renderStudentCard } from './student-card.js';
+import { stageUniformColor } from './stage-photo.js';
 import { createScene } from './scene.js';
 
 const SETTLE_MS = 600;
@@ -348,6 +351,7 @@ async function registerParticipant() {
   try {
     portrait = captureFacePortrait(video, face.bounds, face.outline);
     lockFaceSnapshot(actor);
+    actor.mesh.userData.mouseId = timestampId();
     registrationStatus.textContent = 'Saving participant and creating QR…';
     await persistLiveMouse(actor);
     if (!actor.saved || !actor.mesh.userData.mouseId) {
@@ -386,13 +390,26 @@ async function registerParticipant() {
       portrait: portrait.toDataURL('image/png'),
       snapshot,
     });
+    let cardSaved = false;
+    if (snapshot) {
+      try {
+        const card = await renderStudentCard(snapshot, stageUniformColor(registrationPhoto.count - 1));
+        cardSaved = await publishTransferPhoto(id, card);
+      } catch (error) {
+        console.error(error);
+      }
+    }
     crowd.freeze();
     setIdle();
     resetFaceTracking();
     latestFace = null;
-    registrationMessage = transferred
-      ? ''
-      : 'Registered, but the shared folder did not receive this participant.';
+    if (!transferred) {
+      registrationMessage = 'Registered, but the shared folder did not receive this participant.';
+    } else if (!cardSaved) {
+      registrationMessage = 'Registered, but the student-card photo was not saved.';
+    } else {
+      registrationMessage = '';
+    }
     if (printerMode && printerReachable) {
       void printRegistrationSlip(qrUrl).then(() => {
         printerReachable = true;

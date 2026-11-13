@@ -151,6 +151,8 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
   scene.fog = new THREE.Fog(0xe8dcc8, 8, 22);
 
   const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 50);
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
   camera.position.set(0, cameraHeight, 5.2);
   camera.lookAt(cameraTarget);
 
@@ -399,6 +401,26 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
     return roster.findIndex((r) => r.id === id && !r.eaten);
   }
 
+  function pick(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    pointer.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    raycaster.setFromCamera(pointer, camera);
+    const hits = raycaster.intersectObjects(roster.map((entry) => entry.mesh), true);
+    for (const hit of hits) {
+      let object = hit.object;
+      while (object) {
+        const entry = roster.find((candidate) => candidate.mesh === object);
+        if (entry) return entry.id;
+        object = object.parent;
+      }
+    }
+    return null;
+  }
+
   function listIds() {
     return roster.filter((r) => !r.eaten).map((r) => r.id);
   }
@@ -432,6 +454,7 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
     clearRoster,
     indexOf,
     listIds,
+    pick,
     setRowRise,
     setCameraHeight,
     moveCamera,

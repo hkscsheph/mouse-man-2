@@ -1,7 +1,7 @@
 import { canvasesFromSnapshot } from './persist.js';
 import { createStagePhoto, DEFAULT_STAGE_UNIFORM_ENABLED } from './stage-photo.js';
 import { DEFAULT_PART_TUNING } from './mouse.js';
-import { fetchTransferRecord, listTransferRecords } from './transfer-folder.js';
+import { fetchTransferRecord, listTransferRecords, transferPhotoUrl } from './transfer-folder.js';
 
 document.title = 'Transfer — Mouse Exhibition';
 document.body.classList.add('transfer-mode');
@@ -24,6 +24,26 @@ status.textContent = 'Waiting for the shared folder…';
 document.body.appendChild(status);
 
 const photo = createStagePhoto(photoCanvas, { idle: true });
+const card = document.createElement('div');
+card.id = 'transfer-card';
+card.hidden = true;
+card.innerHTML = `
+  <button type="button" aria-label="Close student card">Close</button>
+  <img alt="Student card photo" />
+`;
+document.body.appendChild(card);
+const cardImage = card.querySelector('img');
+const cardClose = card.querySelector('button');
+
+function showCard(id) {
+  cardImage.src = transferPhotoUrl(id);
+  card.hidden = false;
+}
+
+function hideCard() {
+  card.hidden = true;
+  cardImage.removeAttribute('src');
+}
 const seen = new Set();
 let syncing = false;
 let uniformsEnabled = DEFAULT_STAGE_UNIFORM_ENABLED;
@@ -78,12 +98,28 @@ async function syncFolder() {
   }
 }
 
+photoCanvas.addEventListener('click', (event) => {
+  const id = photo.pick(event.clientX, event.clientY);
+  if (!id) {
+    hideCard();
+    return;
+  }
+  showCard(id);
+});
+card.addEventListener('click', (event) => {
+  if (event.target === card || event.target === cardClose) hideCard();
+});
+
 window.addEventListener('resize', layout);
 layout();
 void syncFolder();
 setInterval(() => void syncFolder(), 1500);
 
 window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    hideCard();
+    return;
+  }
   if (event.code === 'Space' || event.key === ' ') {
     spacePressed = true;
     event.preventDefault();

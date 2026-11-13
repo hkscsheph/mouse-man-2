@@ -98,6 +98,71 @@ function transferRecordPath(id) {
   return resolve(localTransferStore, `${id}.json`);
 }
 
+function transferPhotoPath(id) {
+  return resolve(localTransferStore, `${id}.png`);
+}
+
+async function localTransferPhotoApi(req, res) {
+  if (req.method === 'OPTIONS') {
+    sendJson(res, 204, {});
+    return;
+  }
+  const id = new URL(req.url, 'http://localhost').searchParams.get('id');
+  if (!validMouseId.test(String(id || ''))) {
+    sendJson(res, 400, { error: 'invalid id' });
+    return;
+  }
+  if (req.method === 'GET') {
+    try {
+      const body = await readFile(transferPhotoPath(id));
+      res.statusCode = 200;
+      res.setHeader('content-type', 'image/png');
+      res.setHeader('cache-control', 'no-store');
+      res.setHeader('access-control-allow-origin', '*');
+      res.end(body);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        sendJson(res, 404, { error: 'not found' });
+        return;
+      }
+      console.error('local transfer photo read failed', error);
+      sendJson(res, 500, { error: 'storage read failed' });
+    }
+    return;
+  }
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'method not allowed' });
+    return;
+  }
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 4 * 1024 * 1024) {
+      sendJson(res, 413, { error: 'request body too large' });
+      return;
+    }
+    chunks.push(chunk);
+  }
+  const body = Buffer.concat(chunks);
+  if (body.length < 8 || body[0] !== 0x89 || body[1] !== 0x50) {
+    sendJson(res, 400, { error: 'invalid png' });
+    return;
+  }
+  const finalPath = transferPhotoPath(id);
+  const temporaryPath = `${finalPath}.tmp`;
+  try {
+    await mkdir(localTransferStore, { recursive: true });
+    await writeFile(temporaryPath, body);
+    await rm(finalPath, { force: true });
+    await rename(temporaryPath, finalPath);
+    sendJson(res, 200, { id });
+  } catch (error) {
+    console.error('local transfer photo write failed', error);
+    sendJson(res, 500, { error: 'storage write failed' });
+  }
+}
+
 async function localTransferApi(req, res) {
   if (req.method === 'OPTIONS') {
     sendJson(res, 204, {});
@@ -323,7 +388,9 @@ function localMouseApiPlugin() {
       });
     });
     server.middlewares.use('/api/transfer', (req, res, next) => {
-      localTransferApi(req, res).catch((error) => {
+      const kind = new URL(req.url, 'http://localhost').searchParams.get('kind');
+      const handler = kind === 'photo' ? localTransferPhotoApi : localTransferApi;
+      handler(req, res).catch((error) => {
         console.error('local transfer API request failed', error);
         if (res.headersSent) {
           next(error);
