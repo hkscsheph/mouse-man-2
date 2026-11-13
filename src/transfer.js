@@ -23,7 +23,7 @@ status.setAttribute('role', 'status');
 status.textContent = 'Waiting for the shared folder…';
 document.body.appendChild(status);
 
-const photo = createStagePhoto(photoCanvas);
+const photo = createStagePhoto(photoCanvas, { idle: true });
 const seen = new Set();
 let syncing = false;
 let uniformsEnabled = DEFAULT_STAGE_UNIFORM_ENABLED;

@@ -48,7 +48,86 @@ function slotPose(index, rowRise) {
   return { x, y, z, ry: 0, s: 0.52 };
 }
 
-export function createStagePhoto(canvas) {
+const GESTURES = ['wave', 'nod', 'look', 'shrug'];
+
+function restRotations(parts) {
+  return parts.map((part) => part.rotation.clone());
+}
+
+function poseClassMouse(entry, time) {
+  if (entry.eaten || entry.scratching) return;
+  const mesh = entry.mesh;
+  const phase = mesh.userData.phase;
+  const bob = mesh.userData.bob;
+  const torso = mesh.userData.torso;
+  const head = mesh.userData.head;
+  const arms = mesh.userData.arms;
+  const legs = mesh.userData.legs;
+  if (!entry.idle) {
+    entry.idle = {
+      nextGesture: time + 0.8 + Math.random() * 3.5,
+      gesture: null,
+      armRest: restRotations(arms),
+      legRest: legs.map((leg) => leg.rotation.x),
+    };
+  }
+  const idle = entry.idle;
+  const sway = Math.sin(time * 0.55 + phase);
+
+  bob.position.y = Math.sin(time * 1.15 + phase) * 0.01;
+  bob.rotation.z = Math.sin(time * 0.72 + phase) * 0.01;
+  torso.rotation.y = Math.sin(time * 0.31 + phase) * 0.045;
+  torso.rotation.z = sway * 0.02;
+  head.rotation.y = Math.sin(time * 0.42 + phase) * 0.07;
+  head.rotation.x = Math.sin(time * 0.27 + phase * 1.3) * 0.035;
+  head.rotation.z = Math.sin(time * 0.24 + phase * 0.7) * 0.03;
+  mesh.rotation.z = sway * 0.018;
+  legs.forEach((leg, index) => {
+    const side = index === 0 ? 1 : -1;
+    leg.rotation.x = idle.legRest[index] + sway * 0.035 * side;
+  });
+
+  const gesture = idle.gesture;
+  const active = gesture && (time - gesture.start) / gesture.dur;
+  if (!gesture && time >= idle.nextGesture) {
+    idle.gesture = {
+      name: GESTURES[Math.floor(Math.random() * GESTURES.length)],
+      start: time,
+      dur: 1.4 + Math.random() * 1.1,
+      side: Math.random() < 0.5 ? 0 : 1,
+    };
+  } else if (gesture && active >= 1) {
+    idle.gesture = null;
+    idle.nextGesture = time + 2.8 + Math.random() * 5.5;
+  }
+
+  const envelope = gesture && active < 1 ? Math.sin(active * Math.PI) : 0;
+  arms.forEach((arm, index) => {
+    const rest = idle.armRest[index];
+    arm.rotation.x = rest.x;
+    arm.rotation.y = rest.y;
+    arm.rotation.z = rest.z;
+    if (!gesture || active >= 1) return;
+    if (gesture.name === 'wave' && index === gesture.side) {
+      const outward = index === 0 ? -1 : 1;
+      arm.rotation.x = rest.x - 0.95 * envelope;
+      arm.rotation.z = rest.z + outward * 0.28 * envelope + Math.sin(time * 9) * 0.08 * envelope;
+    } else if (gesture.name === 'shrug') {
+      const outward = index === 0 ? -1 : 1;
+      arm.rotation.z = rest.z + outward * 0.32 * envelope;
+      arm.rotation.x = rest.x - 0.22 * envelope;
+    }
+  });
+  if (gesture && active < 1 && gesture.name === 'nod') {
+    head.rotation.x += Math.sin(active * Math.PI * 2) * 0.14;
+  } else if (gesture && active < 1 && gesture.name === 'look') {
+    const dir = gesture.side === 0 ? -1 : 1;
+    head.rotation.y += dir * 0.28 * envelope;
+    torso.rotation.y += dir * 0.06 * envelope;
+  }
+}
+
+export function createStagePhoto(canvas, { idle = false } = {}) {
   let rowRise = DEFAULT_ROW_RISE;
   let cameraHeight = DEFAULT_CAMERA_HEIGHT;
   let cameraX = 0;
@@ -337,6 +416,16 @@ export function createStagePhoto(canvas) {
   window.addEventListener('resize', frame);
   frame();
 
+  let running = true;
+  function animate(now) {
+    if (!running) return;
+    const time = now / 1000;
+    for (const entry of roster) poseClassMouse(entry, time);
+    frame();
+    requestAnimationFrame(animate);
+  }
+  if (idle) requestAnimationFrame(animate);
+
   return {
     addFigure,
     scratchOut,
@@ -349,6 +438,7 @@ export function createStagePhoto(canvas) {
     setUniformEnabled,
     frame,
     destroy() {
+      running = false;
       for (const entry of [...roster]) {
         scene.remove(entry.mesh);
         disposeMouse(entry.mesh);
