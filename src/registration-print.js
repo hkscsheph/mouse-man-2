@@ -75,10 +75,17 @@ export async function printRegistrationSlip(qrText, date = new Date()) {
     qrGrid(qrText),
     emojiLineBits(),
   ]);
-  const response = await fetch('/api/print', {
-    method: 'POST',
-    headers: { 'content-type': 'application/octet-stream' },
-    body: job,
-  });
-  if (!response.ok) throw new Error(`printer ${response.status}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+  try {
+    const response = await fetch('/api/print', {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: job,
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`printer ${response.status}`);
+  } finally {
+    clearTimeout(timer);
+  }
 }

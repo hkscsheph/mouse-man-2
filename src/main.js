@@ -60,7 +60,6 @@ const registrationStatus = document.querySelector('#registration-status');
 const registrationPrinter = document.querySelector('#registration-printer');
 const registrationCapture = document.querySelector('#registration-capture');
 const registrationPrint = document.querySelector('#registration-print');
-const registrationSwitchGroup = document.querySelector('#registration-switch-group');
 const registrationCount = document.querySelector('#registration-count');
 const registrationCards = document.querySelector('#registration-cards');
 const registrationPhotoCanvas = document.querySelector('#registration-photo');
@@ -120,10 +119,6 @@ function setShareLoading(on, hint = 'Saving your mouse…') {
     sharePanel.classList.remove('empty');
     shareHint.textContent = hint;
   }
-}
-
-function formatRegistrationGroup(group) {
-  return group === 'girls' ? 'Girls’' : 'Boys’';
 }
 
 async function showShareForActor(actor) {
@@ -212,11 +207,6 @@ function updateRegistrationControls(face = latestFace) {
     registrationPhoto.count < registrationPhoto.capacity,
   );
   registrationCapture.disabled = !faceReady;
-  const lastGroup = registrationPhoto.lastGroup;
-  registrationSwitchGroup.disabled = registrationBusy || !lastGroup;
-  registrationSwitchGroup.textContent = lastGroup
-    ? `Switch last participant to ${lastGroup === 'girls' ? 'boys’' : 'girls’'} class`
-    : 'Switch last participant';
   if (registrationBusy) return;
   if (registrationPhoto.failed) {
     registrationStatus.textContent = 'Could not load a class-photo image. Check the image assets and reload.';
@@ -252,13 +242,25 @@ function showPrinterStatus() {
   registrationPrinter.textContent = printerStatusText(printerMode, printerReachable);
 }
 
-async function refreshPrinterStatus() {
-  try {
-    printerReachable = (await fetch('/api/print')).ok;
-  } catch {
-    printerReachable = false;
-  }
-  showPrinterStatus();
+let printerStatusTask = null;
+
+function refreshPrinterStatus() {
+  if (printerStatusTask) return printerStatusTask;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1500);
+  printerStatusTask = fetch('/api/print', { signal: controller.signal })
+    .then((response) => {
+      printerReachable = response.ok;
+    })
+    .catch(() => {
+      printerReachable = false;
+    })
+    .finally(() => {
+      clearTimeout(timer);
+      printerStatusTask = null;
+      showPrinterStatus();
+    });
+  return printerStatusTask;
 }
 
 function onRegistrationFace(face, now) {
@@ -299,11 +301,35 @@ function onRegistrationFace(face, now) {
   updateRegistrationControls(face);
 }
 
+function fillAllRegistrationSlots() {
+  if (!registrationMode || registrationBusy || !registrationPhoto?.ready || registrationPhoto.failed) return;
+  const face = latestFace;
+  if (!face?.present || face.jumped || face.eyeSpan < MIN_EYE_SPAN || !face.bounds) {
+    registrationMessage = 'Hold still and face the camera, then press A again.';
+    updateRegistrationControls(face);
+    return;
+  }
+  try {
+    const portrait = captureFacePortrait(video, face.bounds, face.outline);
+    if (!registrationPhoto.fillAllPortraits(portrait)) {
+      registrationMessage = 'Could not update the class photo.';
+      updateRegistrationControls(face);
+      return;
+    }
+    registrationCards.replaceChildren();
+    registrationCount.textContent = `${registrationPhoto.count} participants registered`;
+    registrationMessage = 'Current face added to all 30 class photo positions.';
+  } catch (error) {
+    console.error(error);
+    registrationMessage = 'Could not capture a face for the class photo.';
+  }
+  updateRegistrationControls(face);
+}
+
 async function registerParticipant() {
   if (!registrationMode || registrationBusy) return;
   const actor = crowd.getLive();
   const face = latestFace;
-  const group = registrationPhoto.nextGroup;
   if (
     !actor ||
     !face?.present ||
@@ -332,7 +358,7 @@ async function registerParticipant() {
     const card = document.createElement('article');
     card.className = 'registration-card';
     const label = document.createElement('p');
-    label.textContent = `Participant ${registrationPhoto.count + 1} — ${formatRegistrationGroup(group)} class`;
+    label.textContent = `Participant ${registrationPhoto.count + 1}`;
     const qrCanvas = document.createElement('canvas');
     qrCanvas.width = 132;
     qrCanvas.height = 132;
@@ -344,7 +370,7 @@ async function registerParticipant() {
       registrationMessage = 'Participant saved, but QR generation failed.';
       return;
     }
-    if (!registrationPhoto.addPortrait(portrait, group)) {
+    if (!registrationPhoto.addPortrait(portrait)) {
       registrationMessage = 'The class photo is full.';
       return;
     }
@@ -355,17 +381,18 @@ async function registerParticipant() {
     resetFaceTracking();
     latestFace = null;
     registrationMessage = '';
-    if (printerMode) {
-      try {
-        registrationStatus.textContent = 'Printing…';
-        await printRegistrationSlip(qrUrl);
+    if (printerMode && printerReachable) {
+      void printRegistrationSlip(qrUrl).then(() => {
         printerReachable = true;
-      } catch (error) {
+        showPrinterStatus();
+      }).catch((error) => {
         console.error(error);
         printerReachable = false;
+        showPrinterStatus();
+        if (registrationBusy) return;
         registrationMessage = 'Registered, but printing failed.';
-      }
-      showPrinterStatus();
+        updateRegistrationControls(latestFace);
+      });
     }
     await showShareForActor(null);
     updateRegistrationControls(null);
@@ -680,21 +707,6 @@ tuneToggle.addEventListener('click', () => {
 });
 
 registrationCapture.addEventListener('click', registerParticipant);
-function switchLastRegisteredGroup() {
-  if (registrationBusy) return;
-  const group = registrationPhoto.switchLastGroup();
-  if (!group) return;
-  const label = registrationCards.firstElementChild?.querySelector('p');
-  if (label) {
-    label.textContent = `Participant ${registrationPhoto.count} — ${formatRegistrationGroup(group)} class`;
-  }
-  registrationMessage = '';
-  updateRegistrationControls();
-}
-registrationSwitchGroup.addEventListener('click', () => {
-  if (registrationBusy) return;
-  switchLastRegisteredGroup();
-});
 registrationPrint.addEventListener('click', () => window.print());
 if (registrationMode) {
   registrationCount.textContent = `0 participants registered`;
@@ -782,9 +794,9 @@ window.addEventListener('keydown', (event) => {
     void registerParticipant();
     return;
   }
-  if (registrationMode && event.key.toLowerCase() === 'w') {
+  if (registrationMode && event.key.toLowerCase() === 'a') {
     event.preventDefault();
-    switchLastRegisteredGroup();
+    fillAllRegistrationSlots();
     return;
   }
   if (registrationMode && event.key.toLowerCase() === 'p') {

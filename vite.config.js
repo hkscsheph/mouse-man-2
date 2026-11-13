@@ -99,13 +99,54 @@ function printerTarget() {
   };
 }
 
+const PRINTER_PROBE_MS = 800;
+const PRINTER_DOWN_MS = 20000;
+const PRINTER_UP_MS = 5000;
+let printerProbe = { at: 0, ok: false };
+let printerProbeTask = null;
+
 function connectPrinter(timeoutMs) {
   const { host, port } = printerTarget();
   return new Promise((resolvePromise, reject) => {
-    const socket = net.connect(port, host, () => resolvePromise(socket));
-    socket.setTimeout(timeoutMs, () => socket.destroy(new Error('timeout')));
-    socket.on('error', reject);
+    let settled = false;
+    const socket = net.connect(port, host);
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) {
+        socket.destroy();
+        reject(error);
+        return;
+      }
+      resolvePromise(socket);
+    };
+    const timer = setTimeout(() => finish(new Error('timeout')), timeoutMs);
+    socket.once('connect', () => finish());
+    socket.once('error', finish);
   });
+}
+
+function probePrinter() {
+  const now = Date.now();
+  const ttl = printerProbe.ok ? PRINTER_UP_MS : PRINTER_DOWN_MS;
+  if (printerProbe.at && now - printerProbe.at < ttl) return Promise.resolve(printerProbe.ok);
+  if (!printerProbeTask) {
+    printerProbeTask = connectPrinter(PRINTER_PROBE_MS)
+      .then((socket) => {
+        socket.end();
+        printerProbe = { at: Date.now(), ok: true };
+        return true;
+      })
+      .catch(() => {
+        printerProbe = { at: Date.now(), ok: false };
+        return false;
+      })
+      .finally(() => {
+        printerProbeTask = null;
+      });
+  }
+  return printerProbeTask;
 }
 
 async function localPrintApi(req, res) {
@@ -114,13 +155,20 @@ async function localPrintApi(req, res) {
     return;
   }
   if (req.method === 'GET') {
-    const socket = await connectPrinter(2000);
-    socket.end();
+    if (!(await probePrinter())) {
+      sendJson(res, 502, { error: 'printer unavailable' });
+      return;
+    }
     sendJson(res, 200, { ok: true, ...printerTarget() });
     return;
   }
   if (req.method !== 'POST') {
     sendJson(res, 405, { error: 'method not allowed' });
+    return;
+  }
+  if (!(await probePrinter())) {
+    req.resume();
+    sendJson(res, 502, { error: 'printer unavailable' });
     return;
   }
   const chunks = [];
@@ -138,11 +186,25 @@ async function localPrintApi(req, res) {
     sendJson(res, 400, { error: 'empty' });
     return;
   }
-  const socket = await connectPrinter(5000);
-  await new Promise((resolvePromise, reject) => {
-    socket.on('error', reject);
-    socket.end(payload, () => resolvePromise());
+  const socket = await connectPrinter(PRINTER_PROBE_MS).catch((error) => {
+    printerProbe = { at: Date.now(), ok: false };
+    throw error;
   });
+  await new Promise((resolvePromise, reject) => {
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error('timeout'));
+    }, PRINTER_PROBE_MS);
+    socket.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    socket.end(payload, () => {
+      clearTimeout(timer);
+      resolvePromise();
+    });
+  });
+  printerProbe = { at: Date.now(), ok: true };
   sendJson(res, 200, { ok: true });
 }
 
@@ -160,7 +222,8 @@ function localMouseApiPlugin() {
     });
     server.middlewares.use('/api/print', (req, res, next) => {
       localPrintApi(req, res).catch((error) => {
-        console.error('local print failed', error);
+        // GET is the status poll; an unreachable printer is a normal result, not a failed job.
+        if (req.method !== 'GET') console.error('local print failed', error);
         if (res.headersSent) {
           next(error);
           return;
