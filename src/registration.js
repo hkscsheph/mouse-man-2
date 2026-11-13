@@ -1,4 +1,5 @@
 import boyOutlines from './polygons_boy.json';
+import teacherOutline from './teacher-outline.json';
 
 const PHOTO_WIDTH = 1408;
 const PHOTO_HEIGHT = 768;
@@ -374,47 +375,10 @@ export function createRegistrationPhoto(canvas) {
 
 function traceTeacher(context) {
   context.beginPath();
-  context.moveTo(684, 400);
-  context.lineTo(682, 385);
-  context.quadraticCurveTo(686, 374, 694, 386);
-  context.lineTo(702, 398);
-  context.quadraticCurveTo(712, 395, 721, 398);
-  context.lineTo(731, 384);
-  context.quadraticCurveTo(740, 374, 743, 388);
-  context.lineTo(739, 408);
-  context.quadraticCurveTo(744, 429, 734, 447);
-  context.lineTo(746, 453);
-  context.quadraticCurveTo(764, 455, 769, 479);
-  context.lineTo(776, 552);
-  context.lineTo(768, 574);
-  context.lineTo(753, 585);
-  context.lineTo(744, 579);
-  context.lineTo(755, 598);
-  context.lineTo(744, 614);
-  context.lineTo(749, 657);
-  context.lineTo(751, 686);
-  context.lineTo(770, 716);
-  context.lineTo(762, 727);
-  context.lineTo(731, 725);
-  context.lineTo(716, 699);
-  context.lineTo(711, 651);
-  context.lineTo(707, 651);
-  context.lineTo(701, 699);
-  context.lineTo(685, 725);
-  context.lineTo(654, 727);
-  context.lineTo(649, 717);
-  context.lineTo(667, 686);
-  context.lineTo(670, 657);
-  context.lineTo(674, 614);
-  context.lineTo(662, 598);
-  context.lineTo(671, 580);
-  context.lineTo(662, 586);
-  context.lineTo(648, 580);
-  context.lineTo(642, 568);
-  context.lineTo(650, 552);
-  context.lineTo(652, 479);
-  context.quadraticCurveTo(658, 456, 675, 453);
-  context.lineTo(687, 447);
-  context.quadraticCurveTo(678, 430, 684, 400);
+  for (const command of teacherOutline.commands) {
+    if (command[0] === 'M') context.moveTo(command[1], command[2]);
+    else if (command[0] === 'L') context.lineTo(command[1], command[2]);
+    else context.quadraticCurveTo(command[1], command[2], command[3], command[4]);
+  }
   context.closePath();
 }
