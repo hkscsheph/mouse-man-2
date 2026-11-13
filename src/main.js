@@ -21,6 +21,7 @@ import {
 import { printRegistrationSlip, printerStatusText } from './registration-print.js';
 import { renderShareQr } from './qr.js';
 import { createRegistrationPhoto } from './registration.js';
+import { publishTransferRecord } from './transfer-folder.js';
 import { createScene } from './scene.js';
 
 const SETTLE_MS = 600;
@@ -173,6 +174,7 @@ async function persistLiveMouse(actor) {
     const published = await publishSnapshot(snapshot);
     actor.mesh.userData.mouseId = published.id;
     actor.saved = true;
+    actor.transferSnapshot = snapshot;
     if (crowd.getLive() === actor) {
       await showShareForActor(actor);
       if (!published.remote) {
@@ -376,11 +378,21 @@ async function registerParticipant() {
     }
     registrationCards.prepend(card);
     registrationCount.textContent = `${registrationPhoto.count} participant${registrationPhoto.count === 1 ? '' : 's'} registered`;
+    const snapshot = actor.transferSnapshot;
+    if (snapshot) snapshot.id = id;
+    const transferred = await publishTransferRecord({
+      id,
+      createdAt: snapshot?.createdAt || Date.now(),
+      portrait: portrait.toDataURL('image/png'),
+      snapshot,
+    });
     crowd.freeze();
     setIdle();
     resetFaceTracking();
     latestFace = null;
-    registrationMessage = '';
+    registrationMessage = transferred
+      ? ''
+      : 'Registered, but the shared folder did not receive this participant.';
     if (printerMode && printerReachable) {
       void printRegistrationSlip(qrUrl).then(() => {
         printerReachable = true;

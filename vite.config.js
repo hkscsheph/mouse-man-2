@@ -1,10 +1,13 @@
 import { defineConfig } from 'vite';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const localMouseStore = resolve(fileURLToPath(new URL('.', import.meta.url)), '.dev-data', 'mice');
+const localTransferStore = process.env.TRANSFER_DIR
+  ? resolve(process.env.TRANSFER_DIR)
+  : resolve(fileURLToPath(new URL('.', import.meta.url)), '.dev-data', 'transfer');
 const validMouseId = /^[a-z0-9]{8,32}$/i;
 
 function sendJson(res, status, body) {
@@ -21,12 +24,12 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-async function readJsonBody(req) {
+async function readJsonBody(req, limit = 2 * 1024 * 1024) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 2 * 1024 * 1024) throw new Error('request body too large');
+    if (size > limit) throw new Error('request body too large');
     chunks.push(chunk);
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
@@ -83,6 +86,105 @@ async function localMouseApi(req, res) {
       sendJson(res, 200, { id, remote: true });
     } catch (error) {
       console.error('local mouse API write failed', error);
+      sendJson(res, 500, { error: 'storage write failed' });
+    }
+    return;
+  }
+
+  sendJson(res, 405, { error: 'method not allowed' });
+}
+
+function transferRecordPath(id) {
+  return resolve(localTransferStore, `${id}.json`);
+}
+
+async function localTransferApi(req, res) {
+  if (req.method === 'OPTIONS') {
+    sendJson(res, 204, {});
+    return;
+  }
+
+  if (req.method === 'GET') {
+    const id = new URL(req.url, 'http://localhost').searchParams.get('id');
+    if (!id) {
+      let names = [];
+      try {
+        names = await readdir(localTransferStore);
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+      const entries = [];
+      for (const name of names) {
+        if (!name.endsWith('.json')) continue;
+        try {
+          const record = JSON.parse(await readFile(resolve(localTransferStore, name), 'utf8'));
+          if (!validMouseId.test(String(record?.id || ''))) continue;
+          entries.push({ id: record.id, createdAt: Number(record.createdAt) || 0 });
+        } catch (error) {
+          console.error('local transfer list skipped', name, error);
+        }
+      }
+      entries.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+      sendJson(res, 200, { ok: true, entries });
+      return;
+    }
+    if (!validMouseId.test(id)) {
+      sendJson(res, 400, { error: 'invalid id' });
+      return;
+    }
+    try {
+      const record = JSON.parse(await readFile(transferRecordPath(id), 'utf8'));
+      sendJson(res, 200, record);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        sendJson(res, 404, { error: 'not found' });
+        return;
+      }
+      console.error('local transfer read failed', error);
+      sendJson(res, 500, { error: 'storage read failed' });
+    }
+    return;
+  }
+
+  if (req.method === 'POST') {
+    let record;
+    try {
+      record = await readJsonBody(req, 8 * 1024 * 1024);
+    } catch (error) {
+      sendJson(res, error.message === 'request body too large' ? 413 : 400, {
+        error: error.message === 'request body too large' ? error.message : 'invalid json',
+      });
+      return;
+    }
+    const id = String(record?.id || '');
+    const portrait = String(record?.portrait || '');
+    const snapshot = record?.snapshot;
+    if (
+      !validMouseId.test(id)
+      || snapshot?.id !== id
+      || !snapshot?.traits
+      || !snapshot?.patches
+      || !portrait.startsWith('data:image/')
+    ) {
+      sendJson(res, 400, { error: 'invalid transfer record' });
+      return;
+    }
+    const stored = {
+      id,
+      createdAt: Number(record.createdAt) || Date.now(),
+      portrait,
+      snapshot,
+    };
+    const finalPath = transferRecordPath(id);
+    const temporaryPath = `${finalPath}.tmp`;
+    try {
+      await mkdir(localTransferStore, { recursive: true });
+      await writeFile(temporaryPath, JSON.stringify(stored), 'utf8');
+      await rm(finalPath, { force: true });
+      await rename(temporaryPath, finalPath);
+      sendJson(res, 200, { id });
+    } catch (error) {
+      console.error('local transfer write failed', error);
       sendJson(res, 500, { error: 'storage write failed' });
     }
     return;
@@ -213,6 +315,16 @@ function localMouseApiPlugin() {
     server.middlewares.use('/api/mouse', (req, res, next) => {
       localMouseApi(req, res).catch((error) => {
         console.error('local mouse API request failed', error);
+        if (res.headersSent) {
+          next(error);
+          return;
+        }
+        sendJson(res, 500, { error: 'storage request failed' });
+      });
+    });
+    server.middlewares.use('/api/transfer', (req, res, next) => {
+      localTransferApi(req, res).catch((error) => {
+        console.error('local transfer API request failed', error);
         if (res.headersSent) {
           next(error);
           return;

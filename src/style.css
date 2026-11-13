@@ -221,6 +221,41 @@ body.stage-mode #gate {
   bottom: auto;
 }
 
+body.transfer-mode {
+  background: #cbb896;
+  overflow: hidden;
+}
+
+body.transfer-mode #view,
+body.transfer-mode #gate,
+body.transfer-mode #cam,
+body.transfer-mode #tune-toggle,
+body.transfer-mode #tune,
+body.transfer-mode #share {
+  display: none;
+}
+
+body.transfer-mode #stage-photo {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+
+#transfer-status {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 4;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(23, 18, 14, 0.72);
+  color: #f6efe4;
+  font-size: 14px;
+}
+
 body.stage-mode #cam,
 body.stage-mode #tune-toggle,
 body.stage-mode #tune,
