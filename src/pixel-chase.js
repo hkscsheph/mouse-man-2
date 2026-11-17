@@ -211,9 +211,13 @@ export function createPixelChase(canvas, options = {}) {
     };
     const frameSpansX = spans(columns);
     const frameSpansY = spans(rows);
+    const omittedDrawings = new Set([2, 4, 10]);
     const frames = [];
+    let sheetIndex = 0;
     for (const [y0, y1] of frameSpansY) {
       for (const [x0, x1] of frameSpansX) {
+        sheetIndex += 1;
+        if (omittedDrawings.has(sheetIndex)) continue;
         const frameWidth = x1 - x0 + 1;
         const frameHeight = y1 - y0 + 1;
         const frame = document.createElement('canvas');
