@@ -8,6 +8,7 @@ import {
   parseMouseIdFromQrText,
   resolveParticipant,
 } from './stage-face.js';
+import { listTransferRecords } from './transfer-folder.js';
 
 document.title = 'Main Stage — Mouse Exhibition';
 document.body.classList.add('stage-mode');
@@ -180,21 +181,51 @@ async function admitParticipant(idHint) {
     return;
   }
   admittedIds.add(participant.id);
+  const seat = await classPhotoSeat(participant);
+  if (ticket !== epoch) return;
+  if (seat.error) {
+    admittedIds.delete(participant.id);
+    setStatus(seat.error, 'error');
+    return;
+  }
   const fig = photo.addFigure(
     participant.id,
     participant.canvases,
     participant.traits,
     participant.faceSettings,
     participant.partTuning,
-    { enter: true },
+    { enter: true, slot: seat.slot, avoidSlots: seat.avoidSlots },
   );
   if (!fig) {
     admittedIds.delete(participant.id);
-    setStatus('Class photo full — cannot add more');
+    setStatus(
+      seat.slot == null
+        ? 'Class photo full — cannot add more'
+        : 'That class photo seat is already filled',
+      'error',
+    );
     return;
   }
   if (gate) gate.classList.add('hidden');
   presentOnStage(fig, participant);
+}
+
+async function classPhotoSeat(participant) {
+  let entries = [];
+  try {
+    entries = await listTransferRecords();
+  } catch (error) {
+    console.error(error);
+    if (participant.snapshot) return { error: 'Could not read the class photo order' };
+    return {};
+  }
+  if (!participant.snapshot) {
+    return { avoidSlots: entries.map((_, index) => index).filter((index) => index < 30) };
+  }
+  const slot = entries.findIndex((entry) => entry.id === participant.id);
+  if (slot < 0) return { error: `${participant.id} has no seat in the class photo` };
+  if (slot >= 30) return { error: 'Class photo full — cannot add more' };
+  return { slot };
 }
 
 let entranceChain = Promise.resolve();

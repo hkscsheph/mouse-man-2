@@ -79,8 +79,9 @@ async function syncFolder() {
   syncing = true;
   try {
     const entries = await listTransferRecords();
-    for (const entry of entries) {
-      if (seen.has(entry.id) || photo.listIds().length >= 30) continue;
+    for (let index = 0; index < entries.length && index < 30; index += 1) {
+      const entry = entries[index];
+      if (seen.has(entry.id)) continue;
       try {
         const record = await fetchTransferRecord(entry.id);
         const canvases = await canvasesFromSnapshot(record.snapshot);
@@ -94,8 +95,9 @@ async function syncFolder() {
             eyePosition: record.snapshot.eyePosition,
           },
           { ...DEFAULT_PART_TUNING, ...record.snapshot.partTuning },
+          { slot: index },
         );
-        if (!figure) break;
+        if (!figure) continue;
         seen.add(record.id);
       } catch (error) {
         console.error('transfer record skipped', entry.id, error);

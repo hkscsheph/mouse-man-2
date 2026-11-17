@@ -341,9 +341,17 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
 
   function addFigure(id, canvases, traits, faceSettings, partTuning, options = {}) {
     if (roster.find((r) => r.id === id)) return null;
-    if (roster.length >= MAX) return null;
-    let slot = 0;
-    while (roster.some((entry) => entry.slot === slot)) slot += 1;
+    const reserved = new Set(
+      (options.avoidSlots || []).filter((seat) => Number.isInteger(seat) && seat >= 0 && seat < MAX),
+    );
+    let slot = options.slot;
+    if (Number.isInteger(slot)) {
+      if (slot < 0 || slot >= MAX || roster.some((entry) => entry.slot === slot)) return null;
+    } else {
+      slot = 0;
+      while (slot < MAX && (reserved.has(slot) || roster.some((entry) => entry.slot === slot))) slot += 1;
+      if (slot >= MAX) return null;
+    }
     const mesh = createMouse(canvases, {
       traits,
       faceSettings,
