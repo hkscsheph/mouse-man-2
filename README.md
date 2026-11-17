@@ -31,7 +31,7 @@
 
 掃 QR 會還原已儲存的毛色、五官、臉部與部位調整。快照讀不到就顯示錯誤，不會換成別隻老鼠。QR 的 `m` 也帶著像素鼠的毛色。`D` 可加入一隻沒有真實五官的示範來賓。
 
-未指定對象時，貓會跑向最近的像素鼠，抓起後一起向左移出畫面，再回到原位。合照上的那一隻被塗黑並畫上紅色抓痕，之後不再算在場。抓痕開始時播放一段怒喵；若瀏覽器擋住聲音，先按一次畫面或畫面上的「啟用聲音」。音檔摘自 [Cat Wants Food by Oneirophile](https://freesound.org/people/Oneirophile/sounds/120160/)，以 [CC0](https://creativecommons.org/publicdomain/zero/1.0/) 釋出。
+未指定對象時，貓會跑向最近的像素鼠，抓起後一起向左移出畫面，再回到原位。按 `2` 會讓一幅畫貼著地面從右端滑入。畫一碰到貓，貓立刻停下並像抓老鼠一樣帶著畫離開，再回到原位。畫隨後以較小尺寸掛在黑板左上角上方，之後每一幅都接在前一幅的右邊，並一直留在之後每塊黑板的上方。合照上的那一隻被塗黑並畫上紅色抓痕，之後不再算在場。抓痕開始時播放一段怒喵；若瀏覽器擋住聲音，先按一次畫面或畫面上的「啟用聲音」。音檔摘自 [Cat Wants Food by Oneirophile](https://freesound.org/people/Oneirophile/sounds/120160/)，以 [CC0](https://creativecommons.org/publicdomain/zero/1.0/) 釋出。
 
 有 `BarcodeDetector` 時用它掃碼，否則用 `jsQR`。支援的瀏覽器在 worker 解碼，其餘在主執行緒。畫面預設隱藏操作面板。`U` 可開關所有 3D 角色的校服，包含之後才進場的。`+=` / `-` 縮放像素角色（起始 300%）。方向鍵移動 3D 鏡頭，`Space` 加 `↑` / `↓` 上下平移。`T` 只隱藏面板，掃描不中斷。`A` 可貼上 QR 網址或老鼠 id。`E` 等同不帶 id 的吃鼠指令。
 
@@ -55,6 +55,12 @@ npm run stage:ws-demo
 - Pixel Mouse https://ikoiku.itch.io/16-x-16-pixel-art-character-mouse
 - Pixel Cat https://opengameart.org/content/pixel-cat-0
 - https://www.spritefusion.com/pixel-snapper
+- DVC prize https://www.shutterstock.com/image-vector/pixel-art-framed-paintings-pixelated-picture-2302164693
+- MMPA prize https://www.pinterest.com/pin/585468020353537367/
+- MMPA prize 2 https://scontent-hkg1-1.xx.fbcdn.net/v/t39.30808-6/626656378_1327787186051179_8460426986218662513_n.jpg?stp=dst-jpg_tt6&cstp=mx761x736&ctp=p526x296&_nc_cat=106&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=aa7b47&_nc_ohc=akXc5fh_6PsQ7kNvwG1TaNP&_nc_oc=AdpCtNWU282DLBuQ4HinyFNjXt2O7th4-xZB2QZepZaVkjUJLBkPuxe05Z1-inKhd0I&_nc_zt=23&_nc_ht=scontent-hkg1-1.xx&_nc_gid=9fxfJRinW0AYKvik1mybVA&_nc_ss=7b289&oh=00_AQQufhVHb4YPzNEALpu7gvPveWcivIw06kJKxui2nEVjhQ&oe=6B01C47B
+- ESS https://www.istockphoto.com/hk/%E5%90%91%E9%87%8F/gift-boxes-with-red-ribbons-pixel-art-set-present-packages-with-bows-collection-gm1419908047-466106982
+- FDA https://www.reddit.com/r/PixelArt/comments/15vy7ij/a_bunch_of_tiny_movie_posters_based_on_a_mixture/
+- FDA 2 https://itch.io/game-assets/tag-movie-posters/tag-pixel-art
 
 ## Modes
 
@@ -102,6 +108,7 @@ The stage requests a high-performance WebGL device when available. Hardware acce
 | `A` | Paste / type a QR URL or mouse id |
 | `D` | Admit a random demo guest (placeholder face) |
 | `E` | Eat the closest active mouse; its 3D figure remains blacked out with red scratches |
+| `2` | Slide a drawing along the ground from the right. The moment it touches the cat, the cat stops and carries it off like a caught mouse, then returns. The small drawings stay above the blackboard: the first at its top-left corner, each later one to the right of the previous. A new drawing appears on the next blackboard that scrolls in, and remains above every blackboard after that. |
 | `T` | Show / hide the HUD and webcam thumbnail; QR scanning continues |
 | `U` | Toggle uniforms on all 3D figures, including later admissions |
 | `+=` / `-` | Enlarge / shrink the pixel cat and mice (starts at 300%) |

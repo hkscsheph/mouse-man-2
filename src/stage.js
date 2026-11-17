@@ -551,6 +551,12 @@ window.addEventListener('keydown', (event) => {
   if (event.key === 'd' || event.key === 'D') {
     event.preventDefault();
     void admitParticipant(null);
+    return;
+  }
+  if (event.key === '2') {
+    event.preventDefault();
+    if (pixel.presentDrawing()) setStatus('A drawing slides across the stage…');
+    else setStatus('The cat is busy');
   }
 });
 
