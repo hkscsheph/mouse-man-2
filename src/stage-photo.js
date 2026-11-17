@@ -16,6 +16,10 @@ const MIN_CAMERA_X = -4;
 const MAX_CAMERA_X = 4;
 const MIN_CAMERA_DEPTH_OFFSET = -2;
 const MAX_CAMERA_DEPTH_OFFSET = 10;
+const MIN_CAMERA_FOV = 20;
+const MAX_CAMERA_FOV = 70;
+const MIN_TARGET_OFFSET_Y = -2;
+const MAX_TARGET_OFFSET_Y = 2;
 const COLUMN_SPACING = 0.64;
 export const DEFAULT_STAGE_UNIFORM_ENABLED = true;
 
@@ -288,6 +292,52 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
     return cameraHeight;
   }
 
+  function perspectiveState() {
+    return {
+      fov: Math.round(camera.fov * 1000) / 1000,
+      rowRise: Math.round(rowRise * 1000) / 1000,
+      cameraHeight: Math.round(cameraHeight * 1000) / 1000,
+      cameraX: Math.round(cameraX * 1000) / 1000,
+      cameraDepthOffset: Math.round(cameraDepthOffset * 1000) / 1000,
+      cameraTargetOffsetY: Math.round(cameraTargetOffsetY * 1000) / 1000,
+    };
+  }
+
+  function applyPerspective(config = {}) {
+    if (Number.isFinite(Number(config.fov))) {
+      camera.fov = THREE.MathUtils.clamp(Number(config.fov), MIN_CAMERA_FOV, MAX_CAMERA_FOV);
+    }
+    if (Number.isFinite(Number(config.rowRise))) setRowRise(config.rowRise);
+    if (Number.isFinite(Number(config.cameraHeight))) {
+      cameraHeight = THREE.MathUtils.clamp(Number(config.cameraHeight), MIN_CAMERA_HEIGHT, MAX_CAMERA_HEIGHT);
+    }
+    if (Number.isFinite(Number(config.cameraX))) {
+      cameraX = THREE.MathUtils.clamp(Number(config.cameraX), MIN_CAMERA_X, MAX_CAMERA_X);
+    }
+    if (Number.isFinite(Number(config.cameraDepthOffset))) {
+      cameraDepthOffset = THREE.MathUtils.clamp(
+        Number(config.cameraDepthOffset),
+        MIN_CAMERA_DEPTH_OFFSET,
+        MAX_CAMERA_DEPTH_OFFSET,
+      );
+    }
+    if (Number.isFinite(Number(config.cameraTargetOffsetY))) {
+      cameraTargetOffsetY = THREE.MathUtils.clamp(
+        Number(config.cameraTargetOffsetY),
+        MIN_TARGET_OFFSET_Y,
+        MAX_TARGET_OFFSET_Y,
+      );
+    }
+    frame();
+    return perspectiveState();
+  }
+
+  function adjustFov(delta) {
+    camera.fov = THREE.MathUtils.clamp(camera.fov + Number(delta), MIN_CAMERA_FOV, MAX_CAMERA_FOV);
+    frame();
+    return camera.fov;
+  }
+
   function addFigure(id, canvases, traits, faceSettings, partTuning) {
     if (roster.find((r) => r.id === id)) return null;
     if (roster.length >= MAX) return null;
@@ -459,6 +509,9 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
     setCameraHeight,
     moveCamera,
     setUniformEnabled,
+    perspectiveState,
+    applyPerspective,
+    adjustFov,
     frame,
     destroy() {
       running = false;

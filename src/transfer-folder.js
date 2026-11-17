@@ -7,6 +7,25 @@ function transferApiUrl(query = '') {
   return url.toString();
 }
 
+export function transferPerspectiveUrl() {
+  return transferApiUrl('kind=perspective');
+}
+
+export async function loadTransferPerspective() {
+  const response = await fetch(transferPerspectiveUrl());
+  if (!response.ok) throw new Error(`perspective ${response.status}`);
+  return response.json();
+}
+
+export async function saveTransferPerspective(config) {
+  const response = await fetch(transferPerspectiveUrl(), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  return response.ok;
+}
+
 export function transferPhotoUrl(id) {
   return transferApiUrl(`id=${encodeURIComponent(id)}&kind=photo`);
 }

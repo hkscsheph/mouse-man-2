@@ -77,7 +77,7 @@ Registration starts with the black-cat teacher alone in the class scene. Each ca
 
 ## Transfer display (`?mode=trans`)
 
-This is the bottom half of the main stage: the 3D class photo, full screen, with no pixel chase, QR scanner, or cat-eat control. It reads `.dev-data/transfer/` about once a second and adds each new registration in capture order, up to 30. `T` hides the status line. `U` toggles uniforms. Arrow keys frame the photo; hold Space with Up or Down to pan vertically. Restart `npm run dev` after changing `TRANSFER_DIR`.
+This is the bottom half of the main stage: the 3D class photo, full screen, with no pixel chase, QR scanner, or cat-eat control. It reads `.dev-data/transfer/` about once a second and adds each new registration in capture order, up to 30. `T` hides the status line. `U` toggles uniforms. Arrow keys frame the photo; hold Space with Up or Down to pan vertically. `-` / `=` change the field of view, and `[` / `]` change the row rise. `S` writes the current perspective to `src/transfer-perspective.json`, which is loaded again the next time the page opens. Restart `npm run dev` after changing `TRANSFER_DIR`.
 
 ## Main stage (`?mode=stage`)
 

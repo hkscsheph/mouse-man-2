@@ -1,7 +1,13 @@
 import { canvasesFromSnapshot } from './persist.js';
 import { createStagePhoto, DEFAULT_STAGE_UNIFORM_ENABLED } from './stage-photo.js';
 import { DEFAULT_PART_TUNING } from './mouse.js';
-import { fetchTransferRecord, listTransferRecords, transferPhotoUrl } from './transfer-folder.js';
+import {
+  fetchTransferRecord,
+  listTransferRecords,
+  loadTransferPerspective,
+  saveTransferPerspective,
+  transferPhotoUrl,
+} from './transfer-folder.js';
 
 document.title = 'Transfer — Mouse Exhibition';
 document.body.classList.add('transfer-mode');
@@ -61,6 +67,13 @@ function showStatus(text) {
   status.hidden = statusHiddenByUser;
 }
 
+function showPerspective() {
+  const view = photo.perspectiveState();
+  showStatus(
+    `fov ${view.fov} · height ${view.cameraHeight} · x ${view.cameraX} · depth ${view.cameraDepthOffset} · rise ${view.rowRise}`,
+  );
+}
+
 async function syncFolder() {
   if (syncing) return;
   syncing = true;
@@ -112,6 +125,12 @@ card.addEventListener('click', (event) => {
 
 window.addEventListener('resize', layout);
 layout();
+void loadTransferPerspective()
+  .then((config) => photo.applyPerspective(config))
+  .catch((error) => {
+    console.error(error);
+    showStatus('Could not load the perspective config.');
+  });
 void syncFolder();
 setInterval(() => void syncFolder(), 1500);
 
@@ -135,9 +154,36 @@ window.addEventListener('keydown', (event) => {
   if (movement) {
     event.preventDefault();
     photo.moveCamera(...movement);
+    showPerspective();
+    return;
+  }
+  if (event.key === '-' || event.key === '_') {
+    event.preventDefault();
+    photo.adjustFov(event.shiftKey ? -1 : -0.5);
+    showPerspective();
+    return;
+  }
+  if (event.key === '=' || event.key === '+') {
+    event.preventDefault();
+    photo.adjustFov(event.shiftKey ? 1 : 0.5);
+    showPerspective();
+    return;
+  }
+  if (event.key === '[' || event.key === ']') {
+    event.preventDefault();
+    const view = photo.perspectiveState();
+    photo.applyPerspective({ rowRise: view.rowRise + (event.key === ']' ? 0.02 : -0.02) });
+    showPerspective();
     return;
   }
   if (event.repeat) return;
+  if (event.key === 's' || event.key === 'S') {
+    event.preventDefault();
+    void saveTransferPerspective(photo.perspectiveState()).then((saved) => {
+      showStatus(saved ? 'Perspective saved to src/transfer-perspective.json' : 'Could not save the perspective.');
+    });
+    return;
+  }
   if (event.key === 't' || event.key === 'T') {
     statusHiddenByUser = !statusHiddenByUser;
     status.hidden = statusHiddenByUser;
