@@ -304,17 +304,24 @@ export function createPixelChase(canvas, options = {}) {
       layout.mouseStart,
       Math.min(layout.mouseStart + layout.mouseSpreadX, Math.round(baseX + wander)),
     );
+    const feetY = layout.groundY - Math.ceil((MOUSE_FOOT_ROW * size) / MOUSE_FRAME_SIZE);
+    if (entry.slideScroll != null) {
+      const traveled = px(scroll - entry.slideScroll);
+      const slideX = width + size - traveled;
+      if (slideX > baseX) return { x: slideX, y: feetY, size, entering: true };
+      entry.slideScroll = null;
+    }
     const yOffset = Math.floor(entry.ySpread * layout.mouseSpreadY)
       + Math.round(Math.sin(movePhase * 1.6) * spriteScale);
-    const y = layout.groundY - Math.ceil((MOUSE_FOOT_ROW * size) / MOUSE_FRAME_SIZE) - yOffset;
-    return { x, y, size };
+    const y = feetY - yOffset;
+    return { x, y, size, entering: false };
   }
 
   function indexOfMouse(id) {
     return mice.findIndex((m) => m.id === id);
   }
 
-  function addMouse(id, skinColor = null) {
+  function addMouse(id, skinColor = null, options = {}) {
     if (indexOfMouse(id) >= 0) return false;
     mice.push({
       id,
@@ -322,6 +329,7 @@ export function createPixelChase(canvas, options = {}) {
       ySpread: seedRandom(),
       sizeBias: mice.length % 3,
       skinColor,
+      slideScroll: options.enter ? scroll : null,
     });
     return true;
   }
@@ -357,6 +365,7 @@ export function createPixelChase(canvas, options = {}) {
     let closestDistance = Infinity;
     for (let i = 0; i < mice.length; i += 1) {
       const position = mousePosition(mice[i], layout);
+      if (position.entering) continue;
       const dx = position.x + position.size / 2 - catCenterX;
       const dy = position.y + position.size / 2 - catCenterY;
       const distance = dx * dx + dy * dy;
@@ -546,13 +555,13 @@ export function createPixelChase(canvas, options = {}) {
     ) {
       for (let i = 0; i < mice.length; i += 1) {
         const entry = mice[i];
-        const { x, y, size } = mousePosition(entry, layout);
+        const { x, y, size, entering } = mousePosition(entry, layout);
         const mouseFrame = Math.floor(now / mouseRunFrameDuration + i * 1.5) % MOUSE_FRAME_COUNT;
         const sprite = getMouseSprite(entry.skinColor);
         const catCenter = layout.catX + layout.catSize / 2;
         const mouseCenter = x + size / 2;
         ctx.save();
-        if (mouseCenter < catCenter) {
+        if (entering || mouseCenter < catCenter) {
           ctx.translate(x + size, y);
           ctx.scale(-1, 1);
           ctx.drawImage(

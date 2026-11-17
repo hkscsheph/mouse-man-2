@@ -59,7 +59,7 @@ function restRotations(parts) {
 }
 
 function poseClassMouse(entry, time) {
-  if (entry.eaten || entry.scratching) return;
+  if (entry.eaten || entry.scratching || entry.entrance) return;
   const mesh = entry.mesh;
   const phase = mesh.userData.phase;
   const bob = mesh.userData.bob;
@@ -253,6 +253,7 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
       rowSteps[row].position.set(0, pose.y - 0.16, pose.z);
     }
     for (const entry of roster) {
+      if (!entry.presented) continue;
       const pose = slotPose(entry.slot, rowRise);
       entry.mesh.position.set(pose.x, pose.y, pose.z);
     }
@@ -338,7 +339,7 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
     return camera.fov;
   }
 
-  function addFigure(id, canvases, traits, faceSettings, partTuning) {
+  function addFigure(id, canvases, traits, faceSettings, partTuning, options = {}) {
     if (roster.find((r) => r.id === id)) return null;
     if (roster.length >= MAX) return null;
     let slot = 0;
@@ -356,23 +357,135 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
       badgeTexture.addEventListener('load', frame);
     }
     setMouseUniform(mesh, uniformEnabled);
+    const enter = options.enter === true;
     const pose = slotPose(slot, rowRise);
     mesh.position.set(pose.x, pose.y, pose.z);
     mesh.rotation.y = pose.ry;
     mesh.scale.setScalar(pose.s);
+    mesh.visible = !enter;
     scene.add(mesh);
     const entry = {
       id,
       mesh,
       slot,
+      presented: !enter,
       scratching: false,
       eaten: false,
       scratchProgress: 0,
       scratchStyle: null,
+      entrance: null,
     };
     roster.push(entry);
     frame();
     return entry;
+  }
+
+  function offscreenRightX(z) {
+    const distance = Math.max(0.4, camera.position.z - z);
+    const halfWidth = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect * distance;
+    return camera.position.x + halfWidth + 0.55;
+  }
+
+  function smoothStep(t) {
+    const clamped = THREE.MathUtils.clamp(t, 0, 1);
+    return clamped * clamped * (3 - 2 * clamped);
+  }
+
+  function swingWalk(entry, gait, amount) {
+    const motion = entry.entrance;
+    const legs = entry.mesh.userData.legs;
+    const arms = entry.mesh.userData.arms;
+    if (legs?.[0]) legs[0].rotation.x = motion.legRest[0] + gait * 0.48 * amount;
+    if (legs?.[1]) legs[1].rotation.x = motion.legRest[1] - gait * 0.48 * amount;
+    if (arms?.[0]) arms[0].rotation.x = motion.armRest[0] - gait * 0.18 * amount;
+    if (arms?.[1]) arms[1].rotation.x = motion.armRest[1] + gait * 0.18 * amount;
+  }
+
+  function finishEntrance(entry, arrived) {
+    const motion = entry.entrance;
+    if (!motion) return;
+    entry.entrance = null;
+    if (arrived) {
+      const pose = slotPose(entry.slot, rowRise);
+      entry.mesh.position.set(pose.x, pose.y, pose.z);
+      entry.mesh.rotation.set(0, pose.ry, 0);
+      entry.mesh.userData.legs?.forEach((leg, index) => {
+        leg.rotation.x = motion.legRest[index];
+      });
+      entry.mesh.userData.arms?.forEach((arm, index) => {
+        arm.rotation.x = motion.armRest[index];
+      });
+      entry.presented = true;
+    }
+    motion.resolve(arrived);
+  }
+
+  function advanceEntrance(entry, now) {
+    const motion = entry.entrance;
+    if (!motion) return;
+    const pose = slotPose(entry.slot, rowRise);
+    const elapsed = now - motion.t0;
+    const gait = Math.sin(elapsed / 1000 * 9);
+    if (elapsed < motion.walkMs) {
+      const along = smoothStep(elapsed / motion.walkMs);
+      entry.mesh.position.set(
+        THREE.MathUtils.lerp(motion.startX, pose.x, along),
+        motion.floorY + Math.abs(gait) * 0.012,
+        motion.floorZ,
+      );
+      entry.mesh.rotation.set(0, -Math.PI / 2, 0);
+      swingWalk(entry, gait, 1);
+      return;
+    }
+    const climb = (elapsed - motion.walkMs) / motion.climbMs;
+    if (climb < 1) {
+      const along = smoothStep(climb);
+      entry.mesh.position.set(
+        pose.x,
+        THREE.MathUtils.lerp(motion.floorY, pose.y, along),
+        THREE.MathUtils.lerp(motion.floorZ, pose.z, along),
+      );
+      entry.mesh.rotation.set(Math.sin(along * Math.PI) * 0.2, THREE.MathUtils.lerp(-Math.PI / 2, pose.ry, along), 0);
+      swingWalk(entry, gait, 1 - along);
+      return;
+    }
+    finishEntrance(entry, true);
+  }
+
+  function playEntrance(entry) {
+    if (!entry || entry.eaten || !roster.includes(entry)) return Promise.resolve(false);
+    if (entry.entrance) return entry.entrance.promise;
+    frame();
+    // Feet stay in the visible foreground, just in front of the lowest step.
+    const floorZ = 2.05;
+    const floorY = 0.28;
+    const pose = slotPose(entry.slot, rowRise);
+    const startX = Math.max(offscreenRightX(floorZ), pose.x + 0.8);
+    entry.mesh.visible = true;
+    entry.mesh.position.set(startX, floorY, floorZ);
+    entry.mesh.rotation.set(0, -Math.PI / 2, 0);
+    entry.mesh.scale.setScalar(pose.s);
+    const legs = entry.mesh.userData.legs ?? [];
+    const arms = entry.mesh.userData.arms ?? [];
+    let resolve = () => {};
+    const promise = new Promise((done) => {
+      resolve = done;
+    });
+    entry.entrance = {
+      t0: performance.now(),
+      walkMs: Math.max(900, (Math.abs(startX - pose.x) / 2.15) * 1000),
+      climbMs: 900,
+      startX,
+      floorY,
+      floorZ,
+      legRest: legs.map((leg) => leg.rotation.x),
+      armRest: arms.map((arm) => arm.rotation.x),
+      resolve,
+      promise,
+    };
+    ensureAnimate();
+    frame();
+    return promise;
   }
 
   function renderScratchOverlay() {
@@ -472,11 +585,12 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
   }
 
   function listIds() {
-    return roster.filter((r) => !r.eaten).map((r) => r.id);
+    return roster.filter((r) => r.presented && !r.eaten).map((r) => r.id);
   }
 
   function clearRoster() {
     for (const entry of roster) {
+      finishEntrance(entry, false);
       scene.remove(entry.mesh);
       disposeMouse(entry.mesh);
     }
@@ -489,17 +603,38 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
   frame();
 
   let running = true;
+  let animating = false;
   function animate(now) {
-    if (!running) return;
+    if (!running) {
+      animating = false;
+      return;
+    }
     const time = now / 1000;
-    for (const entry of roster) poseClassMouse(entry, time);
-    frame();
+    if (idle) {
+      for (const entry of roster) poseClassMouse(entry, time);
+    }
+    for (const entry of roster) {
+      if (entry.entrance) advanceEntrance(entry, now);
+    }
+    const moving = roster.some((entry) => entry.entrance);
+    if (idle || moving) {
+      frame();
+      requestAnimationFrame(animate);
+    } else {
+      animating = false;
+      frame();
+    }
+  }
+  function ensureAnimate() {
+    if (animating || !running) return;
+    animating = true;
     requestAnimationFrame(animate);
   }
-  if (idle) requestAnimationFrame(animate);
+  if (idle) ensureAnimate();
 
   return {
     addFigure,
+    playEntrance,
     scratchOut,
     clearRoster,
     indexOf,
@@ -515,6 +650,7 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
     frame,
     destroy() {
       running = false;
+      for (const entry of roster) finishEntrance(entry, false);
       for (const entry of [...roster]) {
         scene.remove(entry.mesh);
         disposeMouse(entry.mesh);

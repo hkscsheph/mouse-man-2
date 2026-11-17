@@ -180,28 +180,43 @@ async function admitParticipant(idHint) {
     return;
   }
   admittedIds.add(participant.id);
-  pixel.addMouse(participant.id, participant.traits.fur);
   const fig = photo.addFigure(
     participant.id,
     participant.canvases,
     participant.traits,
     participant.faceSettings,
     participant.partTuning,
+    { enter: true },
   );
   if (!fig) {
-    pixel.removeMouse(participant.id);
     admittedIds.delete(participant.id);
     setStatus('Class photo full — cannot add more');
     return;
   }
-  updateCount();
-  setStatus(
-    participant.snapshot
-      ? `Admitted ${participant.id} (registered face)`
-      : `Admitted ${participant.id} (placeholder face)`,
-    'success',
-  );
   if (gate) gate.classList.add('hidden');
+  presentOnStage(fig, participant);
+}
+
+let entranceChain = Promise.resolve();
+
+function presentOnStage(fig, participant) {
+  const ticket = epoch;
+  entranceChain = entranceChain
+    .catch(() => {})
+    .then(async () => {
+      if (ticket !== epoch) return;
+      setStatus(`${participant.id} is walking on…`);
+      const arrived = await photo.playEntrance(fig);
+      if (!arrived || ticket !== epoch) return;
+      pixel.addMouse(participant.id, participant.traits.fur, { enter: true });
+      updateCount();
+      setStatus(
+        participant.snapshot
+          ? `Admitted ${participant.id} (registered face)`
+          : `Admitted ${participant.id} (placeholder face)`,
+        'success',
+      );
+    });
 }
 
 const eatQueue = [];
