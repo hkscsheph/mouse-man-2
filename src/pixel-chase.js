@@ -172,7 +172,7 @@ export function createPixelChase(canvas, options = {}) {
    */
   let flyingDrawing = null;
 
-  function sliceSpriteFrames(source, omitted = new Set(), knockout = 'near') {
+  function sliceSpriteFrames(source, omitted = new Set(), knockout = 'near', split = 'grid') {
     const sourceWidth = source.naturalWidth;
     const sourceHeight = source.naturalHeight;
     if (!sourceWidth || !sourceHeight) return [];
@@ -211,12 +211,27 @@ export function createPixelChase(canvas, options = {}) {
     };
     const frameSpansX = spans(columns);
     const frameSpansY = spans(rows);
+    const rects = [];
+    if (split === 'per-row') {
+      for (const [y0, y1] of frameSpansY) {
+        const colCounts = new Array(sourceWidth).fill(0);
+        for (let y = y0; y <= y1; y += 1) {
+          for (let x = 0; x < sourceWidth; x += 1) {
+            if (!far((y * sourceWidth + x) * 4)) continue;
+            colCounts[x] += 1;
+          }
+        }
+        for (const [x0, x1] of spans(colCounts)) rects.push([x0, y0, x1, y1]);
+      }
+    } else {
+      for (const [y0, y1] of frameSpansY) {
+        for (const [x0, x1] of frameSpansX) rects.push([x0, y0, x1, y1]);
+      }
+    }
     const frames = [];
-    let sheetIndex = 0;
-    for (const [y0, y1] of frameSpansY) {
-      for (const [x0, x1] of frameSpansX) {
-        sheetIndex += 1;
-        if (omitted.has(sheetIndex)) continue;
+    rects.forEach(([x0, y0, x1, y1], index) => {
+        const sheetIndex = index + 1;
+        if (omitted.has(sheetIndex)) return;
         const frameWidth = x1 - x0 + 1;
         const frameHeight = y1 - y0 + 1;
         const frame = document.createElement('canvas');
@@ -272,9 +287,40 @@ export function createPixelChase(canvas, options = {}) {
           }
         }
         frame.bottomInset = contentBottom < 0 ? 0 : (frameHeight - 1 - contentBottom) / frameHeight;
-        frames.push(frame);
-      }
-    }
+        if (split !== 'per-row') {
+          frames.push(frame);
+          return;
+        }
+        let minX = frameWidth;
+        let minY = frameHeight;
+        let maxX = -1;
+        let maxY = -1;
+        for (let y = 0; y < frameHeight; y += 1) {
+          for (let x = 0; x < frameWidth; x += 1) {
+            if (crop.data[(y * frameWidth + x) * 4 + 3] === 0) continue;
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+        if (maxX < 0) return;
+        const tight = document.createElement('canvas');
+        tight.width = maxX - minX + 1;
+        tight.height = maxY - minY + 1;
+        tight.getContext('2d').drawImage(
+          frame,
+          minX,
+          minY,
+          tight.width,
+          tight.height,
+          0,
+          0,
+          tight.width,
+          tight.height,
+        );
+        frames.push(tight);
+    });
     return frames;
   }
 
@@ -286,7 +332,7 @@ export function createPixelChase(canvas, options = {}) {
   const boxSource = new Image();
   /** @type {HTMLCanvasElement[]} */
   let boxFrames = [];
-  /** @type {{ index: number }[]} */
+  /** @type {{ index: number, revealScroll: number }[]} */
   const placedBoxes = [];
   let nextBox = 0;
   /**
@@ -299,6 +345,23 @@ export function createPixelChase(canvas, options = {}) {
     boxFrames = sliceSpriteFrames(boxSource, new Set(), 'edge');
   }, { once: true });
   boxSource.src = new URL('./3-ess.png', import.meta.url).href;
+
+  const posterSource = new Image();
+  /** @type {HTMLCanvasElement[]} */
+  let posterFrames = [];
+  /** @type {{ index: number, u: number, v: number, fromTile: number }[]} */
+  const hungPosters = [];
+  let nextPoster = 0;
+  /**
+   * A poster crossing the stage, then leaving with the cat.
+   * @type {null | { index: number, x: number, y: number, w: number, h: number, phase: 'slide' | 'caught' }}
+   */
+  let flyingPoster = null;
+
+  posterSource.addEventListener('load', () => {
+    posterFrames = sliceSpriteFrames(posterSource, new Set(), 'edge', 'per-row');
+  }, { once: true });
+  posterSource.src = new URL('./4-fda.png', import.meta.url).href;
 
   function catSpriteSize() {
     return Math.round((width < 150 ? 40 : width < 240 ? 64 : 88) * spriteScale);
@@ -402,6 +465,7 @@ export function createPixelChase(canvas, options = {}) {
       ctx.restore();
     }
     drawHungDrawings();
+    drawHungPosters();
     const cabinetY = groundY - px(20);
     ctx.fillStyle = '#936541';
     ctx.fillRect(0, cabinetY, width, px(23));
@@ -486,6 +550,97 @@ export function createPixelChase(canvas, options = {}) {
     hungDrawings.push({ index, fromTile: nextIncomingBoardTile() });
   }
 
+  function posterWallBox(frame) {
+    const groundY = Math.floor(height * 0.82);
+    const boardTop = Math.max(px(24), Math.floor(groundY * 0.2));
+    const gapLeft = px(36) + px(144) + px(3);
+    const gapRight = width - px(82) - px(3);
+    const gapW = Math.max(8, gapRight - gapLeft);
+    const deskTop = groundY - Math.max(px(34), Math.floor(height * 0.18)) - 3;
+    const band = Math.max(px(12), deskTop - boardTop - px(1));
+    const aspect = frame.width / Math.max(1, frame.height);
+    let w = Math.round(gapW * 0.62);
+    let h = Math.max(1, Math.round(w / aspect));
+    if (h > band * 0.72) {
+      h = Math.max(1, Math.round(band * 0.72));
+      w = Math.max(1, Math.round(h * aspect));
+    }
+    w = Math.min(w, gapW);
+    h = Math.min(h, band);
+    return { gapLeft, gapW, boardTop, band, w, h };
+  }
+
+  function posterRect(item) {
+    const frame = posterFrames[item.index];
+    const box = posterWallBox(frame);
+    const maxX = Math.max(0, box.gapW - box.w);
+    const maxY = Math.max(0, box.band - box.h);
+    return {
+      x: Math.round(item.u * maxX),
+      y: Math.round(item.v * maxY),
+      w: box.w,
+      h: box.h,
+      gapLeft: box.gapLeft,
+      boardTop: box.boardTop,
+    };
+  }
+
+  function posterOverlap(a, b) {
+    const width = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+    const height = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+    return width * height;
+  }
+
+  function posterCover(candidate) {
+    const rect = posterRect(candidate);
+    let worst = 0;
+    for (const other of hungPosters) {
+      const prev = posterRect(other);
+      const cover = posterOverlap(rect, prev) / Math.max(1, prev.w * prev.h);
+      if (cover > worst) worst = cover;
+    }
+    return worst;
+  }
+
+  function drawHungPosters() {
+    if (!hungPosters.length) return;
+    const scrollPx = px(scroll / 2);
+    const firstTile = Math.floor(scrollPx / width) - 1;
+    const lastTile = firstTile + 3;
+    for (let tile = firstTile; tile <= lastTile; tile += 1) {
+      const tileX = tile * width - scrollPx;
+      for (const item of hungPosters) {
+        if (tile < item.fromTile) continue;
+        const frame = posterFrames[item.index];
+        if (!frame) continue;
+        const rect = posterRect(item);
+        const x = Math.round(tileX + rect.gapLeft + rect.x);
+        const y = Math.round(rect.boardTop + rect.y);
+        if (x < width && x + rect.w > 0) ctx.drawImage(frame, x, y, rect.w, rect.h);
+      }
+    }
+  }
+
+  function hangPoster(index) {
+    if (!posterFrames[index]) return;
+    let placed = null;
+    let bestCover = Infinity;
+    for (let attempt = 0; attempt < 24; attempt += 1) {
+      const candidate = { index, u: Math.random(), v: Math.random() };
+      const cover = posterCover(candidate);
+      if (cover < bestCover) {
+        bestCover = cover;
+        placed = candidate;
+      }
+      if (cover <= 0.65) break;
+    }
+    const rect = posterRect(placed);
+    const scrollPx = px(scroll / 2);
+    const localX = rect.gapLeft + rect.x;
+    placed.fromTile = Math.ceil((width + scrollPx - localX) / width);
+    hungPosters.push(placed);
+  }
+
   function deskSlots(groundY) {
     const top = groundY - Math.max(px(34), Math.floor(height * 0.18)) - 3;
     const desks = [];
@@ -525,6 +680,15 @@ export function createPixelChase(canvas, options = {}) {
     };
   }
 
+  function nextDeskRevealScroll(deskIndex) {
+    const deskWidth = 42 + (deskIndex % 2) * 8;
+    const span = BASE_WIDTH + deskWidth;
+    const phase = deskIndex * 126 - scroll * 0.82;
+    const boundary = Math.floor(phase / span) * span;
+    const target = phase - boundary < 1e-4 ? boundary - span : boundary;
+    return (deskIndex * 126 - target) / 0.82;
+  }
+
   function drawPlacedBoxes(desks, layer) {
     if (!placedBoxes.length) return;
     const desk = desks[BOX_TABLE];
@@ -543,7 +707,9 @@ export function createPixelChase(canvas, options = {}) {
       return sa.below ? sa.row - sb.row : sb.row - sa.row;
     });
     for (const order of orders) {
-      const frame = boxFrames[placedBoxes[order].index];
+      const item = placedBoxes[order];
+      if (!(scroll > item.revealScroll)) continue;
+      const frame = boxFrames[item.index];
       if (!frame) continue;
       const { row, col, count, below } = boxStackSlot(order);
       const rowCount = below ? BOX_ROWS[0] : count;
@@ -562,7 +728,7 @@ export function createPixelChase(canvas, options = {}) {
 
   function placeBox(index) {
     if (!boxFrames[index]) return;
-    placedBoxes.push({ index });
+    placedBoxes.push({ index, revealScroll: nextDeskRevealScroll(BOX_TABLE) });
   }
 
   function mouseLayout(groundY, now) {
@@ -635,6 +801,9 @@ export function createPixelChase(canvas, options = {}) {
     placedBoxes.length = 0;
     flyingBox = null;
     nextBox = 0;
+    hungPosters.length = 0;
+    flyingPoster = null;
+    nextPoster = 0;
   }
 
   function listMouseIds() {
@@ -667,7 +836,7 @@ export function createPixelChase(canvas, options = {}) {
    * Animate the cat reaching a mouse, crawling out with the background, and returning.
    */
   function presentDrawing() {
-    if (catChase || flyingDrawing || flyingBox || !drawingFrames.length) return false;
+    if (catChase || flyingDrawing || flyingBox || flyingPoster || !drawingFrames.length) return false;
     const index = nextDrawing % drawingFrames.length;
     nextDrawing += 1;
     const frame = drawingFrames[index];
@@ -716,7 +885,7 @@ export function createPixelChase(canvas, options = {}) {
   }
 
   function presentBox() {
-    if (catChase || flyingDrawing || flyingBox || !boxFrames.length) return false;
+    if (catChase || flyingDrawing || flyingBox || flyingPoster || !boxFrames.length) return false;
     const index = nextBox % boxFrames.length;
     nextBox += 1;
     const frame = boxFrames[index];
@@ -755,8 +924,49 @@ export function createPixelChase(canvas, options = {}) {
     };
   }
 
+  function presentPoster() {
+    if (catChase || flyingDrawing || flyingBox || flyingPoster || !posterFrames.length) return false;
+    const index = nextPoster % posterFrames.length;
+    nextPoster += 1;
+    const frame = posterFrames[index];
+    const h = Math.max(px(14), Math.round(catSpriteSize() * 0.16));
+    const w = Math.max(1, Math.round(h * frame.width / frame.height));
+    const groundY = Math.floor(height * 0.82);
+    flyingPoster = {
+      index,
+      x: width + 4,
+      y: groundY - h,
+      w,
+      h,
+      phase: 'slide',
+    };
+    return true;
+  }
+
+  function startPosterCatch(groundY) {
+    if (catChase || !flyingPoster) return;
+    const cat = catRunBounds(groundY);
+    flyingPoster.x = cat.x + cat.w - px(4);
+    flyingPoster.phase = 'caught';
+    catChase = {
+      id: `poster-${flyingPoster.index}`,
+      kind: 'poster',
+      posterIndex: flyingPoster.index,
+      fromSlide: catSlide,
+      toSlide: catSlide,
+      t: 0,
+      dur: 0.25,
+      phase: 'grab',
+      floorMouse: null,
+      carried: { x: flyingPoster.x, w: flyingPoster.w },
+      grabScroll: scroll,
+      outScroll: scroll,
+      catchTime: 0,
+    };
+  }
+
   function eatMouse(id, onGrab) {
-    if (catChase || flyingDrawing || flyingBox) return Promise.resolve(false);
+    if (catChase || flyingDrawing || flyingBox || flyingPoster) return Promise.resolve(false);
     const idx = indexOfMouse(id ?? closestMouseId());
     if (idx < 0 || !mice.length) return Promise.resolve(false);
     const target = mice[idx];
@@ -816,6 +1026,13 @@ export function createPixelChase(canvas, options = {}) {
       const cat = catRunBounds(groundY);
       flyingBox.x -= dt * Math.max(width / 3.1, 90);
       if (flyingBox.x <= cat.x + cat.w) startBoxCatch(groundY);
+    }
+
+    if (flyingPoster?.phase === 'slide') {
+      const groundY = Math.floor(height * 0.82);
+      const cat = catRunBounds(groundY);
+      flyingPoster.x -= dt * Math.max(width / 3.1, 90);
+      if (flyingPoster.x <= cat.x + cat.w) startPosterCatch(groundY);
     }
 
     if (catChase) {
@@ -891,6 +1108,9 @@ export function createPixelChase(canvas, options = {}) {
             } else if (completedChase.kind === 'box') {
               flyingBox = null;
               placeBox(completedChase.boxIndex);
+            } else if (completedChase.kind === 'poster') {
+              flyingPoster = null;
+              hangPoster(completedChase.posterIndex);
             }
             completedChase.resolve?.(true);
           }
@@ -1027,6 +1247,22 @@ export function createPixelChase(canvas, options = {}) {
       }
     }
 
+    if (flyingPoster) {
+      const frameImage = posterFrames[flyingPoster.index];
+      let drawX = flyingPoster.x;
+      if (
+        flyingPoster.phase === 'caught'
+        && catChase?.carried
+        && (catChase.phase === 'grab' || catChase.phase === 'out' || catChase.phase === 'return')
+      ) {
+        drawX = catChase.carried.x - px(scroll - catChase.grabScroll);
+        flyingPoster.x = drawX;
+      }
+      if (frameImage) {
+        ctx.drawImage(frameImage, Math.round(drawX), flyingPoster.y, flyingPoster.w, flyingPoster.h);
+      }
+    }
+
     raf = requestAnimationFrame(frame);
   }
 
@@ -1061,6 +1297,7 @@ export function createPixelChase(canvas, options = {}) {
     eatMouse,
     presentDrawing,
     presentBox,
+    presentPoster,
     stop,
   };
 }

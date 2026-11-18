@@ -563,6 +563,12 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault();
     if (pixel.presentBox()) setStatus('A gift box slides across the stage…');
     else setStatus('The cat is busy');
+    return;
+  }
+  if (event.key === '4') {
+    event.preventDefault();
+    if (pixel.presentPoster()) setStatus('A poster slides across the stage…');
+    else setStatus('The cat is busy');
   }
 });
 
