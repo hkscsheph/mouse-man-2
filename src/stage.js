@@ -557,6 +557,12 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault();
     if (pixel.presentDrawing()) setStatus('A drawing slides across the stage…');
     else setStatus('The cat is busy');
+    return;
+  }
+  if (event.key === '3') {
+    event.preventDefault();
+    if (pixel.presentBox()) setStatus('A gift box slides across the stage…');
+    else setStatus('The cat is busy');
   }
 });
 

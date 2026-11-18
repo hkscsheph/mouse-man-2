@@ -172,15 +172,15 @@ export function createPixelChase(canvas, options = {}) {
    */
   let flyingDrawing = null;
 
-  function sliceDrawingFrames() {
-    const sourceWidth = drawingSource.naturalWidth;
-    const sourceHeight = drawingSource.naturalHeight;
-    if (!sourceWidth || !sourceHeight) return;
+  function sliceSpriteFrames(source, omitted = new Set(), knockout = 'near') {
+    const sourceWidth = source.naturalWidth;
+    const sourceHeight = source.naturalHeight;
+    if (!sourceWidth || !sourceHeight) return [];
     const sheet = document.createElement('canvas');
     sheet.width = sourceWidth;
     sheet.height = sourceHeight;
     const sheetContext = sheet.getContext('2d', { willReadFrequently: true });
-    sheetContext.drawImage(drawingSource, 0, 0);
+    sheetContext.drawImage(source, 0, 0);
     const image = sheetContext.getImageData(0, 0, sourceWidth, sourceHeight);
     const { data } = image;
     const background = [data[0], data[1], data[2]];
@@ -211,13 +211,12 @@ export function createPixelChase(canvas, options = {}) {
     };
     const frameSpansX = spans(columns);
     const frameSpansY = spans(rows);
-    const omittedDrawings = new Set([2, 4, 10]);
     const frames = [];
     let sheetIndex = 0;
     for (const [y0, y1] of frameSpansY) {
       for (const [x0, x1] of frameSpansX) {
         sheetIndex += 1;
-        if (omittedDrawings.has(sheetIndex)) continue;
+        if (omitted.has(sheetIndex)) continue;
         const frameWidth = x1 - x0 + 1;
         const frameHeight = y1 - y0 + 1;
         const frame = document.createElement('canvas');
@@ -225,11 +224,43 @@ export function createPixelChase(canvas, options = {}) {
         frame.height = frameHeight;
         const frameContext = frame.getContext('2d');
         const crop = sheetContext.getImageData(x0, y0, frameWidth, frameHeight);
-        for (let i = 0; i < crop.data.length; i += 4) {
-          const distance = Math.abs(crop.data[i] - background[0])
-            + Math.abs(crop.data[i + 1] - background[1])
-            + Math.abs(crop.data[i + 2] - background[2]);
-          if (distance <= 48) crop.data[i + 3] = 0;
+        const nearBackground = (index) => Math.abs(crop.data[index] - background[0])
+          + Math.abs(crop.data[index + 1] - background[1])
+          + Math.abs(crop.data[index + 2] - background[2]) <= 48;
+        if (knockout === 'edge') {
+          const cleared = new Uint8Array(frameWidth * frameHeight);
+          const pending = [];
+          const clearAt = (x, y) => {
+            if (x < 0 || y < 0 || x >= frameWidth || y >= frameHeight) return;
+            const pixel = y * frameWidth + x;
+            if (cleared[pixel] || !nearBackground(pixel * 4)) return;
+            cleared[pixel] = 1;
+            pending.push(pixel);
+          };
+          for (let x = 0; x < frameWidth; x += 1) {
+            clearAt(x, 0);
+            clearAt(x, frameHeight - 1);
+          }
+          for (let y = 0; y < frameHeight; y += 1) {
+            clearAt(0, y);
+            clearAt(frameWidth - 1, y);
+          }
+          while (pending.length) {
+            const pixel = pending.pop();
+            const x = pixel % frameWidth;
+            const y = (pixel - x) / frameWidth;
+            clearAt(x - 1, y);
+            clearAt(x + 1, y);
+            clearAt(x, y - 1);
+            clearAt(x, y + 1);
+          }
+          for (let pixel = 0; pixel < cleared.length; pixel += 1) {
+            crop.data[pixel * 4 + 3] = cleared[pixel] ? 0 : 255;
+          }
+        } else {
+          for (let i = 0; i < crop.data.length; i += 4) {
+            if (nearBackground(i)) crop.data[i + 3] = 0;
+          }
         }
         frameContext.putImageData(crop, 0, 0);
         let contentBottom = -1;
@@ -244,11 +275,30 @@ export function createPixelChase(canvas, options = {}) {
         frames.push(frame);
       }
     }
-    drawingFrames = frames;
+    return frames;
   }
 
-  drawingSource.addEventListener('load', sliceDrawingFrames, { once: true });
+  drawingSource.addEventListener('load', () => {
+    drawingFrames = sliceSpriteFrames(drawingSource, new Set([2, 4, 10]));
+  }, { once: true });
   drawingSource.src = new URL('./2-dvc.png', import.meta.url).href;
+
+  const boxSource = new Image();
+  /** @type {HTMLCanvasElement[]} */
+  let boxFrames = [];
+  /** @type {{ index: number }[]} */
+  const placedBoxes = [];
+  let nextBox = 0;
+  /**
+   * A gift box crossing the stage, then leaving with the cat.
+   * @type {null | { index: number, x: number, y: number, w: number, h: number, phase: 'slide' | 'caught' }}
+   */
+  let flyingBox = null;
+
+  boxSource.addEventListener('load', () => {
+    boxFrames = sliceSpriteFrames(boxSource, new Set(), 'edge');
+  }, { once: true });
+  boxSource.src = new URL('./3-ess.png', import.meta.url).href;
 
   function catSpriteSize() {
     return Math.round((width < 150 ? 40 : width < 240 ? 64 : 88) * spriteScale);
@@ -366,12 +416,10 @@ export function createPixelChase(canvas, options = {}) {
       ctx.fillRect(x + px(4), cabinetY + px(10), Math.max(1, px(3)), Math.max(1, px(1)));
     }
 
-    for (let i = 0; i < 3; i += 1) {
-      const deskWidth = 42 + (i % 2) * 8;
-      const x = Math.floor(px(wrap(i * 126 - scroll * 0.82, BASE_WIDTH + deskWidth) - deskWidth));
-      const y = groundY - Math.max(px(34), Math.floor(height * 0.18)) - 3;
-      drawDesk(x, y, px(deskWidth));
-    }
+    const desks = deskSlots(groundY);
+    drawPlacedBoxes(desks, 'below');
+    for (const desk of desks) drawDesk(desk.x, desk.top, desk.w);
+    drawPlacedBoxes(desks, 'stack');
 
     ctx.fillStyle = '#96623f';
     ctx.fillRect(0, groundY, width, height - groundY);
@@ -436,6 +484,85 @@ export function createPixelChase(canvas, options = {}) {
   function hangDrawing(index) {
     if (!drawingFrames[index]) return;
     hungDrawings.push({ index, fromTile: nextIncomingBoardTile() });
+  }
+
+  function deskSlots(groundY) {
+    const top = groundY - Math.max(px(34), Math.floor(height * 0.18)) - 3;
+    const desks = [];
+    for (let i = 0; i < 3; i += 1) {
+      const deskWidth = 42 + (i % 2) * 8;
+      const x = Math.floor(px(wrap(i * 126 - scroll * 0.82, BASE_WIDTH + deskWidth) - deskWidth));
+      desks.push({ x, top, w: px(deskWidth) });
+    }
+    return desks;
+  }
+
+  const BOX_TABLE = 1;
+  const BOX_ROWS = [4, 3, 2, 1];
+
+  function boxCarrySize(frame) {
+    const h = Math.max(px(14), Math.round(catSpriteSize() * 0.16));
+    return {
+      w: Math.max(1, Math.round(h * frame.width / frame.height)),
+      h,
+    };
+  }
+
+  function boxStackSlot(order) {
+    let remaining = order;
+    for (let row = 0; row < BOX_ROWS.length; row += 1) {
+      if (remaining < BOX_ROWS[row]) {
+        return { below: false, row, col: remaining, count: BOX_ROWS[row] };
+      }
+      remaining -= BOX_ROWS[row];
+    }
+    const perRow = BOX_ROWS[0];
+    return {
+      below: true,
+      row: Math.floor(remaining / perRow),
+      col: remaining % perRow,
+      count: perRow,
+    };
+  }
+
+  function drawPlacedBoxes(desks, layer) {
+    if (!placedBoxes.length) return;
+    const desk = desks[BOX_TABLE];
+    if (!desk) return;
+    const cellW = desk.w / BOX_ROWS[0];
+    const rowH = Math.max(1, Math.round(cellW * 1.16));
+    const step = Math.max(1, Math.round(rowH * 0.38));
+    const orders = [];
+    for (let order = 0; order < placedBoxes.length; order += 1) {
+      const slot = boxStackSlot(order);
+      if (layer === 'below' ? slot.below : !slot.below) orders.push(order);
+    }
+    orders.sort((a, b) => {
+      const sa = boxStackSlot(a);
+      const sb = boxStackSlot(b);
+      return sa.below ? sa.row - sb.row : sb.row - sa.row;
+    });
+    for (const order of orders) {
+      const frame = boxFrames[placedBoxes[order].index];
+      if (!frame) continue;
+      const { row, col, count, below } = boxStackSlot(order);
+      const rowCount = below ? BOX_ROWS[0] : count;
+      const rowW = cellW * rowCount;
+      const left = desk.x + (desk.w - rowW) / 2;
+      const edge = (index) => Math.round(left + rowW * index / rowCount);
+      const x = edge(col);
+      const w = Math.max(1, edge(col + 1) - x);
+      const h = Math.max(1, Math.round(w * frame.height / frame.width));
+      const y = below
+        ? Math.round(desk.top + px(6) + row * h)
+        : Math.round(desk.top - h - row * step);
+      if (x < width && x + w > 0) ctx.drawImage(frame, x, y, w, h);
+    }
+  }
+
+  function placeBox(index) {
+    if (!boxFrames[index]) return;
+    placedBoxes.push({ index });
   }
 
   function mouseLayout(groundY, now) {
@@ -505,6 +632,9 @@ export function createPixelChase(canvas, options = {}) {
     hungDrawings.length = 0;
     flyingDrawing = null;
     nextDrawing = 0;
+    placedBoxes.length = 0;
+    flyingBox = null;
+    nextBox = 0;
   }
 
   function listMouseIds() {
@@ -537,7 +667,7 @@ export function createPixelChase(canvas, options = {}) {
    * Animate the cat reaching a mouse, crawling out with the background, and returning.
    */
   function presentDrawing() {
-    if (catChase || flyingDrawing || !drawingFrames.length) return false;
+    if (catChase || flyingDrawing || flyingBox || !drawingFrames.length) return false;
     const index = nextDrawing % drawingFrames.length;
     nextDrawing += 1;
     const frame = drawingFrames[index];
@@ -585,8 +715,48 @@ export function createPixelChase(canvas, options = {}) {
     };
   }
 
+  function presentBox() {
+    if (catChase || flyingDrawing || flyingBox || !boxFrames.length) return false;
+    const index = nextBox % boxFrames.length;
+    nextBox += 1;
+    const frame = boxFrames[index];
+    const { w, h } = boxCarrySize(frame);
+    const groundY = Math.floor(height * 0.82);
+    flyingBox = {
+      index,
+      x: width + 4,
+      y: groundY - h,
+      w,
+      h,
+      phase: 'slide',
+    };
+    return true;
+  }
+
+  function startBoxCatch(groundY) {
+    if (catChase || !flyingBox) return;
+    const cat = catRunBounds(groundY);
+    flyingBox.x = cat.x + cat.w - px(4);
+    flyingBox.phase = 'caught';
+    catChase = {
+      id: `box-${flyingBox.index}`,
+      kind: 'box',
+      boxIndex: flyingBox.index,
+      fromSlide: catSlide,
+      toSlide: catSlide,
+      t: 0,
+      dur: 0.25,
+      phase: 'grab',
+      floorMouse: null,
+      carried: { x: flyingBox.x, w: flyingBox.w },
+      grabScroll: scroll,
+      outScroll: scroll,
+      catchTime: 0,
+    };
+  }
+
   function eatMouse(id, onGrab) {
-    if (catChase || flyingDrawing) return Promise.resolve(false);
+    if (catChase || flyingDrawing || flyingBox) return Promise.resolve(false);
     const idx = indexOfMouse(id ?? closestMouseId());
     if (idx < 0 || !mice.length) return Promise.resolve(false);
     const target = mice[idx];
@@ -639,6 +809,13 @@ export function createPixelChase(canvas, options = {}) {
       const cat = catRunBounds(groundY);
       flyingDrawing.x -= dt * Math.max(width / 3.1, 90);
       if (flyingDrawing.x <= cat.x + cat.w) startDrawingCatch(groundY);
+    }
+
+    if (flyingBox?.phase === 'slide') {
+      const groundY = Math.floor(height * 0.82);
+      const cat = catRunBounds(groundY);
+      flyingBox.x -= dt * Math.max(width / 3.1, 90);
+      if (flyingBox.x <= cat.x + cat.w) startBoxCatch(groundY);
     }
 
     if (catChase) {
@@ -711,6 +888,9 @@ export function createPixelChase(canvas, options = {}) {
             if (completedChase.kind === 'drawing') {
               flyingDrawing = null;
               hangDrawing(completedChase.drawingIndex);
+            } else if (completedChase.kind === 'box') {
+              flyingBox = null;
+              placeBox(completedChase.boxIndex);
             }
             completedChase.resolve?.(true);
           }
@@ -831,6 +1011,22 @@ export function createPixelChase(canvas, options = {}) {
       }
     }
 
+    if (flyingBox) {
+      const frameImage = boxFrames[flyingBox.index];
+      let drawX = flyingBox.x;
+      if (
+        flyingBox.phase === 'caught'
+        && catChase?.carried
+        && (catChase.phase === 'grab' || catChase.phase === 'out' || catChase.phase === 'return')
+      ) {
+        drawX = catChase.carried.x - px(scroll - catChase.grabScroll);
+        flyingBox.x = drawX;
+      }
+      if (frameImage) {
+        ctx.drawImage(frameImage, Math.round(drawX), flyingBox.y, flyingBox.w, flyingBox.h);
+      }
+    }
+
     raf = requestAnimationFrame(frame);
   }
 
@@ -864,6 +1060,7 @@ export function createPixelChase(canvas, options = {}) {
     closestMouseId,
     eatMouse,
     presentDrawing,
+    presentBox,
     stop,
   };
 }
