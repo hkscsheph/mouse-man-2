@@ -147,6 +147,13 @@ const pixel = createPixelChase(pixelCanvas, {
   }),
 });
 
+const propStatus = {
+  drawing: 'A drawing slides across the stage…',
+  box: 'A gift box slides across the stage…',
+  poster: 'A poster slides across the stage…',
+};
+pixel.setPropListener((kind) => setStatus(propStatus[kind]));
+
 function layoutStage() {
   const photoH = Math.floor(window.innerHeight * 0.48);
   photoCanvas.style.height = `${photoH}px`;
@@ -553,21 +560,13 @@ window.addEventListener('keydown', (event) => {
     void admitParticipant(null);
     return;
   }
-  if (event.key === '2') {
+  if (event.key === '2' || event.key === '3' || event.key === '4') {
     event.preventDefault();
-    if (pixel.presentDrawing()) setStatus('A drawing slides across the stage…');
-    else setStatus('The cat is busy');
-    return;
-  }
-  if (event.key === '3') {
-    event.preventDefault();
-    if (pixel.presentBox()) setStatus('A gift box slides across the stage…');
-    else setStatus('The cat is busy');
-    return;
-  }
-  if (event.key === '4') {
-    event.preventDefault();
-    if (pixel.presentPoster()) setStatus('A poster slides across the stage…');
+    if (event.repeat) return;
+    const kind = event.key === '2' ? 'drawing' : event.key === '3' ? 'box' : 'poster';
+    const result = pixel.requestProp(kind);
+    if (result === 'started') setStatus(propStatus[kind]);
+    else if (result === 'queued') setStatus('Queued. The cat will bring it in next.');
     else setStatus('The cat is busy');
   }
 });

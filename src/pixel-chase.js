@@ -804,6 +804,7 @@ export function createPixelChase(canvas, options = {}) {
     hungPosters.length = 0;
     flyingPoster = null;
     nextPoster = 0;
+    propQueue.length = 0;
   }
 
   function listMouseIds() {
@@ -835,6 +836,38 @@ export function createPixelChase(canvas, options = {}) {
   /**
    * Animate the cat reaching a mouse, crawling out with the background, and returning.
    */
+  const propQueue = [];
+  let onPropStart = null;
+
+  function propBusy() {
+    return Boolean(catChase || flyingDrawing || flyingBox || flyingPoster);
+  }
+
+  function startProp(kind) {
+    if (kind === 'drawing') return presentDrawing();
+    if (kind === 'box') return presentBox();
+    if (kind === 'poster') return presentPoster();
+    return false;
+  }
+
+  function pumpPropQueue() {
+    if (propBusy()) return;
+    while (propQueue.length) {
+      const kind = propQueue.shift();
+      if (!startProp(kind)) continue;
+      onPropStart?.(kind);
+      return;
+    }
+  }
+
+  function requestProp(kind) {
+    if (propBusy()) {
+      propQueue.push(kind);
+      return 'queued';
+    }
+    return startProp(kind) ? 'started' : 'unavailable';
+  }
+
   function presentDrawing() {
     if (catChase || flyingDrawing || flyingBox || flyingPoster || !drawingFrames.length) return false;
     const index = nextDrawing % drawingFrames.length;
@@ -1113,6 +1146,7 @@ export function createPixelChase(canvas, options = {}) {
               hangPoster(completedChase.posterIndex);
             }
             completedChase.resolve?.(true);
+            pumpPropQueue();
           }
         }
       }
@@ -1298,6 +1332,10 @@ export function createPixelChase(canvas, options = {}) {
     presentDrawing,
     presentBox,
     presentPoster,
+    requestProp,
+    setPropListener(listener) {
+      onPropStart = listener;
+    },
     stop,
   };
 }
