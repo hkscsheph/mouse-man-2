@@ -42,6 +42,7 @@ export function stageUniformColor(slot) {
 }
 
 const STEP_HEIGHT = 0.12;
+const STEP_DEPTH = 0.62;
 const STEP_DROP = 0.16;
 // The scaled foot sole sits just below the mouse origin.
 const FOOT_SOLE = 0.021;
@@ -140,7 +141,7 @@ function poseClassMouse(entry, time) {
   }
 }
 
-export function createStagePhoto(canvas, { idle = false } = {}) {
+export function createStagePhoto(canvas, { idle = false, pinStandBottom = false } = {}) {
   let rowRise = DEFAULT_ROW_RISE;
   let cameraHeight = DEFAULT_CAMERA_HEIGHT;
   let cameraX = 0;
@@ -182,7 +183,7 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
   scene.add(backdrop);
 
   const stepMaterial = new THREE.MeshStandardMaterial({ color: 0x79553b, roughness: 0.86 });
-  const stepGeometry = new THREE.BoxGeometry(7, STEP_HEIGHT, 0.62);
+  const stepGeometry = new THREE.BoxGeometry(7, STEP_HEIGHT, STEP_DEPTH);
   const rowSteps = [];
   for (let row = 0; row < ROWS; row += 1) {
     const pose = slotPose(row * COLS, rowRise);
@@ -221,16 +222,44 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
     scratchCanvas.style.zIndex = '2';
   }
 
+  const standBottom = new THREE.Vector3();
+  const worldUpInCamera = new THREE.Vector3();
+
+  function frontStandBottom(target) {
+    const pose = slotPose(0, rowRise);
+    return target.set(0, pose.y - STEP_DROP - STEP_HEIGHT / 2, pose.z + STEP_DEPTH / 2);
+  }
+
+  // Shift that puts the front riser's bottom edge on the bottom of the view.
+  // Camera orientation stays put; only a shared vertical pan of camera and target changes.
+  function standBottomLift() {
+    camera.updateMatrixWorld(true);
+    frontStandBottom(standBottom).applyMatrix4(camera.matrixWorldInverse);
+    worldUpInCamera.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
+    const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const denom = worldUpInCamera.y - worldUpInCamera.z * tanHalf;
+    if (Math.abs(denom) < 1e-5) return 0;
+    return (standBottom.y - tanHalf * standBottom.z) / denom;
+  }
+
   function frame() {
     const w = canvas.clientWidth || window.innerWidth;
     const h = canvas.clientHeight || Math.floor(window.innerHeight * 0.42);
     camera.aspect = w / Math.max(1, h);
     const horizontalHalfFov = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect);
     const fitDistance = 3.8 / Math.max(0.01, Math.tan(horizontalHalfFov));
-    cameraTarget.y = 0.85 + rowRise - DEFAULT_ROW_RISE + cameraTargetOffsetY;
+    const panY = pinStandBottom ? cameraTargetOffsetY : 0;
+    cameraTarget.y = 0.85 + rowRise - DEFAULT_ROW_RISE + (pinStandBottom ? 0 : cameraTargetOffsetY);
     const baseDistance = Math.max(5.2, cameraTarget.z + fitDistance);
-    camera.position.set(cameraX, cameraHeight, Math.max(3.5, baseDistance + cameraDepthOffset));
+    const baseHeight = pinStandBottom ? cameraHeight - panY : cameraHeight;
+    camera.position.set(cameraX, baseHeight, Math.max(3.5, baseDistance + cameraDepthOffset));
     camera.lookAt(cameraTarget);
+    if (pinStandBottom) {
+      const lift = standBottomLift();
+      camera.position.y = baseHeight + lift + panY;
+      cameraTarget.y += lift + panY;
+      camera.lookAt(cameraTarget);
+    }
     camera.updateProjectionMatrix();
     if (w !== renderWidth || h !== renderHeight) {
       renderer.setSize(w, h, false);
