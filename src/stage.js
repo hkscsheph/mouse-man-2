@@ -1,8 +1,7 @@
 import { createPixelChase } from './pixel-chase.js';
 import { createStagePhoto, DEFAULT_STAGE_UNIFORM_ENABLED } from './stage-photo.js';
-import { createFallbackQrScanner } from './stage-qr-scanner.js';
 import { createScratchSound } from './stage-sound.js';
-import { connectStageWebSocket, postStageWsMessage } from './stage-ws.js';
+import { connectStageWebSocket } from './stage-ws.js';
 import {
   parseMouseFurColorFromQrText,
   parseMouseIdFromQrText,
@@ -22,6 +21,8 @@ const sharePanel = document.querySelector('#share');
   if (el) el.hidden = true;
 });
 
+if (gate) gate.hidden = true;
+
 const pixelCanvas = document.querySelector('#view');
 pixelCanvas.classList.add('pixelated', 'stage-pixel');
 const initialPixelSpriteScale = 3;
@@ -35,22 +36,19 @@ const hud = document.createElement('div');
 hud.id = 'stage-hud';
 hud.hidden = true;
 hud.innerHTML = `
-  <p id="stage-status" data-state="idle" role="status" aria-live="polite">Scan participant QR codes (camera) or press <kbd>A</kbd> to admit demo ID.</p>
+  <p id="stage-status" data-state="idle" role="status" aria-live="polite">Waiting for a signal.</p>
   <p id="stage-ws-status">WebSocket: connecting…</p>
   <p id="stage-count">Active mice: 0</p>
-  <p id="stage-scale">Pixel cat &amp; mice: ${Math.round(initialPixelSpriteScale * 100)}% (<kbd>+</kbd>/<kbd>-</kbd> to resize)</p>
-  <p id="stage-uniform" aria-live="polite">3D uniforms: ${DEFAULT_STAGE_UNIFORM_ENABLED ? 'on' : 'off'} (<kbd>U</kbd> to toggle)</p>
-  <div id="stage-row-height">
-    <label for="stage-row-rise">3D row rise: <output id="stage-row-rise-value">0.80</output></label>
-    <input id="stage-row-rise" type="range" min="0.2" max="0.9" step="0.02" value="0.8" aria-label="3D row rise">
-  </div>
-  <div id="stage-camera-height">
-    <label for="stage-camera">Camera height: <output id="stage-camera-value">1.80</output></label>
-    <input id="stage-camera" type="range" min="0.3" max="2.5" step="0.05" value="1.8" aria-label="3D camera height">
-  </div>
-  <p>Arrow keys move the camera left/right and closer/farther; hold Space + Up/Down to pan vertically.</p>
 `;
 document.body.appendChild(hud);
+
+const admitInput = document.createElement('input');
+admitInput.id = 'stage-admit';
+admitInput.type = 'text';
+admitInput.placeholder = 'Paste QR URL or mouse id';
+admitInput.autocomplete = 'off';
+admitInput.hidden = true;
+document.body.appendChild(admitInput);
 
 const soundNotice = document.createElement('div');
 soundNotice.id = 'stage-sound-notice';
@@ -79,28 +77,6 @@ soundButton.addEventListener('click', () => void scratchSound.unlock());
 document.addEventListener('pointerdown', () => void scratchSound.unlock());
 document.addEventListener('keydown', () => void scratchSound.unlock());
 
-const scanVideo = document.createElement('video');
-scanVideo.id = 'stage-scan';
-scanVideo.playsInline = true;
-scanVideo.muted = true;
-scanVideo.hidden = true;
-scanVideo.setAttribute('aria-label', 'Webcam preview hidden; QR scanning continues');
-scanVideo.setAttribute('aria-keyshortcuts', 'T');
-scanVideo.title = 'Press T to show the HUD and webcam preview';
-hud.setAttribute('aria-keyshortcuts', 'T');
-document.body.appendChild(scanVideo);
-
-const scanCanvas = document.createElement('canvas');
-const scanContext = scanCanvas.getContext('2d', { willReadFrequently: true });
-
-const admitInput = document.createElement('input');
-admitInput.id = 'stage-admit';
-admitInput.type = 'text';
-admitInput.placeholder = 'Paste QR URL or mouse id';
-admitInput.autocomplete = 'off';
-admitInput.hidden = true;
-document.body.appendChild(admitInput);
-
 function setStatus(text, state = 'idle') {
   const el = document.querySelector('#stage-status');
   if (el) {
@@ -122,18 +98,6 @@ function updateCount() {
 const admittedIds = new Set();
 
 const photo = createStagePhoto(photoCanvas);
-const rowRiseInput = document.querySelector('#stage-row-rise');
-const rowRiseValue = document.querySelector('#stage-row-rise-value');
-rowRiseInput.addEventListener('input', () => {
-  const rowRise = photo.setRowRise(rowRiseInput.value);
-  rowRiseValue.value = rowRise.toFixed(2);
-});
-const cameraHeightInput = document.querySelector('#stage-camera');
-const cameraHeightValue = document.querySelector('#stage-camera-value');
-cameraHeightInput.addEventListener('input', () => {
-  const cameraHeight = photo.setCameraHeight(cameraHeightInput.value);
-  cameraHeightValue.value = cameraHeight.toFixed(2);
-});
 const pixel = createPixelChase(pixelCanvas, {
   initialCount: 0,
   initialSpriteScale: initialPixelSpriteScale,
@@ -336,13 +300,16 @@ function restartStage() {
   pixel.clearMice();
   photo.clearRoster();
   admittedIds.clear();
-  lastScan = '';
-  scanCooldown = 0;
   updateCount();
-  setStatus('Stage restarted. Scan a QR code to admit mice.');
+  setStatus('Stage restarted. Waiting for a signal.');
+}
+
+function logStageControl(message) {
+  console.log('stage signal', message);
 }
 
 function handleStageMessage(message) {
+  logStageControl(message);
   if (message?.type === 'restartAll') {
     restartStage();
     return;
@@ -354,132 +321,50 @@ function handleStageMessage(message) {
     void pumpEats();
     return;
   }
-  eatQueue.push(message || { type: 'catEat' });
-  void pumpEats();
+  if (message?.type === 'admit') {
+    const raw = typeof message.raw === 'string' ? message.raw.trim() : '';
+    void admitParticipant(raw || null);
+    return;
+  }
+  if (message?.type === 'scratch') {
+    playCatScratch();
+    return;
+  }
+  if (message?.type === 'prop') {
+    const result = pixel.requestProp(message.kind);
+    if (result === 'started') setStatus(propStatus[message.kind]);
+    else if (result === 'queued') setStatus('Queued. The cat will bring it in next.');
+    else setStatus('The cat is busy');
+    return;
+  }
+  if (message?.type === 'uniform') {
+    uniformsEnabled = photo.setUniformEnabled(
+      typeof message.enabled === 'boolean' ? message.enabled : !uniformsEnabled,
+    );
+    setStatus(`3D uniforms: ${uniformsEnabled ? 'on' : 'off'}`);
+    return;
+  }
+  if (message?.type === 'spriteScale') {
+    const scale = pixel.adjustSpriteScale(Number(message.delta));
+    setStatus(`Pixel cat & mice: ${Math.round(scale * 100)}%`);
+    return;
+  }
+  if (message?.type === 'camera') {
+    const [x = 0, depth = 0, height = 0] = message.move;
+    const cameraHeight = photo.moveCamera(Number(x) || 0, Number(depth) || 0, Number(height) || 0);
+    setStatus(`Camera height: ${cameraHeight.toFixed(2)}`);
+    return;
+  }
+  if (message?.type === 'catEat') {
+    eatQueue.push(message);
+    void pumpEats();
+  }
 }
 
 connectStageWebSocket((msg) => handleStageMessage(msg), {
   onStatus: setWsStatus,
 });
 
-async function startScanCamera() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false,
-    });
-    scanVideo.srcObject = stream;
-    await scanVideo.play();
-    if (gate) gate.classList.add('hidden');
-    if ('BarcodeDetector' in window) {
-      try {
-        // @ts-ignore — BarcodeDetector is not in all TS libs
-        barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
-      } catch (error) {
-        console.warn('Native QR scanner unavailable; using fallback', error);
-      }
-    }
-    if (!scanContext) {
-      setStatus('Unable to start QR scanning — press A to enter an ID', 'error');
-      return;
-    }
-    setStatus(
-      barcodeDetector
-        ? 'Camera ready — point it at a participant QR code'
-        : 'Camera ready — QR scanner fallback active; point it at a participant code',
-    );
-    scanLoop();
-  } catch (error) {
-    console.warn(error);
-    const denied =
-      error?.name === 'NotAllowedError' ||
-      error?.name === 'PermissionDeniedError' ||
-      error?.name === 'SecurityError';
-    setStatus(
-      denied
-        ? 'Camera access denied — allow camera permission, or press A to enter an ID'
-        : 'Camera unavailable — press A to enter an ID or D for a demo guest',
-      'error',
-    );
-    if (gate) {
-      gate.textContent = 'Press A to paste a QR link / mouse id';
-      gate.classList.remove('hidden');
-    }
-  }
-}
-
-let lastScan = '';
-let scanCooldown = 0;
-let lastScanAttempt = 0;
-let barcodeDetector = null;
-let fallbackScanner = null;
-
-async function scanWithFallback() {
-  if (!fallbackScanner) fallbackScanner = createFallbackQrScanner(scanCanvas, scanContext);
-  return fallbackScanner.detect(scanVideo);
-}
-
-async function scanLoop() {
-  if (!scanVideo.srcObject) return;
-  const now = performance.now();
-  if (now - lastScanAttempt < 120) {
-    requestAnimationFrame(scanLoop);
-    return;
-  }
-  lastScanAttempt = now;
-  if (now < scanCooldown) {
-    requestAnimationFrame(scanLoop);
-    return;
-  }
-
-  try {
-    let raw = '';
-    if (barcodeDetector && scanVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-      try {
-        const codes = await barcodeDetector.detect(scanVideo);
-        raw = codes[0]?.rawValue ?? '';
-      } catch (error) {
-        console.warn('Native QR scanner failed; using fallback', error);
-        barcodeDetector = null;
-        setStatus('Camera ready — QR scanner fallback active; point it at a participant code');
-        if (scanVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-          raw = await scanWithFallback();
-        }
-      }
-    } else if (!barcodeDetector && scanVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-      raw = await scanWithFallback();
-    }
-    if (raw && raw !== lastScan) {
-      lastScan = raw;
-      scanCooldown = now + 2500;
-      await admitParticipant(raw);
-    }
-  } catch (error) {
-    console.warn('QR detect failed', error);
-  }
-
-  requestAnimationFrame(scanLoop);
-}
-
-function openAdmitPrompt() {
-  admitInput.hidden = false;
-  admitInput.value = '';
-  admitInput.focus();
-}
-
-admitInput.addEventListener('keydown', async (event) => {
-  if (event.key !== 'Enter') return;
-  const value = admitInput.value.trim();
-  admitInput.hidden = true;
-  if (!value) return;
-  await admitParticipant(value);
-});
-
-admitInput.addEventListener('blur', () => {
-  admitInput.hidden = true;
-});
-
-let spacePressed = false;
 let uniformsEnabled = DEFAULT_STAGE_UNIFORM_ENABLED;
 let catScratchFrames = null;
 let catScratchPlaying = false;
@@ -748,6 +633,26 @@ async function startScratchGif(framesPromise, overlay, runCat, startCatHeight) {
   requestAnimationFrame(tick);
 }
 
+function openAdmitPrompt() {
+  admitInput.hidden = false;
+  admitInput.value = '';
+  admitInput.focus();
+}
+
+admitInput.addEventListener('keydown', async (event) => {
+  if (event.key !== 'Enter') return;
+  const value = admitInput.value.trim();
+  admitInput.hidden = true;
+  if (!value) return;
+  handleStageMessage({ type: 'admit', raw: value });
+});
+
+admitInput.addEventListener('blur', () => {
+  admitInput.hidden = true;
+});
+
+let spacePressed = false;
+
 window.addEventListener('keydown', (event) => {
   const activeElement = document.activeElement;
   const isEditingControl = activeElement instanceof HTMLElement
@@ -769,73 +674,56 @@ window.addEventListener('keydown', (event) => {
     }[event.key];
     if (movement) {
       event.preventDefault();
-      const cameraHeight = photo.moveCamera(...movement);
-      cameraHeightInput.value = String(cameraHeight);
-      cameraHeightValue.value = cameraHeight.toFixed(2);
+      handleStageMessage({ type: 'camera', move: movement });
       return;
     }
   }
   if (event.repeat) return;
+  if ((event.key === 't' || event.key === 'T') && !isEditingControl) {
+    event.preventDefault();
+    hud.hidden = !hud.hidden;
+    logStageControl({ type: 'hud', hidden: hud.hidden });
+    return;
+  }
   if ((event.key === 'u' || event.key === 'U') && !isEditingControl) {
     event.preventDefault();
-    uniformsEnabled = photo.setUniformEnabled(!uniformsEnabled);
-    document.querySelector('#stage-uniform').textContent =
-      `3D uniforms: ${uniformsEnabled ? 'on' : 'off'} (U to toggle)`;
+    handleStageMessage({ type: 'uniform' });
     return;
   }
-  const scaleDelta =
-    event.key === '+' || event.code === 'NumpadAdd'
-      || event.key === '=' || event.code === 'Equal'
-      ? 0.1
-      : event.key === '-' || event.code === 'NumpadSubtract'
-        ? -0.1
-        : 0;
+  const scaleDelta = event.key === '+' || event.code === 'NumpadAdd'
+    || event.key === '=' || event.code === 'Equal'
+    ? 0.1
+    : event.key === '-' || event.code === 'NumpadSubtract'
+      ? -0.1
+      : 0;
   if (scaleDelta && document.activeElement !== admitInput) {
     event.preventDefault();
-    const scale = pixel.adjustSpriteScale(scaleDelta);
-    const el = document.querySelector('#stage-scale');
-    if (el) el.textContent = `Pixel cat & mice: ${Math.round(scale * 100)}%`;
-    return;
-  }
-  if ((event.key === 't' || event.key === 'T') && document.activeElement !== admitInput) {
-    event.preventDefault();
-    const hideOverlay = !hud.hidden;
-    hud.hidden = hideOverlay;
-    scanVideo.hidden = hideOverlay;
-    scanVideo.title = hideOverlay
-      ? 'Press T to show the HUD and webcam preview'
-      : 'Press T to hide the HUD and webcam preview';
-    scanVideo.setAttribute(
-      'aria-label',
-      hideOverlay
-        ? 'Webcam preview hidden; QR scanning continues'
-        : 'Live webcam preview for QR scanning',
-    );
+    handleStageMessage({ type: 'spriteScale', delta: scaleDelta });
     return;
   }
   if ((event.key === 'q' || event.key === 'Q') && document.activeElement !== admitInput) {
     event.preventDefault();
-    playCatScratch();
+    handleStageMessage({ type: 'scratch' });
     return;
   }
   if (event.key === 'a' || event.key === 'A') {
     event.preventDefault();
+    logStageControl({ type: 'admitPrompt' });
     openAdmitPrompt();
     return;
   }
   if (event.key === 'e' || event.key === 'E') {
     event.preventDefault();
-    postStageWsMessage({ type: 'catEat' });
+    handleStageMessage({ type: 'catEat' });
     return;
   }
   if (event.key === 'd' || event.key === 'D') {
     event.preventDefault();
-    void admitParticipant(null);
+    handleStageMessage({ type: 'admit' });
     return;
   }
   if (event.key === '1' || event.key === '2' || event.key === '3' || event.key === '4' || event.key === '5') {
     event.preventDefault();
-    if (event.repeat) return;
     const kind = event.key === '1'
       ? 'figure'
       : event.key === '2'
@@ -845,10 +733,7 @@ window.addEventListener('keydown', (event) => {
           : event.key === '4'
             ? 'poster'
             : 'note';
-    const result = pixel.requestProp(kind);
-    if (result === 'started') setStatus(propStatus[kind]);
-    else if (result === 'queued') setStatus('Queued. The cat will bring it in next.');
-    else setStatus('The cat is busy');
+    handleStageMessage({ type: 'prop', kind });
   }
 });
 
@@ -859,11 +744,5 @@ window.addEventListener('keyup', (event) => {
 window.addEventListener('blur', () => {
   spacePressed = false;
 });
-
-if (gate) {
-  gate.textContent = 'Starting main stage…';
-}
-
-startScanCamera();
 
 export {};

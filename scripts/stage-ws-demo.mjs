@@ -27,6 +27,16 @@ function broadcast(obj) {
 wss.on('connection', (socket) => {
   console.log('client connected');
   socket.send(JSON.stringify({ type: 'hello', message: 'stage ws demo ready' }));
+  socket.on('message', (data) => {
+    let message;
+    try {
+      message = JSON.parse(data.toString());
+    } catch {
+      return;
+    }
+    if (!message || typeof message.type !== 'string' || message.type === 'hello') return;
+    broadcast(message);
+  });
 });
 
 httpServer.listen(PORT, () => {

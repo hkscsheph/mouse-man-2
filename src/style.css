@@ -216,9 +216,92 @@ body.stage-mode {
   flex-direction: column-reverse;
 }
 
-body.stage-mode #gate {
-  top: 40%;
-  bottom: auto;
+body.stage-mode #gate,
+body.stage-mode #cam {
+  display: none;
+}
+
+body.signal-mode {
+  background: #1c1915;
+  color: #f5e9cd;
+  overflow: auto;
+}
+
+body.signal-mode #view,
+body.signal-mode #gate,
+body.signal-mode #cam,
+body.signal-mode #tune-toggle,
+body.signal-mode #tune,
+body.signal-mode #share {
+  display: none;
+}
+
+#signal-root {
+  box-sizing: border-box;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px 16px 40px;
+}
+
+#signal-root h1,
+#signal-root h2 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+}
+
+#signal-root h2 {
+  margin-top: 22px;
+  font-size: 1rem;
+}
+
+#signal-status,
+#signal-ws {
+  margin: 0 0 8px;
+}
+
+#signal-cam {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  margin: 12px 0;
+  background: #000;
+  object-fit: cover;
+}
+
+#signal-admit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+}
+
+#signal-admit label {
+  flex: 1 0 100%;
+}
+
+#signal-admit input {
+  flex: 1 1 180px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  background: #f5e9cd;
+  color: #1c1915;
+}
+
+.signal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#signal-root button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 0;
+  background: #e1b16e;
+  color: #1c1915;
+  font: inherit;
+  cursor: pointer;
 }
 
 body.transfer-mode {
