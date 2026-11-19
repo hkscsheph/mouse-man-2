@@ -152,6 +152,7 @@ const propStatus = {
   drawing: 'A drawing slides across the stage…',
   box: 'A gift box slides across the stage…',
   poster: 'A poster slides across the stage…',
+  note: 'A note slides across the stage…',
 };
 pixel.setPropListener((kind) => setStatus(propStatus[kind]));
 
@@ -832,10 +833,18 @@ window.addEventListener('keydown', (event) => {
     void admitParticipant(null);
     return;
   }
-  if (event.key === '1' || event.key === '2' || event.key === '3' || event.key === '4') {
+  if (event.key === '1' || event.key === '2' || event.key === '3' || event.key === '4' || event.key === '5') {
     event.preventDefault();
     if (event.repeat) return;
-    const kind = event.key === '1' ? 'figure' : event.key === '2' ? 'drawing' : event.key === '3' ? 'box' : 'poster';
+    const kind = event.key === '1'
+      ? 'figure'
+      : event.key === '2'
+        ? 'drawing'
+        : event.key === '3'
+          ? 'box'
+          : event.key === '4'
+            ? 'poster'
+            : 'note';
     const result = pixel.requestProp(kind);
     if (result === 'started') setStatus(propStatus[kind]);
     else if (result === 'queued') setStatus('Queued. The cat will bring it in next.');
