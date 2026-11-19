@@ -23,7 +23,8 @@ function onePixel(pxFn) {
 }
 
 export function createPixelChase(canvas, options = {}) {
-  const ctx = canvas.getContext('2d');
+  let ctx = canvas.getContext('2d');
+  let viewPad = 0;
   let width = BASE_WIDTH;
   let height = 200;
   let worldScale = 1;
@@ -607,7 +608,8 @@ export function createPixelChase(canvas, options = {}) {
 
   function drawClassroom(groundY) {
     const wallOffset = px(scroll / 2) % width;
-    for (let x = -wallOffset; x < width; x += width) {
+    const extraTiles = viewPad > 0 ? Math.ceil(viewPad / Math.max(1, width)) : 0;
+    for (let x = -wallOffset - extraTiles * width; x < width; x += width) {
       ctx.save();
       ctx.translate(x, 0);
       drawClassroomWall(groundY);
@@ -618,12 +620,17 @@ export function createPixelChase(canvas, options = {}) {
     drawWindowNotes();
     const cabinetY = groundY - px(20);
     ctx.fillStyle = '#936541';
-    ctx.fillRect(0, cabinetY, width, px(23));
+    ctx.fillRect(-viewPad, cabinetY, width + viewPad, px(23));
     ctx.fillStyle = '#c48b53';
-    ctx.fillRect(0, cabinetY, width, Math.max(1, px(2)));
+    ctx.fillRect(-viewPad, cabinetY, width + viewPad, Math.max(1, px(2)));
     const cabinetStride = Math.max(1, px(48));
     const cabinetOffset = px(scroll) % cabinetStride;
-    for (let x = px(32) - cabinetOffset; x < width; x += cabinetStride) {
+    let cabinetX = px(32) - cabinetOffset;
+    if (viewPad > 0) {
+      const steps = Math.ceil((cabinetX + viewPad) / cabinetStride);
+      cabinetX -= steps * cabinetStride;
+    }
+    for (let x = cabinetX; x < width; x += cabinetStride) {
       ctx.fillStyle = '#6e4b38';
       ctx.fillRect(x, cabinetY + px(3), Math.max(1, px(2)), px(18));
       ctx.fillStyle = '#d2a36b';
@@ -636,12 +643,19 @@ export function createPixelChase(canvas, options = {}) {
     drawPlacedBoxes(desks, 'stack');
 
     ctx.fillStyle = '#96623f';
-    ctx.fillRect(0, groundY, width, height - groundY);
+    ctx.fillRect(-viewPad, groundY, width + viewPad, height - groundY);
     ctx.fillStyle = '#d5a266';
-    ctx.fillRect(0, groundY, width, Math.max(1, px(2)));
+    ctx.fillRect(-viewPad, groundY, width + viewPad, Math.max(1, px(2)));
     const tileWidth = Math.max(px(32), 2);
     const tileOffset = px(scroll) % (tileWidth * 2);
-    for (let i = 0, x = -tileOffset; x < width; i += 1, x += tileWidth) {
+    let floorX = -tileOffset;
+    let floorIndex = 0;
+    if (viewPad > 0) {
+      const steps = Math.ceil((floorX + viewPad) / tileWidth);
+      floorX -= steps * tileWidth;
+      floorIndex -= steps;
+    }
+    for (let i = floorIndex, x = floorX; x < width; i += 1, x += tileWidth) {
       ctx.fillStyle = i % 2 ? '#a16a43' : '#8c593a';
       ctx.fillRect(x, groundY + px(2), tileWidth - 1, height - groundY - px(2));
       ctx.fillStyle = '#c18a55';
@@ -679,8 +693,9 @@ export function createPixelChase(canvas, options = {}) {
     if (!anchor) return;
     const anchorSize = smallDrawingSize(anchor);
     const anchorBottom = boardTop - px(2) - anchorSize.h * (anchor.bottomInset || 0);
-    const firstTile = Math.floor(scrollPx / width) - 1;
-    const lastTile = firstTile + 3;
+    const tilePad = viewPad > 0 ? Math.ceil(viewPad / width) : 0;
+    const firstTile = Math.floor(scrollPx / width) - 1 - tilePad;
+    const lastTile = firstTile + 3 + tilePad;
     for (let tile = firstTile; tile <= lastTile; tile += 1) {
       let worldX = tile * width + boardX;
       for (const item of hungDrawings) {
@@ -690,7 +705,7 @@ export function createPixelChase(canvas, options = {}) {
         const { w, h } = smallDrawingSize(frame);
         const x = Math.round(worldX - scrollPx);
         const y = Math.round(anchorBottom - h * (1 - (frame.bottomInset || 0)));
-        if (x < width && x + w > 0) ctx.drawImage(frame, x, y, w, h);
+        if (x < width && x + w > -viewPad) ctx.drawImage(frame, x, y, w, h);
         worldX += w + gap;
       }
     }
@@ -756,8 +771,9 @@ export function createPixelChase(canvas, options = {}) {
   function drawHungPosters() {
     if (!hungPosters.length) return;
     const scrollPx = px(scroll / 2);
-    const firstTile = Math.floor(scrollPx / width) - 1;
-    const lastTile = firstTile + 3;
+    const tilePad = viewPad > 0 ? Math.ceil(viewPad / width) : 0;
+    const firstTile = Math.floor(scrollPx / width) - 1 - tilePad;
+    const lastTile = firstTile + 3 + tilePad;
     for (let tile = firstTile; tile <= lastTile; tile += 1) {
       const tileX = tile * width - scrollPx;
       for (const item of hungPosters) {
@@ -767,7 +783,7 @@ export function createPixelChase(canvas, options = {}) {
         const rect = posterRect(item);
         const x = Math.round(tileX + rect.gapLeft + rect.x);
         const y = Math.round(rect.boardTop + rect.y);
-        if (x < width && x + rect.w > 0) ctx.drawImage(frame, x, y, rect.w, rect.h);
+        if (x < width && x + rect.w > -viewPad) ctx.drawImage(frame, x, y, rect.w, rect.h);
       }
     }
   }
@@ -863,8 +879,9 @@ export function createPixelChase(canvas, options = {}) {
   function drawWindowNotes() {
     if (!windowNotes.length) return;
     const scrollPx = px(scroll / 2);
-    const firstTile = Math.floor(scrollPx / width) - 1;
-    const lastTile = firstTile + 3;
+    const tilePad = viewPad > 0 ? Math.ceil(viewPad / width) : 0;
+    const firstTile = Math.floor(scrollPx / width) - 1 - tilePad;
+    const lastTile = firstTile + 3 + tilePad;
     for (let tile = firstTile; tile <= lastTile; tile += 1) {
       const tileX = tile * width - scrollPx;
       for (const item of windowNotes) {
@@ -874,7 +891,7 @@ export function createPixelChase(canvas, options = {}) {
         const rect = noteRect(item);
         const x = Math.round(tileX + rect.windowX + rect.x);
         const y = Math.round(rect.windowY + rect.y);
-        if (x < width && x + rect.w > 0) ctx.drawImage(frame, x, y, rect.w, rect.h);
+        if (x < width && x + rect.w > -viewPad) ctx.drawImage(frame, x, y, rect.w, rect.h);
       }
     }
   }
@@ -980,7 +997,7 @@ export function createPixelChase(canvas, options = {}) {
       const y = below
         ? Math.round(desk.top + px(6) + row * h)
         : Math.round(desk.top - h - row * step);
-      if (x < width && x + w > 0) ctx.drawImage(frame, x, y, w, h);
+      if (x < width && x + w > -viewPad) ctx.drawImage(frame, x, y, w, h);
     }
   }
 
@@ -1067,7 +1084,7 @@ export function createPixelChase(canvas, options = {}) {
           if (outgoing ? !joinedEarlier : !joinedThisPass) continue;
           const x = Math.round(pass.left + spot.offset);
           const y = Math.round(baseline - spot.h);
-          if (x >= width || x + spot.w <= 0 || x >= pass.clipRight) continue;
+          if (x >= width || x + spot.w <= -viewPad || x >= pass.clipRight) continue;
           if (!outgoing) {
             ctx.save();
             ctx.beginPath();
@@ -1622,6 +1639,11 @@ export function createPixelChase(canvas, options = {}) {
       }
     }
 
+    paintScene(now);
+    raf = requestAnimationFrame(frame);
+  }
+
+  function paintScene(now) {
     const groundY = Math.floor(height * 0.82);
     drawClassroom(groundY);
 
@@ -1798,8 +1820,35 @@ export function createPixelChase(canvas, options = {}) {
         ctx.drawImage(frameImage, Math.round(drawX), flyingNote.y, flyingNote.w, flyingNote.h);
       }
     }
+  }
 
-    raf = requestAnimationFrame(frame);
+  let zoomPlate = null;
+
+  function captureZoomPlate() {
+    const pad = width;
+    const plateWidth = width + pad;
+    if (!zoomPlate || zoomPlate.width !== plateWidth || zoomPlate.height !== height) {
+      zoomPlate = document.createElement('canvas');
+      zoomPlate.width = plateWidth;
+      zoomPlate.height = height;
+    }
+    const plateCtx = zoomPlate.getContext('2d');
+    const liveCtx = ctx;
+    ctx = plateCtx;
+    viewPad = pad;
+    plateCtx.setTransform(1, 0, 0, 1, 0, 0);
+    plateCtx.imageSmoothingEnabled = false;
+    plateCtx.clearRect(0, 0, plateWidth, height);
+    plateCtx.save();
+    plateCtx.translate(pad, 0);
+    try {
+      paintScene(performance.now());
+    } finally {
+      plateCtx.restore();
+      ctx = liveCtx;
+      viewPad = 0;
+    }
+    return { canvas: zoomPlate, pad };
   }
 
   function captureCat(runFrame = null) {
@@ -1909,6 +1958,7 @@ export function createPixelChase(canvas, options = {}) {
     closestMouseId,
     eatMouse,
     captureCat,
+    captureZoomPlate,
     setCatHidden(hidden) {
       catHidden = hidden;
     },

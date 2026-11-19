@@ -540,12 +540,19 @@ function playCatScratch() {
     if (scene.height !== window.innerHeight) scene.height = window.innerHeight;
     sceneContext.imageSmoothingEnabled = false;
     sceneContext.clearRect(0, 0, scene.width, scene.height);
+    const plate = pixel.captureZoomPlate();
+    const bitmapScale = currentView.width / Math.max(1, pixelCanvas.width);
+    const destW = currentView.width * scale;
+    const destH = currentView.height * scale;
+    const destX = originX - focusX * currentView.width * scale;
+    const destY = originY - focusY * currentView.height * scale;
+    const padPx = plate.pad * bitmapScale * scale;
     sceneContext.drawImage(
-      pixelCanvas,
-      originX - focusX * currentView.width * scale,
-      originY - focusY * currentView.height * scale,
-      currentView.width * scale,
-      currentView.height * scale,
+      plate.canvas,
+      destX - padPx,
+      destY,
+      destW * (plate.canvas.width / Math.max(1, pixelCanvas.width)),
+      destH,
     );
     const catW = from.w * scale;
     const catH = from.h * scale;
