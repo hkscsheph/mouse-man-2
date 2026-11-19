@@ -15,7 +15,7 @@ const PROP_KINDS = new Set(['figure', 'drawing', 'box', 'poster', 'note']);
 
 /**
  * @typedef {{
- *   type: 'catEat' | 'catSweep' | 'restartAll' | 'admit' | 'scratch' | 'prop' | 'uniform' | 'spriteScale' | 'camera',
+ *   type: 'catEat' | 'catSweep' | 'restartAll' | 'admit' | 'scratch' | 'prop' | 'uniform' | 'spriteScale' | 'camera' | 'hud',
  *   id?: string,
  *   raw?: string,
  *   kind?: string,
@@ -29,7 +29,7 @@ const PROP_KINDS = new Set(['figure', 'drawing', 'box', 'poster', 'note']);
 export function isStageSignal(message) {
   if (!message || typeof message.type !== 'string') return false;
   if (message.type === 'catEat' || message.type === 'catSweep' || message.type === 'restartAll') return true;
-  if (message.type === 'admit' || message.type === 'scratch' || message.type === 'uniform') return true;
+  if (message.type === 'admit' || message.type === 'scratch' || message.type === 'uniform' || message.type === 'hud') return true;
   if (message.type === 'prop') return PROP_KINDS.has(message.kind);
   if (message.type === 'spriteScale') return Number.isFinite(Number(message.delta)) && Number(message.delta) !== 0;
   if (message.type === 'camera') return Array.isArray(message.move);

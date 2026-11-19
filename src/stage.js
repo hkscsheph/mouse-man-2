@@ -330,6 +330,10 @@ function handleStageMessage(message) {
     playCatScratch();
     return;
   }
+  if (message?.type === 'hud') {
+    hud.hidden = typeof message.hidden === 'boolean' ? message.hidden : !hud.hidden;
+    return;
+  }
   if (message?.type === 'prop') {
     const result = pixel.requestProp(message.kind);
     if (result === 'started') setStatus(propStatus[message.kind]);
@@ -681,8 +685,7 @@ window.addEventListener('keydown', (event) => {
   if (event.repeat) return;
   if ((event.key === 't' || event.key === 'T') && !isEditingControl) {
     event.preventDefault();
-    hud.hidden = !hud.hidden;
-    logStageControl({ type: 'hud', hidden: hud.hidden });
+    handleStageMessage({ type: 'hud' });
     return;
   }
   if ((event.key === 'u' || event.key === 'U') && !isEditingControl) {

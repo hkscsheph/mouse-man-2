@@ -254,9 +254,14 @@ body.signal-mode #share {
   font-size: 1rem;
 }
 
-#signal-status,
-#signal-ws {
-  margin: 0 0 8px;
+#signal-keys {
+  margin: 0 0 12px;
+}
+
+#signal-keys kbd {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(245, 233, 205, 0.16);
 }
 
 #signal-cam {

@@ -17,7 +17,7 @@ root.id = 'signal-root';
 root.innerHTML = `
   <h1>Stage signals</h1>
   <p id="signal-status" role="status" aria-live="polite">Starting camera…</p>
-  <p id="signal-ws" role="status">WebSocket: connecting…</p>
+  <p id="signal-keys">Keys match the stage: <kbd>A</kbd> focuses the id field, <kbd>D</kbd> demo guest, <kbd>E</kbd> eat, <kbd>Q</kbd> scratch, <kbd>1</kbd>–<kbd>5</kbd> props, <kbd>U</kbd> uniforms, <kbd>+</kbd>/<kbd>-</kbd> size, arrows move the camera, <kbd>T</kbd> toggles the stage HUD.</p>
   <video id="signal-cam" playsinline muted autoplay aria-label="QR scanner camera"></video>
   <form id="signal-admit">
     <label for="signal-id">Participant QR or mouse id</label>
@@ -111,6 +111,82 @@ root.addEventListener('click', (event) => {
   else if (action === 'uniform') send({ type: 'uniform' }, 'Uniforms');
   else if (action === 'larger') send({ type: 'spriteScale', delta: 0.1 }, 'Larger cat');
   else if (action === 'smaller') send({ type: 'spriteScale', delta: -0.1 }, 'Smaller cat');
+});
+
+const propKeys = {
+  1: 'figure',
+  2: 'drawing',
+  3: 'box',
+  4: 'poster',
+  5: 'note',
+};
+let spacePressed = false;
+
+window.addEventListener('keydown', (event) => {
+  const editing = document.activeElement === admitInput;
+  if (event.code === 'Space' || event.key === ' ') {
+    if (!editing) {
+      spacePressed = true;
+      event.preventDefault();
+    }
+    return;
+  }
+  if (!editing) {
+    const moveStep = 0.01;
+    const movement = {
+      ArrowLeft: [-moveStep, 0, 0],
+      ArrowRight: [moveStep, 0, 0],
+      ArrowUp: spacePressed ? [0, 0, moveStep] : [0, -moveStep, 0],
+      ArrowDown: spacePressed ? [0, 0, -moveStep] : [0, moveStep, 0],
+    }[event.key];
+    if (movement) {
+      event.preventDefault();
+      send({ type: 'camera', move: movement }, 'Camera');
+      return;
+    }
+  }
+  if (event.repeat || editing) return;
+  const prop = propKeys[event.key];
+  if (prop) {
+    event.preventDefault();
+    send({ type: 'prop', kind: prop }, prop);
+    return;
+  }
+  const key = event.key.toLowerCase();
+  if (key === 't') {
+    event.preventDefault();
+    send({ type: 'hud' }, 'HUD');
+  } else if (key === 'u') {
+    event.preventDefault();
+    send({ type: 'uniform' }, 'Uniforms');
+  } else if (key === 'q') {
+    event.preventDefault();
+    send({ type: 'scratch' }, 'Scratch zoom');
+  } else if (key === 'e') {
+    event.preventDefault();
+    send({ type: 'catEat' }, 'Eat closest');
+  } else if (key === 'd') {
+    event.preventDefault();
+    send({ type: 'admit' }, 'Demo guest');
+  } else if (key === 'a') {
+    event.preventDefault();
+    admitInput.focus();
+    admitInput.select();
+  } else if (event.key === '+' || event.code === 'NumpadAdd' || event.key === '=' || event.code === 'Equal') {
+    event.preventDefault();
+    send({ type: 'spriteScale', delta: 0.1 }, 'Larger cat');
+  } else if (event.key === '-' || event.code === 'NumpadSubtract') {
+    event.preventDefault();
+    send({ type: 'spriteScale', delta: -0.1 }, 'Smaller cat');
+  }
+});
+
+window.addEventListener('keyup', (event) => {
+  if (event.code === 'Space' || event.key === ' ') spacePressed = false;
+});
+
+window.addEventListener('blur', () => {
+  spacePressed = false;
 });
 
 const scanCanvas = document.createElement('canvas');
