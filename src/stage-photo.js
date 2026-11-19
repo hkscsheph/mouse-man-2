@@ -41,6 +41,11 @@ export function stageUniformColor(slot) {
   return UNIFORM_ROWS[Math.floor(slot / COLS)][column];
 }
 
+const STEP_HEIGHT = 0.12;
+const STEP_DROP = 0.16;
+// The scaled foot sole sits just below the mouse origin.
+const FOOT_SOLE = 0.021;
+
 function slotPose(index, rowRise) {
   const seat = index % COLS;
   const row = Math.floor(index / COLS);
@@ -50,6 +55,10 @@ function slotPose(index, rowRise) {
   const y = 0.12 + row * rowRise;
   const z = 1.35 - row * ROW_SPACING;
   return { x, y, z, ry: 0, s: 0.52 };
+}
+
+function standY(pose) {
+  return pose.y - STEP_DROP + STEP_HEIGHT / 2 + FOOT_SOLE;
 }
 
 const GESTURES = ['wave', 'nod', 'look', 'shrug'];
@@ -173,12 +182,12 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
   scene.add(backdrop);
 
   const stepMaterial = new THREE.MeshStandardMaterial({ color: 0x79553b, roughness: 0.86 });
-  const stepGeometry = new THREE.BoxGeometry(7, 0.12, 0.62);
+  const stepGeometry = new THREE.BoxGeometry(7, STEP_HEIGHT, 0.62);
   const rowSteps = [];
   for (let row = 0; row < ROWS; row += 1) {
     const pose = slotPose(row * COLS, rowRise);
     const step = new THREE.Mesh(stepGeometry, stepMaterial);
-    step.position.set(0, pose.y - 0.16, pose.z);
+    step.position.set(0, pose.y - STEP_DROP, pose.z);
     scene.add(step);
     rowSteps.push(step);
   }
@@ -235,7 +244,7 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
 
   function projectSlotCenterFixed(slot) {
     const pose = slotPose(slot, rowRise);
-    const v = new THREE.Vector3(pose.x, pose.y + 0.55, pose.z);
+    const v = new THREE.Vector3(pose.x, standY(pose) + 0.55, pose.z);
     v.project(camera);
     const rect = canvas.getBoundingClientRect();
     return {
@@ -250,12 +259,12 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
     rowRise = THREE.MathUtils.clamp(numeric, MIN_ROW_RISE, MAX_ROW_RISE);
     for (let row = 0; row < ROWS; row += 1) {
       const pose = slotPose(row * COLS, rowRise);
-      rowSteps[row].position.set(0, pose.y - 0.16, pose.z);
+      rowSteps[row].position.set(0, pose.y - STEP_DROP, pose.z);
     }
     for (const entry of roster) {
       if (!entry.presented) continue;
       const pose = slotPose(entry.slot, rowRise);
-      entry.mesh.position.set(pose.x, pose.y, pose.z);
+      entry.mesh.position.set(pose.x, standY(pose), pose.z);
     }
     frame();
     return rowRise;
@@ -367,7 +376,7 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
     setMouseUniform(mesh, uniformEnabled);
     const enter = options.enter === true;
     const pose = slotPose(slot, rowRise);
-    mesh.position.set(pose.x, pose.y, pose.z);
+    mesh.position.set(pose.x, standY(pose), pose.z);
     mesh.rotation.y = pose.ry;
     mesh.scale.setScalar(pose.s);
     mesh.visible = !enter;
@@ -415,7 +424,7 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
     entry.entrance = null;
     if (arrived) {
       const pose = slotPose(entry.slot, rowRise);
-      entry.mesh.position.set(pose.x, pose.y, pose.z);
+      entry.mesh.position.set(pose.x, standY(pose), pose.z);
       entry.mesh.rotation.set(0, pose.ry, 0);
       entry.mesh.userData.legs?.forEach((leg, index) => {
         leg.rotation.x = motion.legRest[index];
@@ -450,7 +459,7 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
       const along = smoothStep(climb);
       entry.mesh.position.set(
         pose.x,
-        THREE.MathUtils.lerp(motion.floorY, pose.y, along),
+        THREE.MathUtils.lerp(motion.floorY, standY(pose), along),
         THREE.MathUtils.lerp(motion.floorZ, pose.z, along),
       );
       entry.mesh.rotation.set(Math.sin(along * Math.PI) * 0.2, THREE.MathUtils.lerp(-Math.PI / 2, pose.ry, along), 0);
@@ -464,9 +473,9 @@ export function createStagePhoto(canvas, { idle = false } = {}) {
     if (!entry || entry.eaten || !roster.includes(entry)) return Promise.resolve(false);
     if (entry.entrance) return entry.entrance.promise;
     frame();
-    // Feet stay in the visible foreground, just in front of the lowest step.
+    // Feet stay in the visible foreground, level with the front step.
     const floorZ = 2.05;
-    const floorY = 0.28;
+    const floorY = standY(slotPose(0, rowRise));
     const pose = slotPose(entry.slot, rowRise);
     const startX = Math.max(offscreenRightX(floorZ), pose.x + 0.8);
     entry.mesh.visible = true;
