@@ -37,6 +37,7 @@ export function createPixelChase(canvas, options = {}) {
   const catSpeedVariation = Math.min(0.5, Math.max(0, Number(options.catSpeedVariation) || 0));
   let lastFrame = performance.now();
   let scroll = 0;
+  let catHidden = false;
   let catRunTime = 0;
   let running = true;
   let raf = 0;
@@ -1396,7 +1397,7 @@ export function createPixelChase(canvas, options = {}) {
     const catDrawHeight = layout.catSize * catFrameHeight / catFrameWidth;
     const catRow = crawling ? catCatchRow : 0;
     const catY = groundY - Math.ceil((catFootRows[catRow] / catFrameHeight) * catDrawHeight);
-    if (catRunSheet) {
+    if (catRunSheet && !catHidden) {
       const sourceY = catRow * catFrameHeight;
       ctx.save();
       ctx.translate(layout.catX + layout.catSize, catY);
@@ -1656,6 +1657,9 @@ export function createPixelChase(canvas, options = {}) {
     closestMouseId,
     eatMouse,
     captureCat,
+    setCatHidden(hidden) {
+      catHidden = hidden;
+    },
     presentDrawing,
     presentBox,
     presentPoster,

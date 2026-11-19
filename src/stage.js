@@ -572,6 +572,7 @@ function playCatScratch() {
   if (catScratchPlaying) return;
   catScratchPlaying = true;
   setStatus('The cat scratches…');
+  try {
   const first = pixel.captureCat();
   const view = pixelCanvas.getBoundingClientRect();
   const scaleX = view.width / pixelCanvas.width;
@@ -597,9 +598,15 @@ function playCatScratch() {
   };
   const duration = 2400;
   const runFrameMs = 110;
+  const focusX = (first.x + first.w / 2) / pixelCanvas.width;
+  const focusY = (first.y + first.h / 2) / pixelCanvas.height;
+  const maxScale = largestH / Math.max(1, from.h);
 
   const overlay = document.createElement('div');
   overlay.className = 'stage-cat-zoom';
+  const scene = document.createElement('canvas');
+  scene.className = 'stage-cat-zoom-scene';
+  const sceneContext = scene.getContext('2d');
   const fade = document.createElement('div');
   fade.className = 'stage-cat-zoom-fade';
   const cat = document.createElement('canvas');
@@ -615,9 +622,9 @@ function playCatScratch() {
     catContext.drawImage(shot.canvas, 0, 0);
   };
   paintRunFrame(first.frame);
-  placeCatSprite(cat, from.x, from.y, from.w, from.h);
-  overlay.append(fade, cat);
+  overlay.append(scene, fade, cat);
   document.body.append(overlay);
+  pixel.setCatHidden(true);
 
   const framesPromise = loadCatScratchFrames().catch(() => null);
   const started = performance.now();
@@ -626,6 +633,7 @@ function playCatScratch() {
 
   const approach = (now) => {
     if (!overlay.isConnected) return;
+    try {
     const t = Math.min(1, (now - started) / duration);
     const k = ease(t);
     fade.style.opacity = String(k);
@@ -634,27 +642,54 @@ function playCatScratch() {
       shownFrame = frame;
       paintRunFrame(frame);
     }
-    placeCatSprite(
-      cat,
-      from.x + (end.x - from.x) * k,
-      from.y + (end.y - from.y) * k,
-      from.w + (end.w - from.w) * k,
-      from.h + (end.h - from.h) * k,
+    const scale = 1 + (maxScale - 1) * k;
+    const originX = from.x + from.w / 2 + (window.innerWidth / 2 - (from.x + from.w / 2)) * k;
+    const originY = from.y + from.h / 2 + (window.innerHeight / 2 - (from.y + from.h / 2)) * k;
+    const currentView = pixelCanvas.getBoundingClientRect();
+    if (scene.width !== window.innerWidth) scene.width = window.innerWidth;
+    if (scene.height !== window.innerHeight) scene.height = window.innerHeight;
+    sceneContext.imageSmoothingEnabled = false;
+    sceneContext.clearRect(0, 0, scene.width, scene.height);
+    sceneContext.drawImage(
+      pixelCanvas,
+      originX - focusX * currentView.width * scale,
+      originY - focusY * currentView.height * scale,
+      currentView.width * scale,
+      currentView.height * scale,
     );
+    const catW = from.w * scale;
+    const catH = from.h * scale;
+    placeCatSprite(cat, originX - catW / 2, originY - catH / 2, catW, catH);
     if (t < 1) {
       requestAnimationFrame(approach);
       return;
     }
     paintRunFrame(shownFrame);
     placeCatSprite(cat, end.x, end.y, end.w, end.h);
+    scene.remove();
     void startScratchGif(framesPromise, overlay, cat, end.h);
+    } catch (error) {
+      pixel.setCatHidden(false);
+      overlay.remove();
+      catScratchPlaying = false;
+      setStatus('The cat could not zoom in.');
+      console.error(error);
+    }
   };
   requestAnimationFrame(approach);
+  } catch (error) {
+    pixel.setCatHidden?.(false);
+    document.querySelector('.stage-cat-zoom')?.remove();
+    catScratchPlaying = false;
+    setStatus('The cat could not zoom in.');
+    console.error(error);
+  }
 }
 
 async function startScratchGif(framesPromise, overlay, runCat, startCatHeight) {
   const frames = await framesPromise;
   if (!frames?.length || !overlay.isConnected) {
+    pixel.setCatHidden(false);
     catScratchPlaying = false;
     return;
   }
