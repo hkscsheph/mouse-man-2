@@ -480,6 +480,237 @@ admitInput.addEventListener('blur', () => {
 
 let spacePressed = false;
 let uniformsEnabled = DEFAULT_STAGE_UNIFORM_ENABLED;
+let catScratchFrames = null;
+let catScratchPlaying = false;
+
+function recolorScratchFrame(source) {
+  const frame = document.createElement('canvas');
+  frame.width = source.displayWidth || source.width;
+  frame.height = source.displayHeight || source.height;
+  const context = frame.getContext('2d', { willReadFrequently: true });
+  context.imageSmoothingEnabled = false;
+  context.save();
+  context.translate(frame.width, 0);
+  context.scale(-1, 1);
+  context.drawImage(source, 0, 0);
+  context.restore();
+  const image = context.getImageData(0, 0, frame.width, frame.height);
+  const { data } = image;
+  let minX = frame.width;
+  let minY = frame.height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < frame.height; y += 1) {
+    for (let x = 0; x < frame.width; x += 1) {
+      const i = (y * frame.width + x) * 4;
+      const red = data[i];
+      const green = data[i + 1];
+      const blue = data[i + 2];
+      const max = Math.max(red, green, blue);
+      const min = Math.min(red, green, blue);
+      if (blue > red + 15 && blue >= green - 10 && blue > 80) {
+        data[i + 3] = 0;
+        continue;
+      }
+      if (green > red + 12 && green > blue + 12 && green > 70) {
+        data[i] = 255;
+        data[i + 1] = 32;
+        data[i + 2] = 32;
+      } else if (min > 140 && max - min < 36) {
+        data[i] = 255;
+        data[i + 1] = 36;
+        data[i + 2] = 36;
+      } else {
+        data[i] = 0;
+        data[i + 1] = 0;
+        data[i + 2] = 0;
+      }
+      data[i + 3] = 255;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+  context.putImageData(image, 0, 0);
+  return {
+    canvas: frame,
+    box: {
+      x: maxX < 0 ? 0 : minX,
+      y: maxY < 0 ? 0 : minY,
+      w: maxX < 0 ? frame.width : maxX - minX + 1,
+      h: maxY < 0 ? frame.height : maxY - minY + 1,
+    },
+  };
+}
+
+async function loadCatScratchFrames() {
+  if (catScratchFrames) return catScratchFrames;
+  const response = await fetch(new URL('./cat_scratch.gif', import.meta.url));
+  const decoder = new ImageDecoder({ data: await response.arrayBuffer(), type: 'image/gif' });
+  await decoder.tracks.ready;
+  const count = decoder.tracks.selectedTrack.frameCount;
+  const frames = [];
+  for (let index = 0; index < count; index += 1) {
+    const { image } = await decoder.decode({ frameIndex: index });
+    frames.push(recolorScratchFrame(image));
+    image.close();
+  }
+  decoder.close();
+  catScratchFrames = frames;
+  return frames;
+}
+
+function placeCatSprite(element, x, y, w, h) {
+  element.style.left = `${x}px`;
+  element.style.top = `${y}px`;
+  element.style.width = `${w}px`;
+  element.style.height = `${h}px`;
+}
+
+function playCatScratch() {
+  if (catScratchPlaying) return;
+  catScratchPlaying = true;
+  setStatus('The cat scratches…');
+  const first = pixel.captureCat();
+  const view = pixelCanvas.getBoundingClientRect();
+  const scaleX = view.width / pixelCanvas.width;
+  const scaleY = view.height / pixelCanvas.height;
+  const from = {
+    x: view.left + first.x * scaleX,
+    y: view.top + first.y * scaleY,
+    w: first.w * scaleX,
+    h: first.h * scaleY,
+  };
+  const runningGifHeight = 130;
+  const scratchGifHeight = 295;
+  const largestH = Math.min(
+    window.innerHeight * 0.82,
+    Math.max(from.h * 1.8, window.innerHeight * (runningGifHeight / scratchGifHeight)),
+  );
+  const largestW = largestH * (from.w / Math.max(1, from.h));
+  const end = {
+    x: (window.innerWidth - largestW) / 2,
+    y: (window.innerHeight - largestH) / 2,
+    w: largestW,
+    h: largestH,
+  };
+  const duration = 2400;
+  const runFrameMs = 110;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'stage-cat-zoom';
+  const fade = document.createElement('div');
+  fade.className = 'stage-cat-zoom-fade';
+  const cat = document.createElement('canvas');
+  cat.className = 'stage-cat-zoom-cat';
+  const catContext = cat.getContext('2d');
+  catContext.imageSmoothingEnabled = false;
+  const paintRunFrame = (index) => {
+    const shot = pixel.captureCat(index);
+    cat.width = shot.canvas.width;
+    cat.height = shot.canvas.height;
+    catContext.imageSmoothingEnabled = false;
+    catContext.clearRect(0, 0, cat.width, cat.height);
+    catContext.drawImage(shot.canvas, 0, 0);
+  };
+  paintRunFrame(first.frame);
+  placeCatSprite(cat, from.x, from.y, from.w, from.h);
+  overlay.append(fade, cat);
+  document.body.append(overlay);
+
+  const framesPromise = loadCatScratchFrames().catch(() => null);
+  const started = performance.now();
+  let shownFrame = first.frame;
+  const ease = (t) => t * t * (3 - 2 * t);
+
+  const approach = (now) => {
+    if (!overlay.isConnected) return;
+    const t = Math.min(1, (now - started) / duration);
+    const k = ease(t);
+    fade.style.opacity = String(k);
+    const frame = (first.frame + Math.floor((now - started) / runFrameMs)) % first.frameCount;
+    if (frame !== shownFrame) {
+      shownFrame = frame;
+      paintRunFrame(frame);
+    }
+    placeCatSprite(
+      cat,
+      from.x + (end.x - from.x) * k,
+      from.y + (end.y - from.y) * k,
+      from.w + (end.w - from.w) * k,
+      from.h + (end.h - from.h) * k,
+    );
+    if (t < 1) {
+      requestAnimationFrame(approach);
+      return;
+    }
+    paintRunFrame(shownFrame);
+    placeCatSprite(cat, end.x, end.y, end.w, end.h);
+    void startScratchGif(framesPromise, overlay, cat, end.h);
+  };
+  requestAnimationFrame(approach);
+}
+
+async function startScratchGif(framesPromise, overlay, runCat, startCatHeight) {
+  const frames = await framesPromise;
+  if (!frames?.length || !overlay.isConnected) {
+    catScratchPlaying = false;
+    return;
+  }
+  const hole = document.createElement('div');
+  hole.className = 'stage-cat-zoom-hole';
+  const cover = Math.hypot(window.innerWidth, window.innerHeight);
+  hole.style.width = `${cover}px`;
+  hole.style.height = `${cover}px`;
+  hole.style.left = `${(window.innerWidth - cover) / 2}px`;
+  hole.style.top = `${(window.innerHeight - cover) / 2}px`;
+  const play = document.createElement('canvas');
+  play.className = 'stage-cat-zoom-play';
+  play.width = frames[0].canvas.width;
+  play.height = frames[0].canvas.height;
+  const playContext = play.getContext('2d');
+  playContext.imageSmoothingEnabled = false;
+  overlay.append(hole, play);
+  runCat.remove();
+
+  const lastBox = frames[frames.length - 1].box;
+  const startScale = startCatHeight / Math.max(1, frames[0].box.h);
+  const endScale = window.innerHeight / Math.max(1, lastBox.h);
+  const drawFrame = (item, progress) => {
+    playContext.clearRect(0, 0, play.width, play.height);
+    playContext.drawImage(item.canvas, 0, 0);
+    const scale = startScale + (endScale - startScale) * progress;
+    const width = play.width * scale;
+    const height = play.height * scale;
+    const centerX = (item.box.x + item.box.w / 2) * scale;
+    const centerY = (item.box.y + item.box.h / 2) * scale;
+    placeCatSprite(
+      play,
+      window.innerWidth / 2 - centerX,
+      window.innerHeight / 2 - centerY,
+      width,
+      height,
+    );
+  };
+  drawFrame(frames[0], 0);
+  const gifStarted = performance.now();
+  const gifDuration = Math.max(1, (frames.length - 1) * 100);
+  let frameIndex = 0;
+  let last = gifStarted;
+  const tick = (now) => {
+    if (!overlay.isConnected) return;
+    const progress = Math.min(1, (now - gifStarted) / gifDuration);
+    if (frameIndex < frames.length - 1 && now - last >= 100) {
+      last += 100;
+      frameIndex += 1;
+    }
+    drawFrame(frames[frameIndex], progress);
+    hole.style.transform = `scale(${progress})`;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
 
 window.addEventListener('keydown', (event) => {
   const activeElement = document.activeElement;
@@ -544,6 +775,11 @@ window.addEventListener('keydown', (event) => {
         ? 'Webcam preview hidden; QR scanning continues'
         : 'Live webcam preview for QR scanning',
     );
+    return;
+  }
+  if ((event.key === 'q' || event.key === 'Q') && document.activeElement !== admitInput) {
+    event.preventDefault();
+    playCatScratch();
     return;
   }
   if (event.key === 'a' || event.key === 'A') {

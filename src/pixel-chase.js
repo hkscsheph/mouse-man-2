@@ -1549,6 +1549,83 @@ export function createPixelChase(canvas, options = {}) {
     raf = requestAnimationFrame(frame);
   }
 
+  function captureCat(runFrame = null) {
+    const groundY = Math.floor(height * 0.82);
+    const layout = mouseLayout(groundY, performance.now());
+    const crawling = catChase && (catChase.phase === 'grab' || catChase.phase === 'out');
+    const liveFrame = crawling
+      ? Math.floor((catChase.catchTime * 1000) / 110) % CAT_FRAME_COUNT
+      : Math.floor((catRunTime * 1000) / 110) % CAT_FRAME_COUNT;
+    const frameIndex = runFrame == null
+      ? liveFrame
+      : ((runFrame % CAT_FRAME_COUNT) + CAT_FRAME_COUNT) % CAT_FRAME_COUNT;
+    const catRow = runFrame == null && crawling ? catCatchRow : 0;
+    const catDrawHeight = Math.max(1, Math.round(layout.catSize * catFrameHeight / catFrameWidth));
+    const catY = groundY - Math.ceil((catFootRows[catRow] / catFrameHeight) * catDrawHeight);
+    const sprite = document.createElement('canvas');
+    sprite.width = Math.max(1, Math.round(layout.catSize));
+    sprite.height = catDrawHeight;
+    const spriteCtx = sprite.getContext('2d');
+    spriteCtx.imageSmoothingEnabled = false;
+    if (catRunSheet) {
+      spriteCtx.save();
+      spriteCtx.translate(sprite.width, 0);
+      spriteCtx.scale(-1, 1);
+      spriteCtx.drawImage(
+        catRunSheet,
+        frameIndex * catFrameWidth,
+        catRow * catFrameHeight,
+        catFrameWidth,
+        catFrameHeight,
+        0,
+        0,
+        sprite.width,
+        sprite.height,
+      );
+      spriteCtx.restore();
+    }
+    const pixels = spriteCtx.getImageData(0, 0, sprite.width, sprite.height).data;
+    let minX = sprite.width;
+    let minY = sprite.height;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < sprite.height; y += 1) {
+      for (let x = 0; x < sprite.width; x += 1) {
+        if (pixels[(y * sprite.width + x) * 4 + 3] < 20) continue;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+    if (maxX >= 0) {
+      const tight = document.createElement('canvas');
+      tight.width = maxX - minX + 1;
+      tight.height = maxY - minY + 1;
+      const tightCtx = tight.getContext('2d');
+      tightCtx.imageSmoothingEnabled = false;
+      tightCtx.drawImage(sprite, minX, minY, tight.width, tight.height, 0, 0, tight.width, tight.height);
+      return {
+        canvas: tight,
+        x: layout.catX + minX,
+        y: catY + minY,
+        w: tight.width,
+        h: tight.height,
+        frame: frameIndex,
+        frameCount: CAT_FRAME_COUNT,
+      };
+    }
+    return {
+      canvas: sprite,
+      x: layout.catX,
+      y: catY,
+      w: sprite.width,
+      h: sprite.height,
+      frame: frameIndex,
+      frameCount: CAT_FRAME_COUNT,
+    };
+  }
+
   function start() {
     if (raf) return;
     lastFrame = performance.now();
@@ -1578,6 +1655,7 @@ export function createPixelChase(canvas, options = {}) {
     listMouseIds,
     closestMouseId,
     eatMouse,
+    captureCat,
     presentDrawing,
     presentBox,
     presentPoster,
