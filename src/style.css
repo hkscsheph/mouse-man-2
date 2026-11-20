@@ -463,6 +463,49 @@ body.stage-mode #share {
   image-rendering: crisp-edges;
 }
 
+.stage-cat-zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.stage-cat-zoom-scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.stage-cat-zoom-fade {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  z-index: 1;
+}
+
+.stage-cat-zoom-hole {
+  position: absolute;
+  border-radius: 50%;
+  background: #000;
+  transform: scale(0);
+  transform-origin: center;
+  z-index: 2;
+}
+
+.stage-cat-zoom-cat,
+.stage-cat-zoom-play {
+  position: absolute;
+  z-index: 3;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
 .stage-scratch-layer {
   position: absolute;
   pointer-events: none;
@@ -667,6 +710,7 @@ body.registration-mode.registration-hud-hidden #cam {
 }
 
 #registration-status,
+#registration-printer,
 #registration-printer,
 #registration-count {
   margin: 0 0 10px;

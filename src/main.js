@@ -17,9 +17,14 @@ import {
   publishSnapshot,
   shareUrlForId,
   snapshotFromMouse,
+  timestampId,
 } from './persist.js';
+import { printRegistrationSlip, printerStatusText } from './registration-print.js';
 import { renderShareQr } from './qr.js';
 import { createRegistrationPhoto } from './registration.js';
+import { publishTransferPhoto, publishTransferRecord } from './transfer-folder.js';
+import { renderStudentCard } from './student-card.js';
+import { stageUniformColor } from './stage-photo.js';
 import { createScene } from './scene.js';
 
 const SETTLE_MS = 600;
@@ -56,9 +61,9 @@ const shareQr = document.querySelector('#share-qr');
 const shareHint = document.querySelector('#share-hint');
 const registrationRoot = document.querySelector('#registration');
 const registrationStatus = document.querySelector('#registration-status');
+const registrationPrinter = document.querySelector('#registration-printer');
 const registrationCapture = document.querySelector('#registration-capture');
 const registrationPrint = document.querySelector('#registration-print');
-const registrationSwitchGroup = document.querySelector('#registration-switch-group');
 const registrationCount = document.querySelector('#registration-count');
 const registrationCards = document.querySelector('#registration-cards');
 const registrationPhotoCanvas = document.querySelector('#registration-photo');
@@ -86,6 +91,8 @@ let latestFace = null;
 let registrationBusy = false;
 let registrationMessage = '';
 let registrationHudVisible = true;
+let printerMode = false;
+let printerReachable = null;
 const urlParams = new URLSearchParams(location.search);
 const mode = !urlParams.has('m') && urlParams.get('mode') === 'random' ? 'random' : 'default';
 const registrationMode = !urlParams.has('m') && urlParams.get('mode') === 'reg';
@@ -116,10 +123,6 @@ function setShareLoading(on, hint = 'Saving your mouse…') {
     sharePanel.classList.remove('empty');
     shareHint.textContent = hint;
   }
-}
-
-function formatRegistrationGroup(group) {
-  return group === 'girls' ? 'Girls’' : 'Boys’';
 }
 
 async function showShareForActor(actor) {
@@ -174,6 +177,7 @@ async function persistLiveMouse(actor) {
     const published = await publishSnapshot(snapshot);
     actor.mesh.userData.mouseId = published.id;
     actor.saved = true;
+    actor.transferSnapshot = snapshot;
     if (crowd.getLive() === actor) {
       await showShareForActor(actor);
       if (!published.remote) {
@@ -208,11 +212,6 @@ function updateRegistrationControls(face = latestFace) {
     registrationPhoto.count < registrationPhoto.capacity,
   );
   registrationCapture.disabled = !faceReady;
-  const lastGroup = registrationPhoto.lastGroup;
-  registrationSwitchGroup.disabled = registrationBusy || !lastGroup;
-  registrationSwitchGroup.textContent = lastGroup
-    ? `Switch last participant to ${lastGroup === 'girls' ? 'boys’' : 'girls’'} class`
-    : 'Switch last participant';
   if (registrationBusy) return;
   if (registrationPhoto.failed) {
     registrationStatus.textContent = 'Could not load a class-photo image. Check the image assets and reload.';
@@ -241,6 +240,32 @@ function updateRegistrationControls(face = latestFace) {
   } else {
     registrationStatus.textContent = 'Waiting for the next participant…';
   }
+}
+
+function showPrinterStatus() {
+  if (!registrationPrinter) return;
+  registrationPrinter.textContent = printerStatusText(printerMode, printerReachable);
+}
+
+let printerStatusTask = null;
+
+function refreshPrinterStatus() {
+  if (printerStatusTask) return printerStatusTask;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1500);
+  printerStatusTask = fetch('/api/print', { signal: controller.signal })
+    .then((response) => {
+      printerReachable = response.ok;
+    })
+    .catch(() => {
+      printerReachable = false;
+    })
+    .finally(() => {
+      clearTimeout(timer);
+      printerStatusTask = null;
+      showPrinterStatus();
+    });
+  return printerStatusTask;
 }
 
 function onRegistrationFace(face, now) {
@@ -281,11 +306,35 @@ function onRegistrationFace(face, now) {
   updateRegistrationControls(face);
 }
 
+function fillAllRegistrationSlots() {
+  if (!registrationMode || registrationBusy || !registrationPhoto?.ready || registrationPhoto.failed) return;
+  const face = latestFace;
+  if (!face?.present || face.jumped || face.eyeSpan < MIN_EYE_SPAN || !face.bounds) {
+    registrationMessage = 'Hold still and face the camera, then press A again.';
+    updateRegistrationControls(face);
+    return;
+  }
+  try {
+    const portrait = captureFacePortrait(video, face.bounds, face.outline);
+    if (!registrationPhoto.fillAllPortraits(portrait)) {
+      registrationMessage = 'Could not update the class photo.';
+      updateRegistrationControls(face);
+      return;
+    }
+    registrationCards.replaceChildren();
+    registrationCount.textContent = `${registrationPhoto.count} participants registered`;
+    registrationMessage = 'Current face added to all 30 class photo positions.';
+  } catch (error) {
+    console.error(error);
+    registrationMessage = 'Could not capture a face for the class photo.';
+  }
+  updateRegistrationControls(face);
+}
+
 async function registerParticipant() {
   if (!registrationMode || registrationBusy) return;
   const actor = crowd.getLive();
   const face = latestFace;
-  const group = registrationPhoto.nextGroup;
   if (
     !actor ||
     !face?.present ||
@@ -302,6 +351,7 @@ async function registerParticipant() {
   try {
     portrait = captureFacePortrait(video, face.bounds, face.outline);
     lockFaceSnapshot(actor);
+    actor.mesh.userData.mouseId = timestampId();
     registrationStatus.textContent = 'Saving participant and creating QR…';
     await persistLiveMouse(actor);
     if (!actor.saved || !actor.mesh.userData.mouseId) {
@@ -314,7 +364,7 @@ async function registerParticipant() {
     const card = document.createElement('article');
     card.className = 'registration-card';
     const label = document.createElement('p');
-    label.textContent = `Participant ${registrationPhoto.count + 1} — ${formatRegistrationGroup(group)} class`;
+    label.textContent = `Participant ${registrationPhoto.count + 1}`;
     const qrCanvas = document.createElement('canvas');
     qrCanvas.width = 132;
     qrCanvas.height = 132;
@@ -326,17 +376,53 @@ async function registerParticipant() {
       registrationMessage = 'Participant saved, but QR generation failed.';
       return;
     }
-    if (!registrationPhoto.addPortrait(portrait, group)) {
+    if (!registrationPhoto.addPortrait(portrait)) {
       registrationMessage = 'The class photo is full.';
       return;
     }
     registrationCards.prepend(card);
     registrationCount.textContent = `${registrationPhoto.count} participant${registrationPhoto.count === 1 ? '' : 's'} registered`;
+    const snapshot = actor.transferSnapshot;
+    if (snapshot) snapshot.id = id;
+    const transferred = await publishTransferRecord({
+      id,
+      createdAt: snapshot?.createdAt || Date.now(),
+      portrait: portrait.toDataURL('image/png'),
+      snapshot,
+    });
+    let cardSaved = false;
+    if (snapshot) {
+      try {
+        const card = await renderStudentCard(snapshot, stageUniformColor(registrationPhoto.count - 1));
+        cardSaved = await publishTransferPhoto(id, card);
+      } catch (error) {
+        console.error(error);
+      }
+    }
     crowd.freeze();
     setIdle();
     resetFaceTracking();
     latestFace = null;
-    registrationMessage = '';
+    if (!transferred) {
+      registrationMessage = 'Registered, but the shared folder did not receive this participant.';
+    } else if (!cardSaved) {
+      registrationMessage = 'Registered, but the student-card photo was not saved.';
+    } else {
+      registrationMessage = '';
+    }
+    if (printerMode && printerReachable) {
+      void printRegistrationSlip(qrUrl).then(() => {
+        printerReachable = true;
+        showPrinterStatus();
+      }).catch((error) => {
+        console.error(error);
+        printerReachable = false;
+        showPrinterStatus();
+        if (registrationBusy) return;
+        registrationMessage = 'Registered, but printing failed.';
+        updateRegistrationControls(latestFace);
+      });
+    }
     await showShareForActor(null);
     updateRegistrationControls(null);
   } catch (error) {
@@ -650,25 +736,12 @@ tuneToggle.addEventListener('click', () => {
 });
 
 registrationCapture.addEventListener('click', registerParticipant);
-function switchLastRegisteredGroup() {
-  if (registrationBusy) return;
-  const group = registrationPhoto.switchLastGroup();
-  if (!group) return;
-  const label = registrationCards.firstElementChild?.querySelector('p');
-  if (label) {
-    label.textContent = `Participant ${registrationPhoto.count} — ${formatRegistrationGroup(group)} class`;
-  }
-  registrationMessage = '';
-  updateRegistrationControls();
-}
-registrationSwitchGroup.addEventListener('click', () => {
-  if (registrationBusy) return;
-  switchLastRegisteredGroup();
-});
 registrationPrint.addEventListener('click', () => window.print());
 if (registrationMode) {
   registrationCount.textContent = `0 participants registered`;
   updateRegistrationControls(null);
+  void refreshPrinterStatus();
+  setInterval(() => void refreshPrinterStatus(), 5000);
 }
 
 featureScale.addEventListener('input', () => {
@@ -750,9 +823,17 @@ window.addEventListener('keydown', (event) => {
     void registerParticipant();
     return;
   }
-  if (registrationMode && event.key.toLowerCase() === 'w') {
+  if (registrationMode && event.key.toLowerCase() === 'a') {
     event.preventDefault();
-    switchLastRegisteredGroup();
+    fillAllRegistrationSlots();
+    return;
+  }
+  if (registrationMode && event.key.toLowerCase() === 'p') {
+    event.preventDefault();
+    printerMode = !printerMode;
+    registrationMessage = '';
+    showPrinterStatus();
+    updateRegistrationControls();
     return;
   }
   if (registrationMode && (event.key === 't' || event.key === 'T')) {

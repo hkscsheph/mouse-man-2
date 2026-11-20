@@ -694,10 +694,10 @@ export function createMouseTraits() {
     noseSize: rand(0.85, 1.3),
     fitness,
     headScale: THREE.MathUtils.lerp(0.94, 1.14, 0.35 + fitness * 0.65),
-    bodyWide: THREE.MathUtils.lerp(0.84, 1.32, fitness),
-    bodyTall: THREE.MathUtils.lerp(1.02, 0.82, fitness),
-    bodyDeep: THREE.MathUtils.lerp(0.86, 1.24, fitness),
-    bellySize: THREE.MathUtils.lerp(0.82, 1.22, fitness),
+    bodyWide: THREE.MathUtils.lerp(0.84, 1.1, fitness),
+    bodyTall: THREE.MathUtils.lerp(1.02, 0.9, fitness),
+    bodyDeep: THREE.MathUtils.lerp(0.86, 1.06, fitness),
+    bellySize: THREE.MathUtils.lerp(0.82, 1.04, fitness),
     snoutLen: rand(0.88, 1.22),
     snoutRound: rand(0.85, 1),
     whiskerCount: Math.random() < 0.3 ? 4 : 3,
@@ -717,12 +717,22 @@ function normalizeChoice(value, allowed, fallback = 'none') {
   return allowed.includes(value) ? value : fallback;
 }
 
+function clampTrait(value, min, max, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return THREE.MathUtils.clamp(numeric, min, max);
+}
+
 /** Rebuild Color traits from a saved plain snapshot. */
 export function hydrateTraits(data) {
   const sides = Number(data.earSides);
   const fitness = Number.isFinite(data.fitness) ? data.fitness : 0.5;
   return {
     ...data,
+    bodyWide: clampTrait(data.bodyWide, 0.84, 1.1, 1),
+    bodyTall: clampTrait(data.bodyTall, 0.9, 1.02, 0.96),
+    bodyDeep: clampTrait(data.bodyDeep, 0.86, 1.06, 1),
+    bellySize: clampTrait(data.bellySize, 0.82, 1.04, 1),
     fur: asColor(data.fur),
     belly: asColor(data.belly),
     earInner: asColor(data.earInner),

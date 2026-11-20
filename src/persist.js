@@ -29,6 +29,12 @@ export function newMouseId() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Local time as yymmddHHmmss, used as the registration id and filename. */
+export function timestampId(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${pad(date.getFullYear() % 100)}${pad(date.getMonth() + 1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
 export function colorToHex(color) {
   return `#${color.getHexString()}`;
 }

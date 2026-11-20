@@ -2,3 +2,5 @@ node_modules
 dist
 Rattus_Registry/
 .dev-data/
+_*.jpg
+src/polygons_boy_*.json

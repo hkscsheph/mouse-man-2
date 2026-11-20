@@ -1,0 +1,8 @@
+{
+  "fov": 48,
+  "rowRise": 0.76,
+  "cameraHeight": 2.25,
+  "cameraX": 0,
+  "cameraDepthOffset": 0.05,
+  "cameraTargetOffsetY": 0.45
+}
