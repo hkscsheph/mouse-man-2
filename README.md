@@ -20,7 +20,7 @@
 
 眼睛、嘴巴貼在頭骨上，並跟著頭部傾斜一起動。鼻子貼片與 3D 鼻子沿著吻部。可調五官大小、眼睛高低、鼻孔、胸口與耳朵。隨機配件會配合每隻老鼠的身體與耳朵尺寸。
 
-報到使用男生班剪影，不依臉判斷性別。剪影來自 `polygons_boy.json`。`P` 開關印表機模式。開啟時，每次報到成功會印一張：第一行是「竄 」加上本機時間 `yyyymmdd hhMM` 再加上「 🐈」，第二行是半寬 QR，第三行是 🐭🐁🪤🐀🐹🧀。印表機要能從 `npm run dev` 連到 `192.168.0.191:9100`。
+報到使用男生班剪影，不依臉判斷性別。剪影來自 `polygons_boy.json`。`P` 開關印表機模式。開啟時，每次報到成功會印一張：第一行是「竄 」加上本機時間 `yyyymmdd hhMM` 再加上「 🐈」，第二行是半寬 QR，第三行是 🐭🐁🪤🐀🐹🧀。印表機要能從 `npm run dev` 連到 `192.168.0.191:9100`。老鼠 json 與學生卡 png 都放在同一個資料夾 `.dev-data/transfer/`（可用 `TRANSFER_DIR` 改位置）。印出的 QR 由訊號頁的鏡頭或 IP 攝影機掃到後，主舞台用該資料夾裡的 json 還原那隻老鼠。
 
 | 按鍵 | 動作 |
 | --- | --- |
@@ -50,7 +50,7 @@ npm run stage:ws-demo
 
 在另一個終端機執行 `npm run dev`，開啟 `http://localhost:5173/?mode=stage`。示範伺服器按 Enter 會吃掉最近的一隻；輸入 `id=老鼠ID` 再按 Enter 則指定對象。
 
-`npm run dev` 與 `npm run preview` 會把老鼠快照放在被忽略的 `.dev-data/mice/`，同一來源的瀏覽器可以再讀回。上線後由 Netlify Function `/api/mouse` 存取 Blobs。
+`npm run dev` 與 `npm run preview` 會把老鼠 json 與 png 放在被忽略的 `.dev-data/transfer/`，同一來源的瀏覽器可以再讀回。上線後由 Netlify Function `/api/mouse` 存取 Blobs。
 
 # Reference
 
@@ -83,7 +83,7 @@ Uniform mode uses textured, short-sleeved shirts with the school badge on the le
 
 ## Registration (`?mode=reg`)
 
-Registration starts with the black-cat teacher alone in the class scene. Each capture adds one student from the boys' class-photo template and replaces the student's face with the captured portrait. Face appearance is not used to infer gender. Student silhouettes are clipped to the manual polygon annotations in `polygons_boy.json`. Press **Q** to capture, **A** to place the current webcam face into all 30 silhouette slots (visual demo; no per-slot QR), and **T** to toggle the registration panel and webcam thumbnail. Press **P** to toggle printer mode. While it is on, each successful registration prints a slip on the LAN printer (`192.168.0.191:9100`, override with `PRINTER_HOST`): line 1 is `竄 ` plus the local time as `yyyymmdd hhMM` plus ` 🐈`, line 2 is a half-width QR code, and line 3 is 🐭🐁🪤🐀🐹🧀. The dev server must be running so the page can reach that port. The existing mouse-saving and printable QR-card flow is preserved. Each successful capture also writes the portrait and that mouse's random traits, face patches, and tuning into the shared folder `.dev-data/transfer/` as `<id>.json`, plus a front-facing student-card PNG of the uniformed, face-swapped mouse as `<id>.png` (override the directory with `TRANSFER_DIR`, including a network share). Point `?mode=trans` at the same dev server, or at a server using that same folder, to show those mice.
+Registration starts with the black-cat teacher alone in the class scene. Each capture adds one student from the boys' class-photo template and replaces the student's face with the captured portrait. Face appearance is not used to infer gender. Student silhouettes are clipped to the manual polygon annotations in `polygons_boy.json`. Press **Q** to capture, **A** to place the current webcam face into all 30 silhouette slots (visual demo; no per-slot QR), and **T** to toggle the registration panel and webcam thumbnail. Press **P** to toggle printer mode. While it is on, each successful registration prints a slip on the LAN printer (`192.168.0.191:9100`, override with `PRINTER_HOST`): line 1 is `竄 ` plus the local time as `yyyymmdd hhMM` plus ` 🐈`, line 2 is a half-width QR code, and line 3 is 🐭🐁🪤🐀🐹🧀. The dev server must be running so the page can reach that port. The existing mouse-saving and printable QR-card flow is preserved. Each successful capture writes `<id>.json` (portrait plus mouse traits, face patches, and tuning) and `<id>.png` (the front-facing student card) into one folder, `.dev-data/transfer/` (override with `TRANSFER_DIR`, including a network share). The printed QR is scanned by `?mode=signal` with the webcam or an IP camera. `?mode=stage` then admits that mouse from the JSON in that folder. Point `?mode=trans` at the same dev server, or at a server using that same folder, to show those mice.
 
 ## Transfer display (`?mode=trans`)
 
@@ -98,14 +98,14 @@ Split screen: **pixel chase** on top, **class photo** (3D mice) on the bottom. S
 Shirt colors follow the corresponding front, middle, and back positions in `br_class.jpg`. The photo's purple and navy shirts both use indigo to retain the five-color uniform palette; the central cat teacher has no mouse slot.
 
 1. The signal page scans participant QR codes (uses native `BarcodeDetector` when available and a `jsQR` fallback otherwise) and sends an `admit` signal. A pasted QR link or mouse id does the same. **Webcam** uses this device. **IP camera** uses an `http://`, `https://`, or `rtsp://` stream on the local network, such as `rtsp://192.168.1.64/Streaming/Channels/102`. An `rtsp://` address is converted by the dev server into frames the browser can show. The same address can be passed as `?ipcam=`. The choice is remembered in this browser.
-2. Each QR admit restores the original 3D mouse from its persisted traits, captured eyes/nose/mouth, face tuning, and part tuning. If its snapshot cannot be loaded, the stage reports an error instead of showing a different mouse. The `m` value also carries the saved fur color for the pixel mouse. A registered mouse stands in the same class-photo seat as in `?mode=trans` (registration order), even when scanned out of order. The 3D mouse walks in from the right, climbs onto that seat, and only then does its pixel mouse slide in from the right, locked to the scrolling floor, until it reaches its place. Admits line up and enter one at a time. Demo guest adds a placeholder face in a seat that is not reserved for a registration.
+2. Each QR admit restores the original 3D mouse from the matching JSON in `.dev-data/transfer/` (traits, captured eyes/nose/mouth, face tuning, and part tuning). If that record cannot be loaded, the stage reports an error instead of showing a different mouse. The `m` value also carries the saved fur color for the pixel mouse. A registered mouse stands in the same class-photo seat as in `?mode=trans` (registration order), even when scanned out of order. The 3D mouse walks in from the right, climbs onto that seat, and only then does its pixel mouse slide in from the right, locked to the scrolling floor, until it reaches its place. Admits line up and enter one at a time. Demo guest adds a placeholder face in a seat that is not reserved for a registration.
 3. **Eat closest** on the signal page (or a `catEat` message without an ID) targets the closest active pixel mouse. The cat runs to it, then uses the second row of `cat-run-actions.png` while crawling away; the mouse stays on the floor as both drift left with the scrolling background until off-screen, and the cat returns to its starting position. Its 3D figure stays in the photo blacked out with randomized red claw slashes drawn diagonally downward in either direction and is no longer counted as active. Messages with an ID target that specific mouse. **Clear the stage** sends `catSweep`. **Scratch zoom** plays the fullscreen cat scratch. **Figure**, **Drawing**, **Gift**, **Poster**, and **Note** send those slide-and-catch props.
 
 An angry meow plays when the scratches start. Browsers may require a click or keypress before sound is allowed; if blocked, use the on-screen **Enable sound** button for subsequent scratches. The recording is an excerpt of [Cat Wants Food by Oneirophile](https://freesound.org/people/Oneirophile/sounds/120160/), shared under [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
 
 The stage requests a high-performance WebGL device when available. Hardware acceleration depends on browser and driver settings. When native QR scanning is unavailable, supported browsers decode camera frames in a worker to keep the animation responsive; other browsers use the main-thread fallback.
 
-`npm run dev` and `npm run preview` provide a local `/api/mouse` backed by ignored `.dev-data/mice/` files, so saved QR snapshots can be retrieved across browser sessions using the same server origin.
+`npm run dev` and `npm run preview` provide a local `/api/mouse` backed by the JSON files in the ignored `.dev-data/transfer/` folder, so saved QR snapshots can be retrieved across browser sessions using the same server origin.
 
 ### Signals
 

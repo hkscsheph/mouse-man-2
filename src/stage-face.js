@@ -1,4 +1,5 @@
 import { canvasesFromSnapshot, fetchSnapshot, newMouseId } from './persist.js';
+import { fetchTransferRecord } from './transfer-folder.js';
 import { createMouseTraits, DEFAULT_PART_TUNING } from './mouse.js';
 
 /** Fallback palette for demo guests without a saved mouse. */
@@ -125,7 +126,12 @@ export async function resolveParticipant(idHint, furColorHint = null) {
   let snapshot = null;
 
   if (idHint) {
-    snapshot = await fetchSnapshot(idHint);
+    try {
+      snapshot = (await fetchTransferRecord(idHint)).snapshot;
+    } catch (error) {
+      console.warn('stage: transfer record unavailable, reading the mice store', error);
+      snapshot = await fetchSnapshot(idHint);
+    }
     canvases = await canvasesFromSnapshot(snapshot);
     traits = snapshot.traits;
     if (!snapshot.traits.fur && furColorHint) {

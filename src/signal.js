@@ -89,6 +89,11 @@ function setStatus(text) {
   statusEl.textContent = text;
 }
 
+function scanStamp(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
 const signals = connectStageSignals({
   onStatus(text) {
     wsEl.textContent = text;
@@ -273,10 +278,13 @@ function startScan() {
         }
       }
       if (generation !== scanGeneration) return;
-      if (raw && raw !== lastScan) {
+      if (raw && (raw !== lastScan || now >= scanCooldown)) {
         lastScan = raw;
         scanCooldown = now + 2500;
-        send({ type: 'admit', raw }, 'Scanned QR');
+        const line = `${scanStamp()} ${raw}`;
+        console.log(line);
+        setStatus(line);
+        signals.send({ type: 'admit', raw });
       }
     } catch (error) {
       console.warn('QR detect failed', error);
