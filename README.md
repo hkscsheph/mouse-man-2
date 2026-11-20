@@ -11,7 +11,7 @@
 | `?mode=pixel` | 像素貓鼠追逐。教室背景持續捲動。 |
 | `?mode=reg` | 報到。黑貓老師先站在班級合照裡，每次擷取加入一位學生，並把肖像貼上該人的剪影。成功後把肖像與這隻隨機老鼠寫進共用資料夾。 |
 | `?mode=stage` | 主舞台。上方是像素追逐，下方是最多 30 隻、三排各十隻的 3D 合照。這個畫面只負責顯示，不掃描、也不接受按鍵。 |
-| `?mode=signal` | 舞台訊號。用鏡頭掃 QR，並把入場、吃鼠、抓痕放大，以及 `1` 到 `5` 的物件訊號送給主舞台。 |
+| `?mode=signal` | 舞台訊號。用鏡頭或區域網路 IP 攝影機掃 QR，並把入場、吃鼠、抓痕放大，以及 `1` 到 `5` 的物件訊號送給主舞台。 |
 | `?mode=trans` | 傳輸畫面。只顯示主舞台下半的 3D 合照，並依序讀取共用資料夾裡的報到資料。 |
 
 預設路線加上 `?stage` 仍會顯示舊的示範老鼠。合照裡的紫衣與海軍藍都用靛藍，以維持五色校服。中央的貓老師不佔老鼠位置。
@@ -36,7 +36,7 @@
 
 未指定對象時，貓會跑向最近的像素鼠，抓起後一起向左移出畫面，再回到原位。訊號頁的「Scratch zoom」會把整個教室畫面慢慢放大到正在跑的黑貓身上，背景同時淡成白色。黑貓一直跑，直到放到最大並停在整個畫面正中，才換成抓痕動畫。動畫越靠越近，最後撐滿畫面高度時抓下去。紅眼睛和紅色抓痕保留，黑圓從畫面中央在貓後面擴大，直到蓋滿整個畫面。訊號頁的「Figure」會讓 `src/1-mmpa.png` 的一個小人貼地滑向貓，貓帶走後回到原位。邊緣收成實心像素黑線，半透明灰邊和雜點會去掉。放到背景時與滑進來時一樣高，在桌子之間由左到右排成一列，底部對齊桌腳。新的小人要等旁邊那張桌子下次從右邊滑入才出現。整列往左移出時，最左邊的一個碰到左緣後，其餘的會留到最後一個也離開為止。訊號頁的「Drawing」會讓一幅畫貼著地面從右端滑入。畫一碰到貓，貓立刻停下並像抓老鼠一樣帶著畫離開，再回到原位。畫隨後以較小尺寸掛在黑板左上角上方，之後每一幅都接在前一幅的右邊，並一直留在之後每塊黑板的上方。訊號頁的「Gift」會讓一個較小的禮物盒貼地滑向貓，貓帶走後回到原位。盒子都放在同一張課桌上：桌面四個、後面三個、再後面兩個、第四排一個。再多的盒子放到這張桌子下面。新的盒子要等這張桌子下次從右邊滑入才出現。訊號頁的「Poster」會讓一張海報同樣貼地滑向貓，貓帶走後回到原位。海報隨機掛在黑板和窗戶之間的牆上，可以互相遮住，但每一張都會露出一部分。新的海報要等那段牆下次滑入才出現，之後跟著牆壁一起移動。訊號頁的「Note」會讓 `src/5-msa.png` 的一個音符貼地滑向貓，貓帶走後回到原位。音符隨機貼在看得到的窗玻璃上，整顆都留在窗框裡，後來的可以稍微重疊，但每一顆都會露出一部分。新的音符要等窗戶下次滑入才出現，之後跟著窗戶一起移動。動畫還沒結束時再送小人、畫、禮物、海報或音符，會依序排隊，等這次結束再開始。合照上的那一隻被塗黑並畫上紅色抓痕，之後不再算在場。抓痕開始時播放一段怒喵；若瀏覽器擋住聲音，先按一次畫面或畫面上的「啟用聲音」。音檔摘自 [Cat Wants Food by Oneirophile](https://freesound.org/people/Oneirophile/sounds/120160/)，以 [CC0](https://creativecommons.org/publicdomain/zero/1.0/) 釋出。
 
-有 `BarcodeDetector` 時，訊號頁用它掃碼，否則用 `jsQR`。舞台畫面不再開啟鏡頭。合照預設穿校服。像素角色起始 300%，可從訊號頁放大或縮小。訊號頁可以用與舞台相同的按鍵送出訊號。
+有 `BarcodeDetector` 時，訊號頁用它掃碼，否則用 `jsQR`。訊號頁預設用這台裝置的鏡頭，也可以改成區域網路上的 IP 攝影機。位址可以是 `http://`、`https://` 或 `rtsp://`，例如 `rtsp://192.168.1.64/Streaming/Channels/102`，或在網址加上 `?ipcam=`。`rtsp://` 由開發伺服器轉成瀏覽器能顯示的影像。舞台畫面不再開啟鏡頭。合照預設穿校服。像素角色起始 300%，可從訊號頁放大或縮小。訊號頁可以用與舞台相同的按鍵送出訊號。
 
 WebSocket 位址依序為 `?ws=`、建置時的 `VITE_STAGE_WS_URL`、否則 `ws://localhost:8787`。JSON 文字的 `type` 可以是 `admit`、`catEat`、`catSweep`、`restartAll`、`scratch`、`prop`、`uniform`、`spriteScale`、`camera`。`admit` 的 `raw` 是 QR 內容，省略就是示範來賓。`prop` 的 `kind` 是 `figure`、`drawing`、`box`、`poster` 或 `note`。父頁面也可以送同一份內容：
 
@@ -73,7 +73,7 @@ npm run stage:ws-demo
 | `?mode=uniform` | Default webcam crowd with mice in five school-uniform colors |
 | `?mode=pixel` | Pixel cat chase (demo loop) |
 | `?mode=stage` | **Main stage** — view only. Pixel chase and class photo follow signals. |
-| `?mode=signal` | **Stage signals** — scan QR codes and send every stage event |
+| `?mode=signal` | **Stage signals** — scan QR codes from the webcam or a local IP camera and send every stage event |
 | `?mode=reg` | **Registration** — capture participants into the class photo and print their QR codes |
 | `?mode=trans` | **Transfer display** — the stage class photo only, filled from the shared registration folder |
 
@@ -97,7 +97,7 @@ Split screen: **pixel chase** on top, **class photo** (3D mice) on the bottom. S
 
 Shirt colors follow the corresponding front, middle, and back positions in `br_class.jpg`. The photo's purple and navy shirts both use indigo to retain the five-color uniform palette; the central cat teacher has no mouse slot.
 
-1. The signal page scans participant QR codes (uses native `BarcodeDetector` when available and a `jsQR` fallback otherwise) and sends an `admit` signal. A pasted QR link or mouse id does the same.
+1. The signal page scans participant QR codes (uses native `BarcodeDetector` when available and a `jsQR` fallback otherwise) and sends an `admit` signal. A pasted QR link or mouse id does the same. **Webcam** uses this device. **IP camera** uses an `http://`, `https://`, or `rtsp://` stream on the local network, such as `rtsp://192.168.1.64/Streaming/Channels/102`. An `rtsp://` address is converted by the dev server into frames the browser can show. The same address can be passed as `?ipcam=`. The choice is remembered in this browser.
 2. Each QR admit restores the original 3D mouse from its persisted traits, captured eyes/nose/mouth, face tuning, and part tuning. If its snapshot cannot be loaded, the stage reports an error instead of showing a different mouse. The `m` value also carries the saved fur color for the pixel mouse. A registered mouse stands in the same class-photo seat as in `?mode=trans` (registration order), even when scanned out of order. The 3D mouse walks in from the right, climbs onto that seat, and only then does its pixel mouse slide in from the right, locked to the scrolling floor, until it reaches its place. Admits line up and enter one at a time. Demo guest adds a placeholder face in a seat that is not reserved for a registration.
 3. **Eat closest** on the signal page (or a `catEat` message without an ID) targets the closest active pixel mouse. The cat runs to it, then uses the second row of `cat-run-actions.png` while crawling away; the mouse stays on the floor as both drift left with the scrolling background until off-screen, and the cat returns to its starting position. Its 3D figure stays in the photo blacked out with randomized red claw slashes drawn diagonally downward in either direction and is no longer counted as active. Messages with an ID target that specific mouse. **Clear the stage** sends `catSweep`. **Scratch zoom** plays the fullscreen cat scratch. **Figure**, **Drawing**, **Gift**, **Poster**, and **Note** send those slide-and-catch props.
 

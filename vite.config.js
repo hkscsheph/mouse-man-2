@@ -1,9 +1,14 @@
 import { defineConfig } from 'vite';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import http from 'node:http';
+import https from 'node:https';
+import { createRequire } from 'node:module';
 import net from 'node:net';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const ffmpegPath = createRequire(import.meta.url)('ffmpeg-static');
 const localMouseStore = resolve(fileURLToPath(new URL('.', import.meta.url)), '.dev-data', 'mice');
 const localTransferStore = process.env.TRANSFER_DIR
   ? resolve(process.env.TRANSFER_DIR)
@@ -446,6 +451,140 @@ async function localPrintApi(req, res) {
   sendJson(res, 200, { ok: true });
 }
 
+function isLocalCameraHost(hostname) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host === '::1' || host.endsWith('.local')) return true;
+  const parts = host.split('.').map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  const [a, b] = parts;
+  return a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254);
+}
+
+function localCameraUrl(req) {
+  let parsed;
+  try {
+    parsed = new URL(new URL(req.url, 'http://localhost').searchParams.get('url') || '');
+  } catch {
+    return null;
+  }
+  const stream = parsed.protocol === 'http:' || parsed.protocol === 'https:'
+    || parsed.protocol === 'rtsp:' || parsed.protocol === 'rtsps:';
+  if (!stream || !isLocalCameraHost(parsed.hostname)) return null;
+  return parsed;
+}
+
+function redactCamera(text) {
+  return String(text).replace(/rtsps?:\/\/\S+/gi, 'rtsp://camera');
+}
+
+function streamRtsp(target, req, res) {
+  if (!ffmpegPath) {
+    sendJson(res, 500, { error: 'ffmpeg is required for an rtsp camera' });
+    return;
+  }
+  const child = spawn(ffmpegPath, [
+    '-hide_banner',
+    '-loglevel', 'error',
+    '-rtsp_transport', 'tcp',
+    '-i', target.href,
+    '-an',
+    '-vf', 'fps=8',
+    '-q:v', '6',
+    '-f', 'mpjpeg',
+    'pipe:1',
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let started = false;
+  let settled = false;
+  let stderr = '';
+  const stop = () => {
+    if (child.exitCode === null && !child.killed) child.kill();
+  };
+  const fail = (status, error) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    stop();
+    console.error('rtsp camera failed', redactCamera(stderr || error));
+    if (!res.headersSent) sendJson(res, status, { error });
+    else res.destroy();
+  };
+  const timer = setTimeout(() => fail(504, 'camera timed out'), 12000);
+  child.stderr.on('data', (chunk) => {
+    stderr = (stderr + chunk.toString()).slice(-400);
+  });
+  child.stdout.once('data', (chunk) => {
+    if (settled) return;
+    started = true;
+    clearTimeout(timer);
+    res.statusCode = 200;
+    res.setHeader('content-type', 'multipart/x-mixed-replace; boundary=ffmpeg');
+    res.setHeader('cache-control', 'no-store');
+    res.write(chunk);
+    child.stdout.pipe(res);
+  });
+  child.on('error', (error) => fail(500, error.message || 'ffmpeg failed to start'));
+  child.on('exit', () => {
+    if (!started) fail(502, 'camera stream failed');
+    else if (!res.writableEnded) res.end();
+  });
+  req.once('close', stop);
+  res.once('close', stop);
+}
+
+function localIpcamApi(req, res) {
+  if (req.method !== 'GET') {
+    sendJson(res, 405, { error: 'method not allowed' });
+    return;
+  }
+  const target = localCameraUrl(req);
+  if (!target) {
+    sendJson(res, 400, { error: 'camera must be an http or rtsp address on the local network' });
+    return;
+  }
+  if (target.protocol === 'rtsp:' || target.protocol === 'rtsps:') {
+    streamRtsp(target, req, res);
+    return;
+  }
+  const pump = (next, redirectsLeft) => {
+    const lib = next.protocol === 'https:' ? https : http;
+    const upstream = lib.request(next, { method: 'GET', headers: { accept: '*/*' } }, (incoming) => {
+      const location = incoming.headers.location;
+      if (incoming.statusCode >= 300 && incoming.statusCode < 400 && location && redirectsLeft > 0) {
+        incoming.resume();
+        upstream.destroy();
+        let redirected;
+        try {
+          redirected = new URL(location, next);
+        } catch {
+          sendJson(res, 502, { error: 'camera redirect is invalid' });
+          return;
+        }
+        if ((redirected.protocol !== 'http:' && redirected.protocol !== 'https:') || !isLocalCameraHost(redirected.hostname)) {
+          sendJson(res, 400, { error: 'camera must be an http address on the local network' });
+          return;
+        }
+        pump(redirected, redirectsLeft - 1);
+        return;
+      }
+      res.statusCode = incoming.statusCode || 502;
+      const type = incoming.headers['content-type'];
+      if (type) res.setHeader('content-type', type);
+      res.setHeader('cache-control', 'no-store');
+      incoming.pipe(res);
+    });
+    upstream.on('error', (error) => {
+      console.error('ip camera proxy failed', error);
+      if (!res.headersSent) sendJson(res, 502, { error: 'camera unreachable' });
+      else res.destroy();
+    });
+    const stop = () => upstream.destroy();
+    req.once('close', stop);
+    res.once('close', stop);
+    upstream.end();
+  };
+  pump(target, 3);
+}
+
 function localMouseApiPlugin() {
   function register(server) {
     server.middlewares.use('/api/mouse', (req, res, next) => {
@@ -473,6 +612,18 @@ function localMouseApiPlugin() {
         }
         sendJson(res, 500, { error: 'storage request failed' });
       });
+    });
+    server.middlewares.use('/api/ipcam', (req, res, next) => {
+      try {
+        localIpcamApi(req, res);
+      } catch (error) {
+        console.error('ip camera proxy failed', error);
+        if (res.headersSent) {
+          next(error);
+          return;
+        }
+        sendJson(res, 500, { error: 'camera request failed' });
+      }
     });
     server.middlewares.use('/api/print', (req, res, next) => {
       localPrintApi(req, res).catch((error) => {
