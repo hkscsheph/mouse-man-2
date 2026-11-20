@@ -42,20 +42,23 @@ export function createFallbackQrScanner(canvas, context) {
     }
   }
 
-  function scanOnMainThread(video) {
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+  function scanOnMainThread(source) {
+    const frameWidth = source.videoWidth || source.naturalWidth;
+    const frameHeight = source.videoHeight || source.naturalHeight;
+    if (!frameWidth || !frameHeight) return '';
+    if (canvas.width !== frameWidth || canvas.height !== frameHeight) {
+      canvas.width = frameWidth;
+      canvas.height = frameHeight;
     }
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    context.drawImage(source, 0, 0, canvas.width, canvas.height);
     const image = context.getImageData(0, 0, canvas.width, canvas.height);
     return jsQR(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' })?.data ?? '';
   }
 
-  async function detect(video) {
+  async function detect(source) {
     if (worker) {
       try {
-        const bitmap = await createImageBitmap(video);
+        const bitmap = await createImageBitmap(source);
         if (!worker) {
           bitmap.close();
         } else {
@@ -77,7 +80,7 @@ export function createFallbackQrScanner(canvas, context) {
         disableWorker(error);
       }
     }
-    return scanOnMainThread(video);
+    return scanOnMainThread(source);
   }
 
   return { detect };

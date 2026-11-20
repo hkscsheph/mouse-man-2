@@ -58,7 +58,7 @@ Resolved in order:
 
 1. Query `?ws=wss://example.com/stage`
 2. Build-time `VITE_STAGE_WS_URL`
-3. Default `ws://localhost:8787`
+3. The host in the page address, port `8787`. `http://192.168.99.31:5173/?mode=stage` uses `ws://192.168.99.31:8787`. `localhost` and `127.0.0.1` stay on `ws://localhost:8787`.
 
 ### Message schema
 
