@@ -373,7 +373,7 @@ let uniformsEnabled = DEFAULT_STAGE_UNIFORM_ENABLED;
 let catScratchFrames = null;
 let catScratchPlaying = false;
 
-function recolorScratchFrame(source) {
+function prepareScratchFrame(source) {
   const frame = document.createElement('canvas');
   frame.width = source.displayWidth || source.width;
   frame.height = source.displayHeight || source.height;
@@ -390,6 +390,7 @@ function recolorScratchFrame(source) {
   let minY = frame.height;
   let maxX = -1;
   let maxY = -1;
+  let scratchPixels = 0;
   for (let y = 0; y < frame.height; y += 1) {
     for (let x = 0; x < frame.width; x += 1) {
       const i = (y * frame.width + x) * 4;
@@ -407,6 +408,7 @@ function recolorScratchFrame(source) {
         data[i + 1] = 32;
         data[i + 2] = 32;
       } else if (min > 140 && max - min < 36) {
+        scratchPixels += 1;
         data[i] = 255;
         data[i + 1] = 36;
         data[i + 2] = 36;
@@ -425,6 +427,8 @@ function recolorScratchFrame(source) {
   context.putImageData(image, 0, 0);
   return {
     canvas: frame,
+    scratch: scratchPixels > 4000,
+    duration: Math.max(1, Math.round((source.duration || 100000) / 1000)),
     box: {
       x: maxX < 0 ? 0 : minX,
       y: maxY < 0 ? 0 : minY,
@@ -443,7 +447,7 @@ async function loadCatScratchFrames() {
   const frames = [];
   for (let index = 0; index < count; index += 1) {
     const { image } = await decoder.decode({ frameIndex: index });
-    frames.push(recolorScratchFrame(image));
+    frames.push(prepareScratchFrame(image));
     image.close();
   }
   decoder.close();
@@ -473,8 +477,8 @@ function playCatScratch() {
     w: first.w * scaleX,
     h: first.h * scaleY,
   };
-  const runningGifHeight = 130;
-  const scratchGifHeight = 295;
+  const runningGifHeight = 312;
+  const scratchGifHeight = 792;
   const largestH = Math.min(
     window.innerHeight * 0.82,
     Math.max(from.h * 1.8, window.innerHeight * (runningGifHeight / scratchGifHeight)),
@@ -627,18 +631,23 @@ async function startScratchGif(framesPromise, overlay, runCat, startCatHeight) {
   };
   drawFrame(frames[0], 0);
   const gifStarted = performance.now();
-  const gifDuration = Math.max(1, (frames.length - 1) * 100);
+  const gifDuration = Math.max(1, frames.reduce((total, item) => total + item.duration, 0));
+  const foundScratch = frames.findIndex((item) => item.scratch);
+  const scratchIndex = foundScratch < 0 ? frames.length - 1 : foundScratch;
+  const scratchStarts = frames.slice(0, scratchIndex).reduce((total, item) => total + item.duration, 0);
+  const scratchSpan = Math.max(1, gifDuration - scratchStarts);
   let frameIndex = 0;
-  let last = gifStarted;
+  let nextAt = gifStarted + frames[0].duration;
   const tick = (now) => {
     if (!overlay.isConnected) return;
-    const progress = Math.min(1, (now - gifStarted) / gifDuration);
-    if (frameIndex < frames.length - 1 && now - last >= 100) {
-      last += 100;
+    while (frameIndex < frames.length - 1 && now >= nextAt) {
       frameIndex += 1;
+      nextAt += frames[frameIndex].duration;
     }
-    drawFrame(frames[frameIndex], progress);
-    hole.style.transform = `scale(${progress})`;
+    const elapsed = now - gifStarted;
+    drawFrame(frames[frameIndex], Math.min(1, elapsed / gifDuration));
+    const scratchProgress = elapsed < scratchStarts ? 0 : Math.min(1, (elapsed - scratchStarts) / scratchSpan);
+    hole.style.transform = `scale(${scratchProgress})`;
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
