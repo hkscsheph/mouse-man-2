@@ -254,6 +254,11 @@ body.signal-mode #share {
   font-size: 1rem;
 }
 
+#signal-status,
+#signal-ws {
+  margin: 0 0 8px;
+}
+
 #signal-keys {
   margin: 0 0 12px;
 }

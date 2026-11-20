@@ -18,6 +18,7 @@ root.id = 'signal-root';
 root.innerHTML = `
   <h1>Stage signals</h1>
   <p id="signal-status" role="status" aria-live="polite">Starting camera…</p>
+  <p id="signal-ws" role="status">Connecting to the stage…</p>
   <p id="signal-keys">Keys match the stage: <kbd>A</kbd> focuses the id field, <kbd>D</kbd> demo guest, <kbd>E</kbd> eat, <kbd>Q</kbd> scratch, <kbd>1</kbd>–<kbd>5</kbd> props, <kbd>U</kbd> uniforms, <kbd>+</kbd>/<kbd>-</kbd> size, arrows move the camera, <kbd>T</kbd> toggles the stage HUD.</p>
   <details id="signal-osc-panel">
     <summary>OSC</summary>
@@ -98,7 +99,7 @@ function setStatus(text) {
 
 const signals = connectStageSignals({
   onStatus(text) {
-    wsEl.textContent = text;
+    if (wsEl) wsEl.textContent = text;
   },
 });
 
