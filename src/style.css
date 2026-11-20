@@ -264,6 +264,24 @@ body.signal-mode #share {
   background: rgba(245, 233, 205, 0.16);
 }
 
+#signal-osc-panel {
+  margin: 0 0 16px;
+}
+
+#signal-osc-panel summary {
+  cursor: pointer;
+}
+
+#signal-osc-map {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+#signal-osc-map code,
+#signal-osc-panel code {
+  font-family: ui-monospace, monospace;
+}
+
 #signal-cam,
 #signal-ipcam {
   display: block;

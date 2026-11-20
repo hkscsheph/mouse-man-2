@@ -84,80 +84,6 @@ async function localTransferPerspectiveApi(req, res) {
     sendJson(res, 500, { error: 'perspective write failed' });
   }
 }
-const localTransferStore = process.env.TRANSFER_DIR
-  ? resolve(process.env.TRANSFER_DIR)
-  : resolve(fileURLToPath(new URL('.', import.meta.url)), '.dev-data', 'transfer');
-const transferPerspectivePath = resolve(
-  fileURLToPath(new URL('.', import.meta.url)),
-  'src',
-  'transfer-perspective.json',
-);
-const perspectiveLimits = {
-  fov: [20, 70],
-  rowRise: [0.2, 0.9],
-  cameraHeight: [0.3, 2.5],
-  cameraX: [-4, 4],
-  cameraDepthOffset: [-2, 10],
-  cameraTargetOffsetY: [-2, 2],
-};
-
-function perspectiveConfig(input) {
-  const config = {};
-  for (const [key, [min, max]] of Object.entries(perspectiveLimits)) {
-    const value = Number(input?.[key]);
-    if (!Number.isFinite(value)) throw new Error(`invalid ${key}`);
-    config[key] = Math.round(Math.min(max, Math.max(min, value)) * 1000) / 1000;
-  }
-  return config;
-}
-
-async function localTransferPerspectiveApi(req, res) {
-  if (req.method === 'OPTIONS') {
-    sendJson(res, 204, {});
-    return;
-  }
-  if (req.method === 'GET') {
-    try {
-      sendJson(res, 200, JSON.parse(await readFile(transferPerspectivePath, 'utf8')));
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        sendJson(res, 200, perspectiveConfig({
-          fov: 38,
-          rowRise: 0.8,
-          cameraHeight: 1.8,
-          cameraX: 0,
-          cameraDepthOffset: 0,
-          cameraTargetOffsetY: 0,
-        }));
-        return;
-      }
-      console.error('transfer perspective read failed', error);
-      sendJson(res, 500, { error: 'perspective read failed' });
-    }
-    return;
-  }
-  if (req.method !== 'POST') {
-    sendJson(res, 405, { error: 'method not allowed' });
-    return;
-  }
-  let config;
-  try {
-    config = perspectiveConfig(await readJsonBody(req));
-  } catch (error) {
-    sendJson(res, 400, { error: error.message || 'invalid perspective' });
-    return;
-  }
-  const temporaryPath = `${transferPerspectivePath}.tmp`;
-  try {
-    await writeFile(temporaryPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
-    await rm(transferPerspectivePath, { force: true });
-    await rename(temporaryPath, transferPerspectivePath);
-    sendJson(res, 200, config);
-  } catch (error) {
-    console.error('transfer perspective write failed', error);
-    sendJson(res, 500, { error: 'perspective write failed' });
-  }
-}
 const validMouseId = /^[a-z0-9]{8,32}$/i;
 
 function sendJson(res, status, body) {
@@ -175,12 +101,10 @@ function sendJson(res, status, body) {
 }
 
 async function readJsonBody(req, limit = 2 * 1024 * 1024) {
-async function readJsonBody(req, limit = 2 * 1024 * 1024) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > limit) throw new Error('request body too large');
     if (size > limit) throw new Error('request body too large');
     chunks.push(chunk);
   }
