@@ -58,6 +58,18 @@ function mainThreadFixture() {
   };
 }
 
+test('caps a large camera frame before decoding on the main thread', async () => {
+  await withGlobals({ Worker: undefined }, async () => {
+    const fixture = mainThreadFixture();
+    fixture.video.videoWidth = 1920;
+    fixture.video.videoHeight = 1080;
+    const scanner = createFallbackQrScanner(fixture.canvas, fixture.context);
+    assert.equal(await scanner.detect(fixture.video), payload);
+    assert.equal(fixture.canvas.width, 720);
+    assert.equal(fixture.canvas.height, 405);
+  });
+});
+
 test('decodes QR at full resolution when worker APIs are unavailable', async () => {
   await withGlobals({ Worker: undefined }, async () => {
     const fixture = mainThreadFixture();

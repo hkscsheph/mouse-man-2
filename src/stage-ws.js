@@ -6,6 +6,8 @@ export function resolveStageWsUrl() {
   if (fromQuery) return fromQuery;
   const fromEnv = import.meta.env.VITE_STAGE_WS_URL;
   if (fromEnv) return fromEnv;
+  const host = location.hostname;
+  if (host && host !== 'localhost' && host !== '127.0.0.1') return `ws://${host}:8787`;
   return DEFAULT_WS;
 }
 

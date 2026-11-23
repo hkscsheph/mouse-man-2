@@ -32,6 +32,8 @@
 
 `?mode=stage` 只顯示演出，不再開鏡頭掃碼。原本的按鍵仍然可用：`A` 貼上 QR 或老鼠 id，`D` 加入示範來賓，`E` 吃最近的老鼠，`Q` 抓痕放大，`1` 到 `5` 送出物件，`U` 切換校服，`+=` / `-` 縮放像素角色，方向鍵移動 3D 鏡頭。`T` 顯示或隱藏狀態列，預設隱藏。收到的訊號和舞台上的按鍵都會寫進主控台。掃碼、以及同樣的演出動作，也可以由 `?mode=signal` 送出。同一個瀏覽器裡的舞台分頁會直接收到訊號；另一台裝置要先執行 `npm run stage:ws-demo`，兩邊再開同一個 WebSocket。
 
+`?mode=signal` 的每個選項也可以用 OSC 觸發。另開終端機執行 `npm run stage:osc`，訊號頁會連上 `ws://這台電腦:9001`（可用 `?osc=` 或建置時的 `VITE_STAGE_OSC_URL` 改位址）。控制器把 OSC 送到 UDP `9000`（`STAGE_OSC_PORT`）。按下時送大於 0 的值。位址與訊號頁 OSC 清單相同，例如 `/signal/eat`、`/signal/scratch`、`/signal/prop/figure`、`/signal/camera/left`、`/signal/webcam`、`/signal/ipcam`、`/signal/admit`。
+
 掃 QR 會還原已儲存的毛色、五官、臉部與部位調整。快照讀不到就顯示錯誤，不會換成別隻老鼠。QR 的 `m` 也帶著像素鼠的毛色。訊號頁的「Demo guest」可加入一隻沒有真實五官的示範來賓。
 
 未指定對象時，貓會跑向最近的像素鼠，抓起後一起向左移出畫面，再回到原位。訊號頁的「Scratch zoom」會把整個教室畫面慢慢放大到正在跑的黑貓身上，背景同時淡成白色。黑貓一直跑，直到放到最大並停在整個畫面正中，才換成抓痕動畫。然後換成 `src/cat_scratch.gif`。位置與先前相同，貓身轉成黑色，眼睛和抓痕轉成紅色，並放大到撐滿畫面高度。抓下去之後，黑圓才從畫面中央在貓後面擴大，直到蓋滿整個畫面。訊號頁的「Figure」會讓 `src/1-mmpa.png` 的一個小人貼地滑向貓，貓帶走後回到原位。邊緣收成實心像素黑線，半透明灰邊和雜點會去掉。放到背景時與滑進來時一樣高，在桌子之間由左到右排成一列，底部對齊桌腳。新的小人要等旁邊那張桌子下次從右邊滑入才出現。整列往左移出時，最左邊的一個碰到左緣後，其餘的會留到最後一個也離開為止。訊號頁的「Drawing」會讓一幅畫貼著地面從右端滑入。畫一碰到貓，貓立刻停下並像抓老鼠一樣帶著畫離開，再回到原位。畫隨後以較小尺寸掛在黑板左上角上方，之後每一幅都接在前一幅的右邊，並一直留在之後每塊黑板的上方。訊號頁的「Gift」會讓一個較小的禮物盒貼地滑向貓，貓帶走後回到原位。盒子都放在同一張課桌上：桌面四個、後面三個、再後面兩個、第四排一個。再多的盒子放到這張桌子下面。新的盒子要等這張桌子下次從右邊滑入才出現。訊號頁的「Poster」會讓一張海報同樣貼地滑向貓，貓帶走後回到原位。海報隨機掛在黑板和窗戶之間的牆上，可以互相遮住，但每一張都會露出一部分。新的海報要等那段牆下次滑入才出現，之後跟著牆壁一起移動。訊號頁的「Note」會讓 `src/5-msa.png` 的一個音符貼地滑向貓，貓帶走後回到原位。音符隨機貼在看得到的窗玻璃上，整顆都留在窗框裡，後來的可以稍微重疊，但每一顆都會露出一部分。新的音符要等窗戶下次滑入才出現，之後跟著窗戶一起移動。動畫還沒結束時再送小人、畫、禮物、海報或音符，會依序排隊，等這次結束再開始。合照上的那一隻被塗黑並畫上紅色抓痕，之後不再算在場。抓痕開始時播放一段怒喵；若瀏覽器擋住聲音，先按一次畫面或畫面上的「啟用聲音」。音檔摘自 [Cat Wants Food by Oneirophile](https://freesound.org/people/Oneirophile/sounds/120160/)，以 [CC0](https://creativecommons.org/publicdomain/zero/1.0/) 釋出。
@@ -73,7 +75,7 @@ npm run stage:ws-demo
 | `?mode=uniform` | Default webcam crowd with mice in five school-uniform colors |
 | `?mode=pixel` | Pixel cat chase (demo loop) |
 | `?mode=stage` | **Main stage** — view only. Pixel chase and class photo follow signals. |
-| `?mode=signal` | **Stage signals** — scan QR codes from the webcam or a local IP camera and send every stage event |
+| `?mode=signal` | **Stage signals** — scan QR codes from the webcam or a local IP camera and send every stage event. OSC can trigger the same options |
 | `?mode=reg` | **Registration** — capture participants into the class photo and print their QR codes |
 | `?mode=trans` | **Transfer display** — the stage class photo only, filled from the shared registration folder |
 
@@ -124,13 +126,34 @@ The stage keeps its keyboard controls and also follows `?mode=signal`. That page
 | Larger cat / Smaller cat | Enlarge / shrink the pixel cat and mice (starts at 300%) |
 | Camera buttons | Move the 3D camera left/right, closer/farther, and up/down |
 
+### OSC
+
+`npm run stage:osc` listens on UDP port `9000` and forwards each message to the open `?mode=signal` page at `ws://<this-host>:9001`. That page runs the matching option, then sends the usual stage signal. A press is any value above 0. The page lists every address under **OSC**. Ports can be changed with `STAGE_OSC_PORT` and `STAGE_OSC_WS_PORT`. The page address is `?osc=`, then build-time `VITE_STAGE_OSC_URL`, then `ws://<page-host>:9001`.
+
+| Address | Option |
+| --- | --- |
+| `/signal/demo` | Demo guest |
+| `/signal/eat` | Eat closest. A string eats that mouse id |
+| `/signal/sweep` | Clear the stage |
+| `/signal/scratch` | Scratch zoom |
+| `/signal/restart` | Restart |
+| `/signal/prop/figure` `/signal/prop/drawing` `/signal/prop/box` `/signal/prop/poster` `/signal/prop/note` | Bring on that prop. `/signal/1` through `/signal/5` and `/signal/gift` also work |
+| `/signal/uniform` | Uniforms |
+| `/signal/larger` `/signal/smaller` | Pixel size by 0.1. `/signal/scale` uses the number sent |
+| `/signal/camera/left` `/signal/camera/right` `/signal/camera/closer` `/signal/camera/farther` `/signal/camera/up` `/signal/camera/down` | One on-screen camera step (0.08) |
+| `/signal/camera/move` | Move by the three numbers `x`, `depth`, `height` |
+| `/signal/webcam` | Webcam |
+| `/signal/ipcam` | IP camera. A string sets the address |
+| `/signal/admit` | Admit the QR or mouse id string |
+| `/signal/hud` | Stage HUD |
+
 ### WebSocket URL
 
 Resolved in order:
 
 1. Query `?ws=wss://example.com/stage`
 2. Build-time `VITE_STAGE_WS_URL`
-3. Default `ws://localhost:8787`
+3. The host in the page address, port `8787`. `http://192.168.99.31:5173/?mode=stage` uses `ws://192.168.99.31:8787`. `localhost` and `127.0.0.1` stay on `ws://localhost:8787`.
 
 ### Message schema
 

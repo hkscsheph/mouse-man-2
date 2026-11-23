@@ -1,4 +1,5 @@
 import { createFallbackQrScanner } from './stage-qr-scanner.js';
+import { resolveSignalOscUrl, SIGNAL_OSC_ROUTES, signalActionFromOsc, signalControl } from './signal-osc.js';
 import { connectStageSignals } from './stage-ws.js';
 
 document.title = 'Stage Signals';
@@ -17,7 +18,14 @@ root.id = 'signal-root';
 root.innerHTML = `
   <h1>Stage signals</h1>
   <p id="signal-status" role="status" aria-live="polite">Starting camera…</p>
+  <p id="signal-ws" role="status">Connecting to the stage…</p>
   <p id="signal-keys">Keys match the stage: <kbd>A</kbd> focuses the id field, <kbd>D</kbd> demo guest, <kbd>E</kbd> eat, <kbd>Q</kbd> scratch, <kbd>1</kbd>–<kbd>5</kbd> props, <kbd>U</kbd> uniforms, <kbd>+</kbd>/<kbd>-</kbd> size, arrows move the camera, <kbd>T</kbd> toggles the stage HUD.</p>
+  <details id="signal-osc-panel">
+    <summary>OSC</summary>
+    <p id="signal-osc" role="status">OSC offline</p>
+    <p>Start <code>npm run stage:osc</code>. Controllers send UDP port 9000. A press sends a value above 0.</p>
+    <ul id="signal-osc-map"></ul>
+  </details>
   <section>
     <h2>Camera</h2>
     <div class="signal-actions">
@@ -96,7 +104,7 @@ function scanStamp(date = new Date()) {
 
 const signals = connectStageSignals({
   onStatus(text) {
-    wsEl.textContent = text;
+    if (wsEl) wsEl.textContent = text;
   },
 });
 
@@ -105,11 +113,20 @@ function send(payload, label) {
   setStatus(`Sent: ${label}`);
 }
 
+function applyAction(action, signalId) {
+  if (!action) return;
+  if (action.op === 'send') {
+    const payload = signalId ? { ...action.payload, signalId } : action.payload;
+    send(payload, action.label);
+  } else if (action.op === 'webcam') void useWebcam();
+  else if (action.op === 'ipcam') void useIpcam(action.url || ipcamInput.value);
+}
+
 admitForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  const raw = admitInput.value.trim();
-  if (!raw) return;
-  send({ type: 'admit', raw }, raw);
+  const action = signalControl('admit', admitInput.value);
+  if (!action) return;
+  applyAction(action);
   admitInput.value = '';
 });
 
@@ -117,31 +134,22 @@ root.addEventListener('click', (event) => {
   const button = event.target.closest('button');
   if (!button || button.type === 'submit') return;
   if (button.dataset.source === 'webcam') {
-    void useWebcam();
+    applyAction(signalControl('webcam'));
     return;
   }
   if (button.dataset.source === 'ipcam') {
-    void useIpcam(ipcamInput.value);
+    applyAction(signalControl('ipcam', ipcamInput.value));
     return;
   }
   if (button.dataset.prop) {
-    send({ type: 'prop', kind: button.dataset.prop }, button.textContent.trim());
+    applyAction(signalControl('prop', button.dataset.prop));
     return;
   }
   if (button.dataset.move) {
-    const move = button.dataset.move.split(',').map((part) => Number(part) * 0.08);
-    send({ type: 'camera', move }, button.textContent.trim());
+    applyAction(signalControl('camera', button.dataset.move));
     return;
   }
-  const action = button.dataset.signal;
-  if (action === 'demo') send({ type: 'admit' }, 'Demo guest');
-  else if (action === 'eat') send({ type: 'catEat' }, 'Eat closest');
-  else if (action === 'sweep') send({ type: 'catSweep' }, 'Clear the stage');
-  else if (action === 'scratch') send({ type: 'scratch' }, 'Scratch zoom');
-  else if (action === 'restart') send({ type: 'restartAll' }, 'Restart');
-  else if (action === 'uniform') send({ type: 'uniform' }, 'Uniforms');
-  else if (action === 'larger') send({ type: 'spriteScale', delta: 0.1 }, 'Larger cat');
-  else if (action === 'smaller') send({ type: 'spriteScale', delta: -0.1 }, 'Smaller cat');
+  applyAction(signalControl(button.dataset.signal));
 });
 
 const propKeys = {
@@ -185,35 +193,35 @@ window.addEventListener('keydown', (event) => {
   const prop = propKeys[event.key];
   if (prop) {
     event.preventDefault();
-    send({ type: 'prop', kind: prop }, prop);
+    applyAction(signalControl('prop', prop));
     return;
   }
   const key = event.key.toLowerCase();
   if (key === 't') {
     event.preventDefault();
-    send({ type: 'hud' }, 'HUD');
+    applyAction(signalControl('hud'));
   } else if (key === 'u') {
     event.preventDefault();
-    send({ type: 'uniform' }, 'Uniforms');
+    applyAction(signalControl('uniform'));
   } else if (key === 'q') {
     event.preventDefault();
-    send({ type: 'scratch' }, 'Scratch zoom');
+    applyAction(signalControl('scratch'));
   } else if (key === 'e') {
     event.preventDefault();
-    send({ type: 'catEat' }, 'Eat closest');
+    applyAction(signalControl('eat'));
   } else if (key === 'd') {
     event.preventDefault();
-    send({ type: 'admit' }, 'Demo guest');
+    applyAction(signalControl('demo'));
   } else if (key === 'a') {
     event.preventDefault();
     admitInput.focus();
     admitInput.select();
   } else if (event.key === '+' || event.code === 'NumpadAdd' || event.key === '=' || event.code === 'Equal') {
     event.preventDefault();
-    send({ type: 'spriteScale', delta: 0.1 }, 'Larger cat');
+    applyAction(signalControl('larger'));
   } else if (event.key === '-' || event.code === 'NumpadSubtract') {
     event.preventDefault();
-    send({ type: 'spriteScale', delta: -0.1 }, 'Smaller cat');
+    applyAction(signalControl('smaller'));
   }
 });
 
@@ -439,3 +447,74 @@ if (queryCam || (localStorage.getItem(SOURCE_KEY) === 'ipcam' && ipcamInput.valu
 } else {
   void useWebcam();
 }
+
+const oscMap = root.querySelector('#signal-osc-map');
+for (const [address, text] of SIGNAL_OSC_ROUTES) {
+  const item = document.createElement('li');
+  const code = document.createElement('code');
+  code.textContent = address;
+  item.append(code, ` — ${text}`);
+  oscMap.append(item);
+}
+
+function connectSignalOsc() {
+  const url = resolveSignalOscUrl(location, import.meta.env.VITE_STAGE_OSC_URL || '');
+  const oscEl = root.querySelector('#signal-osc');
+  let closed = false;
+  let retry = 1000;
+  let timer = 0;
+  let openedSocket = null;
+
+  function setOsc(text) {
+    oscEl.textContent = text;
+  }
+
+  function connect() {
+    if (closed) return;
+    let socket;
+    try {
+      socket = new WebSocket(url);
+    } catch (error) {
+      console.warn(error);
+      setOsc('OSC address is invalid');
+      return;
+    }
+    openedSocket = socket;
+    let finished = false;
+    const fail = () => {
+      if (finished || closed) return;
+      finished = true;
+      if (openedSocket === socket) openedSocket = null;
+      setOsc(`OSC offline (${url})`);
+      timer = window.setTimeout(connect, retry);
+      retry = Math.min(retry * 2, 8000);
+    };
+    socket.addEventListener('open', () => {
+      retry = 1000;
+      setOsc(`OSC connected (${url})`);
+    });
+    socket.addEventListener('message', (event) => {
+      let message;
+      try {
+        message = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      const signalId = typeof message?.signalId === 'string' ? message.signalId : '';
+      applyAction(signalActionFromOsc(message?.address, message?.args), signalId);
+    });
+    socket.addEventListener('close', fail);
+    socket.addEventListener('error', () => {
+      if (socket.readyState !== WebSocket.CLOSING && socket.readyState !== WebSocket.CLOSED) socket.close();
+    });
+  }
+
+  connect();
+  window.addEventListener('pagehide', () => {
+    closed = true;
+    window.clearTimeout(timer);
+    openedSocket?.close();
+  });
+}
+
+connectSignalOsc();
