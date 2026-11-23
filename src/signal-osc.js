@@ -2,7 +2,9 @@
 
 export const CAMERA_NUDGE = 0.08;
 export const SCALE_STEP = 0.1;
-const OSC_WS_PORT = 9001;
+// PC-中央Server already uses UDP 9000 (Central) and UDP 9001 (OscForward).
+export const SIGNAL_OSC_UDP_PORT = 9020;
+export const SIGNAL_OSC_WS_PORT = 9021;
 
 const PROP_LABELS = {
   figure: 'Figure',
@@ -198,5 +200,5 @@ export function resolveSignalOscUrl({ search = '', hostname = '' } = {}, envUrl 
   if (envUrl) return envUrl;
   const host = !hostname || hostname === '127.0.0.1' ? 'localhost' : hostname;
   const name = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
-  return `ws://${name}:${OSC_WS_PORT}`;
+  return `ws://${name}:${SIGNAL_OSC_WS_PORT}`;
 }

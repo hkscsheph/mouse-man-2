@@ -1,5 +1,5 @@
 import { createFallbackQrScanner, qrFrameReady } from './stage-qr-scanner.js';
-import { resolveSignalOscUrl, SIGNAL_OSC_ROUTES, signalActionFromOsc, signalControl } from './signal-osc.js';
+import { resolveSignalOscUrl, SIGNAL_OSC_ROUTES, SIGNAL_OSC_UDP_PORT, signalActionFromOsc, signalControl } from './signal-osc.js';
 import { connectStageSignals } from './stage-ws.js';
 
 document.title = 'Stage Signals';
@@ -23,7 +23,7 @@ root.innerHTML = `
   <details id="signal-osc-panel">
     <summary>OSC</summary>
     <p id="signal-osc" role="status">OSC offline</p>
-    <p>Start <code>npm run stage:osc</code>. Controllers send UDP port 9000. A press sends a value above 0.</p>
+    <p>Start <code>npm run stage:osc</code>. Controllers send UDP port ${SIGNAL_OSC_UDP_PORT}. A press sends a value above 0.</p>
     <ul id="signal-osc-map"></ul>
   </details>
   <section>

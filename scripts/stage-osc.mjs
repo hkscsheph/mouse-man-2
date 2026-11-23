@@ -2,16 +2,17 @@
 /**
  * OSC input for ?mode=signal.
  * Usage: npm run stage:osc
- * Listens for OSC on UDP 9000 and forwards each message to signal pages on ws://0.0.0.0:9001.
+ * Listens for OSC on UDP 9020 and forwards each message to signal pages on ws://0.0.0.0:9021.
  */
 import { randomUUID } from 'node:crypto';
 import dgram from 'node:dgram';
 import { networkInterfaces } from 'node:os';
 import { WebSocketServer, WebSocket } from 'ws';
 import { decodeOscPacket } from '../src/osc-decode.js';
+import { SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT } from '../src/signal-osc.js';
 
-const OSC_PORT = Number(process.env.STAGE_OSC_PORT || 9000);
-const WS_PORT = Number(process.env.STAGE_OSC_WS_PORT || 9001);
+const OSC_PORT = Number(process.env.STAGE_OSC_PORT || SIGNAL_OSC_UDP_PORT);
+const WS_PORT = Number(process.env.STAGE_OSC_WS_PORT || SIGNAL_OSC_WS_PORT);
 
 if (!Number.isInteger(OSC_PORT) || !Number.isInteger(WS_PORT) || OSC_PORT < 1 || WS_PORT < 1) {
   console.error('STAGE_OSC_PORT and STAGE_OSC_WS_PORT must be port numbers');
