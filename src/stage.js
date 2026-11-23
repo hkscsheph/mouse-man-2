@@ -101,6 +101,8 @@ const photo = createStagePhoto(photoCanvas, { pinStandBottom: true });
 const pixel = createPixelChase(pixelCanvas, {
   initialCount: 0,
   initialSpriteScale: initialPixelSpriteScale,
+  posterWallScale: 1.5,
+  noteWallScale: 0.75,
   mouseWanderSpeed: 0.45,
   mouseWanderRange: 10,
   mouseRunFrameDuration: 150,

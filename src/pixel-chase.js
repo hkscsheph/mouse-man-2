@@ -36,6 +36,14 @@ export function createPixelChase(canvas, options = {}) {
   const mouseWanderRange = Math.max(0, Number(options.mouseWanderRange) || 0);
   const mouseRunFrameDuration = Math.max(1, Number(options.mouseRunFrameDuration) || 105);
   const catSpeedVariation = Math.min(0.5, Math.max(0, Number(options.catSpeedVariation) || 0));
+  const requestedPosterWallScale = Number(options.posterWallScale ?? 1);
+  const posterWallScale = Number.isFinite(requestedPosterWallScale) && requestedPosterWallScale > 0
+    ? requestedPosterWallScale
+    : 1;
+  const requestedNoteWallScale = Number(options.noteWallScale ?? 1);
+  const noteWallScale = Number.isFinite(requestedNoteWallScale) && requestedNoteWallScale > 0
+    ? requestedNoteWallScale
+    : 1;
   let lastFrame = performance.now();
   let scroll = 0;
   let catHidden = false;
@@ -718,36 +726,39 @@ export function createPixelChase(canvas, options = {}) {
 
   function posterWallBox(frame) {
     const groundY = Math.floor(height * 0.82);
+    const wallTop = px(7) + px(2);
     const boardTop = Math.max(px(24), Math.floor(groundY * 0.2));
     const gapLeft = px(36) + px(144) + px(3);
     const gapRight = width - px(82) - px(3);
     const gapW = Math.max(8, gapRight - gapLeft);
     const deskTop = groundY - Math.max(px(34), Math.floor(height * 0.18)) - 3;
-    const band = Math.max(px(12), deskTop - boardTop - px(1));
+    const wallHeight = Math.max(1, groundY - wallTop);
+    const posterSizeBand = Math.max(px(12), deskTop - boardTop - px(1));
     const aspect = frame.width / Math.max(1, frame.height);
     let w = Math.round(gapW * 0.62);
     let h = Math.max(1, Math.round(w / aspect));
-    if (h > band * 0.72) {
-      h = Math.max(1, Math.round(band * 0.72));
+    if (h > posterSizeBand * 0.72) {
+      h = Math.max(1, Math.round(posterSizeBand * 0.72));
       w = Math.max(1, Math.round(h * aspect));
     }
-    w = Math.min(w, gapW);
-    h = Math.min(h, band);
-    return { gapLeft, gapW, boardTop, band, w, h };
+    const fitScale = Math.min(posterWallScale, gapW / w, posterSizeBand / h, wallHeight / h);
+    w = Math.max(1, Math.round(w * fitScale));
+    h = Math.max(1, Math.round(h * fitScale));
+    return { gapLeft, gapW, wallTop, wallHeight, w, h };
   }
 
   function posterRect(item) {
     const frame = posterFrames[item.index];
     const box = posterWallBox(frame);
     const maxX = Math.max(0, box.gapW - box.w);
-    const maxY = Math.max(0, box.band - box.h);
+    const maxY = Math.max(0, box.wallHeight - box.h);
     return {
       x: Math.round(item.u * maxX),
       y: Math.round(item.v * maxY),
       w: box.w,
       h: box.h,
       gapLeft: box.gapLeft,
-      boardTop: box.boardTop,
+      wallTop: box.wallTop,
     };
   }
 
@@ -782,7 +793,7 @@ export function createPixelChase(canvas, options = {}) {
         if (!frame) continue;
         const rect = posterRect(item);
         const x = Math.round(tileX + rect.gapLeft + rect.x);
-        const y = Math.round(rect.boardTop + rect.y);
+        const y = Math.round(rect.wallTop + rect.y);
         if (x < width && x + rect.w > -viewPad) ctx.drawImage(frame, x, y, rect.w, rect.h);
       }
     }
@@ -845,7 +856,11 @@ export function createPixelChase(canvas, options = {}) {
       h = maxH;
       w = Math.max(1, Math.min(maxW, Math.round(h * frame.width / frame.height)));
     }
-    return { ...box, w, h };
+    return {
+      ...box,
+      w: Math.max(1, Math.round(w * noteWallScale)),
+      h: Math.max(1, Math.round(h * noteWallScale)),
+    };
   }
 
   function noteRect(item) {
