@@ -1,12 +1,12 @@
 import { createPixelChase } from './pixel-chase.js';
-import { createStagePhoto, DEFAULT_STAGE_UNIFORM_ENABLED } from './stage-photo.js';
-import { createScratchSound } from './stage-sound.js';
-import { connectStageWebSocket } from './stage-ws.js';
+import { createStagePhoto, DEFAULT_STAGE_UNIFORM_ENABLED } from './stage/stage-photo.js';
+import { createScratchSound } from './stage/stage-sound.js';
+import { connectStageWebSocket } from './stage/stage-ws.js';
 import {
   parseMouseFurColorFromQrText,
   parseMouseIdFromQrText,
   resolveParticipant,
-} from './stage-face.js';
+} from './stage/stage-face.js';
 import { listTransferRecords } from './transfer-folder.js';
 
 document.title = 'Main Stage — Mouse Exhibition';

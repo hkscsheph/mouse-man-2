@@ -8,8 +8,8 @@ import { randomUUID } from 'node:crypto';
 import dgram from 'node:dgram';
 import { networkInterfaces } from 'node:os';
 import { WebSocketServer, WebSocket } from 'ws';
-import { decodeOscPacket } from '../src/osc-decode.js';
-import { SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT } from '../src/signal-osc.js';
+import { decodeOscPacket } from '../src/signal/osc-decode.js';
+import { SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT } from '../src/signal/signal-osc.js';
 
 const OSC_PORT = Number(process.env.STAGE_OSC_PORT || SIGNAL_OSC_UDP_PORT);
 const WS_PORT = Number(process.env.STAGE_OSC_WS_PORT || SIGNAL_OSC_WS_PORT);

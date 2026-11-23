@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { decodeOscPacket } from '../src/osc-decode.js';
+import { decodeOscPacket } from '../../src/signal/osc-decode.js';
 
 function oscString(text) {
   const raw = Buffer.from(`${text}\0`);

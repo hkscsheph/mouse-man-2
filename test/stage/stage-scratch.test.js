@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createScratchStyle, drawScratches } from '../src/stage-scratch.js';
+import { createScratchStyle, drawScratches } from '../../src/stage/stage-scratch.js';
 
 function pathsAt(style, progress, dpr = 1) {
   const paths = [];

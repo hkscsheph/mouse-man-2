@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createMouse, disposeMouse, setMouseUniform, UNIFORM_COLORS } from './mouse.js';
+import { createMouse, disposeMouse, setMouseUniform, UNIFORM_COLORS } from '../mouse.js';
 import { createScratchStyle, drawScratches } from './stage-scratch.js';
 
 const COLS = 10;

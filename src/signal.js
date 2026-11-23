@@ -1,6 +1,6 @@
-import { createFallbackQrScanner, qrFrameReady } from './stage-qr-scanner.js';
-import { resolveSignalOscUrl, SIGNAL_OSC_ROUTES, SIGNAL_OSC_UDP_PORT, signalActionFromOsc, signalControl } from './signal-osc.js';
-import { connectStageSignals } from './stage-ws.js';
+import { createFallbackQrScanner, qrFrameReady } from './stage/stage-qr-scanner.js';
+import { resolveSignalOscUrl, SIGNAL_OSC_ROUTES, SIGNAL_OSC_UDP_PORT, signalActionFromOsc, signalControl } from './signal/signal-osc.js';
+import { connectStageSignals } from './stage/stage-ws.js';
 
 document.title = 'Stage Signals';
 document.body.classList.add('signal-mode');

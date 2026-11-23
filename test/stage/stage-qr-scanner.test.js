@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import QRCode from 'qrcode';
-import { createFallbackQrScanner, qrFrameReady } from '../src/stage-qr-scanner.js';
+import { createFallbackQrScanner, qrFrameReady } from '../../src/stage/stage-qr-scanner.js';
 
 const payload = 'https://example.test/?id=12345678';
 

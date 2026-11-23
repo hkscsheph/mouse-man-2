@@ -24,7 +24,7 @@ import { renderShareQr } from './qr.js';
 import { createRegistrationPhoto } from './registration.js';
 import { publishTransferPhoto, publishTransferRecord } from './transfer-folder.js';
 import { renderStudentCard } from './student-card.js';
-import { stageUniformColor } from './stage-photo.js';
+import { stageUniformColor } from './stage/stage-photo.js';
 import { createScene } from './scene.js';
 
 const SETTLE_MS = 600;

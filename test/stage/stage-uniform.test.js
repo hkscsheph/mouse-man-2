@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { stageUniformColor } from '../src/stage-photo.js';
+import { stageUniformColor } from '../../src/stage/stage-photo.js';
 
 test('stage shirt colors match the class photo in center-out admission order', () => {
   const [black, white, olive, burgundy, indigo] = [

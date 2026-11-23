@@ -1,5 +1,5 @@
 import { canvasesFromSnapshot } from './persist.js';
-import { createStagePhoto, DEFAULT_STAGE_UNIFORM_ENABLED } from './stage-photo.js';
+import { createStagePhoto, DEFAULT_STAGE_UNIFORM_ENABLED } from './stage/stage-photo.js';
 import { DEFAULT_PART_TUNING } from './mouse.js';
 import {
   fetchTransferRecord,

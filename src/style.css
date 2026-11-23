@@ -536,7 +536,7 @@ body.stage-mode #share {
 }
 
 #stage-photo + .stage-scratch-layer {
-  /* positioned via inline styles from stage-photo.js */
+  /* positioned via inline styles from stage/stage-photo.js */
 }
 
 #stage-hud {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createScratchSound } from '../src/stage-sound.js';
+import { createScratchSound } from '../../src/stage/stage-sound.js';
 
 function audioFixture() {
   const starts = [];

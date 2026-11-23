@@ -1,6 +1,6 @@
-import { canvasesFromSnapshot, fetchSnapshot, newMouseId } from './persist.js';
-import { fetchTransferRecord } from './transfer-folder.js';
-import { createMouseTraits, DEFAULT_PART_TUNING } from './mouse.js';
+import { canvasesFromSnapshot, fetchSnapshot, newMouseId } from '../persist.js';
+import { fetchTransferRecord } from '../transfer-folder.js';
+import { createMouseTraits, DEFAULT_PART_TUNING } from '../mouse.js';
 
 /** Fallback palette for demo guests without a saved mouse. */
 export const UNIFORM_TRAITS = {
