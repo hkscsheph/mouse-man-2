@@ -9,7 +9,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ffmpegPath = createRequire(import.meta.url)('ffmpeg-static');
-const localMouseStore = resolve(fileURLToPath(new URL('.', import.meta.url)), '.dev-data', 'mice');
+const legacyMouseStore = resolve(fileURLToPath(new URL('.', import.meta.url)), '.dev-data', 'mice');
 const localTransferStore = process.env.TRANSFER_DIR
   ? resolve(process.env.TRANSFER_DIR)
   : resolve(fileURLToPath(new URL('.', import.meta.url)), '.dev-data', 'transfer');
@@ -128,13 +128,13 @@ async function localMouseApi(req, res) {
       return;
     }
     try {
-      const snapshot = JSON.parse(await readFile(resolve(localMouseStore, `${id}.json`), 'utf8'));
-      sendJson(res, 200, snapshot);
-    } catch (error) {
-      if (error.code === 'ENOENT') {
+      const record = await readStoredRecord(id);
+      if (!record?.snapshot) {
         sendJson(res, 404, { error: 'not found' });
         return;
       }
+      sendJson(res, 200, record.snapshot);
+    } catch (error) {
       console.error('local mouse API read failed', error);
       sendJson(res, 500, { error: 'storage read failed' });
     }
@@ -157,8 +157,13 @@ async function localMouseApi(req, res) {
       return;
     }
     try {
-      await mkdir(localMouseStore, { recursive: true });
-      await writeFile(resolve(localMouseStore, `${id}.json`), JSON.stringify(snapshot), 'utf8');
+      const existing = await readStoredRecord(id);
+      await writeStoredRecord({
+        id,
+        createdAt: existing?.createdAt || Number(snapshot.createdAt) || Date.now(),
+        ...(existing?.portrait ? { portrait: existing.portrait } : {}),
+        snapshot: { ...snapshot, id },
+      });
       sendJson(res, 200, { id, remote: true });
     } catch (error) {
       console.error('local mouse API write failed', error);
@@ -172,6 +177,58 @@ async function localMouseApi(req, res) {
 
 function transferRecordPath(id) {
   return resolve(localTransferStore, `${id}.json`);
+}
+
+async function readStoredRecord(id) {
+  try {
+    const parsed = JSON.parse(await readFile(transferRecordPath(id), 'utf8'));
+    if (parsed?.snapshot?.traits && parsed?.snapshot?.patches) return { ...parsed, id };
+    if (parsed?.traits && parsed?.patches) {
+      return {
+        id,
+        createdAt: Number(parsed.createdAt) || Date.now(),
+        snapshot: { ...parsed, id },
+      };
+    }
+    return null;
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+async function writeStoredRecord(record) {
+  await mkdir(localTransferStore, { recursive: true });
+  const finalPath = transferRecordPath(record.id);
+  const temporaryPath = `${finalPath}.tmp`;
+  await writeFile(temporaryPath, JSON.stringify(record), 'utf8');
+  await rm(finalPath, { force: true });
+  await rename(temporaryPath, finalPath);
+}
+
+async function moveLegacyMiceIntoTransfer() {
+  let names = [];
+  try {
+    names = await readdir(legacyMouseStore);
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue;
+    const id = name.slice(0, -'.json'.length);
+    if (!validMouseId.test(id)) continue;
+    const mouse = JSON.parse(await readFile(resolve(legacyMouseStore, name), 'utf8'));
+    if (!mouse?.traits || !mouse?.patches) continue;
+    const existing = await readStoredRecord(id);
+    await writeStoredRecord({
+      id,
+      createdAt: existing?.createdAt || Number(mouse.createdAt) || Date.now(),
+      ...(existing?.portrait ? { portrait: existing.portrait } : {}),
+      snapshot: { ...(existing?.snapshot || {}), ...mouse, id },
+    });
+    await rm(resolve(legacyMouseStore, name), { force: true });
+  }
 }
 
 function transferPhotoPath(id) {
@@ -259,7 +316,7 @@ async function localTransferApi(req, res) {
         if (!name.endsWith('.json')) continue;
         try {
           const record = JSON.parse(await readFile(resolve(localTransferStore, name), 'utf8'));
-          if (!validMouseId.test(String(record?.id || ''))) continue;
+          if (!validMouseId.test(String(record?.id || '')) || !record?.portrait) continue;
           entries.push({ id: record.id, createdAt: Number(record.createdAt) || 0 });
         } catch (error) {
           console.error('local transfer list skipped', name, error);
@@ -274,7 +331,11 @@ async function localTransferApi(req, res) {
       return;
     }
     try {
-      const record = JSON.parse(await readFile(transferRecordPath(id), 'utf8'));
+      const record = await readStoredRecord(id);
+      if (!record?.snapshot) {
+        sendJson(res, 404, { error: 'not found' });
+        return;
+      }
       sendJson(res, 200, record);
     } catch (error) {
       if (error.code === 'ENOENT') {
@@ -310,19 +371,15 @@ async function localTransferApi(req, res) {
       sendJson(res, 400, { error: 'invalid transfer record' });
       return;
     }
+    const existing = await readStoredRecord(id);
     const stored = {
       id,
-      createdAt: Number(record.createdAt) || Date.now(),
+      createdAt: Number(record.createdAt) || existing?.createdAt || Date.now(),
       portrait,
-      snapshot,
+      snapshot: { ...(existing?.snapshot || {}), ...snapshot, id },
     };
-    const finalPath = transferRecordPath(id);
-    const temporaryPath = `${finalPath}.tmp`;
     try {
-      await mkdir(localTransferStore, { recursive: true });
-      await writeFile(temporaryPath, JSON.stringify(stored), 'utf8');
-      await rm(finalPath, { force: true });
-      await rename(temporaryPath, finalPath);
+      await writeStoredRecord(stored);
       sendJson(res, 200, { id });
     } catch (error) {
       console.error('local transfer write failed', error);
@@ -337,7 +394,7 @@ async function localTransferApi(req, res) {
 function printerTarget() {
   // shortcut: this RP80 is on the LAN; set PRINTER_HOST when it moves
   return {
-    host: process.env.PRINTER_HOST || '192.168.0.191',
+    host: process.env.PRINTER_HOST || '192.168.99.15',
     port: Number(process.env.PRINTER_PORT || 9100),
   };
 }
@@ -587,6 +644,9 @@ function localIpcamApi(req, res) {
 
 function localMouseApiPlugin() {
   function register(server) {
+    moveLegacyMiceIntoTransfer().catch((error) => {
+      console.error('could not move mice json into the shared folder', error);
+    });
     server.middlewares.use('/api/mouse', (req, res, next) => {
       localMouseApi(req, res).catch((error) => {
         console.error('local mouse API request failed', error);

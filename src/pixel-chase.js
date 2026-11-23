@@ -1022,27 +1022,6 @@ export function createPixelChase(canvas, options = {}) {
     };
   }
 
-  function aisleAfterDesk(desks, deskIndex) {
-    const desk = desks[deskIndex];
-    let left = desk.x + desk.w;
-    let expanded = true;
-    while (expanded) {
-      expanded = false;
-      for (const other of desks) {
-        if (other === desk) continue;
-        if (other.x < left && other.x + other.w > left) {
-          left = other.x + other.w;
-          expanded = true;
-        }
-      }
-    }
-    let right = Infinity;
-    for (const other of desks) {
-      if (other.x >= left && other.x < right) right = other.x;
-    }
-    return { left, right };
-  }
-
   function drawPlacedFigures(desks) {
     if (!placedFigures.length || !desks.length) return;
     const gapPad = Math.max(1, px(1));
@@ -1058,8 +1037,6 @@ export function createPixelChase(canvas, options = {}) {
       const phase = aisle * 126 - scroll * 0.82;
       const cycleStartPhase = Math.ceil((phase - 1e-6) / span) * span;
       const currentEntrance = (aisle * 126 - cycleStartPhase) / 0.82;
-      const gap = aisleAfterDesk(desks, aisle);
-      if (!Number.isFinite(gap.right)) gap.right = gap.left + width;
       const baseline = desk.top + tableBottom;
       const spots = [];
       let cursor = gapPad;
@@ -1072,8 +1049,8 @@ export function createPixelChase(canvas, options = {}) {
       }
       const lineLeft = desk.x + desk.w;
       const passes = [
-        { left: lineLeft, entrance: currentEntrance, clipRight: gap.right },
-        { left: lineLeft - px(span), entrance: currentEntrance - span / 0.82, clipRight: Infinity },
+        { left: lineLeft, entrance: currentEntrance },
+        { left: lineLeft - px(span), entrance: currentEntrance - span / 0.82 },
       ];
       for (const pass of passes) {
         const outgoing = pass.left !== lineLeft;
@@ -1084,15 +1061,8 @@ export function createPixelChase(canvas, options = {}) {
           if (outgoing ? !joinedEarlier : !joinedThisPass) continue;
           const x = Math.round(pass.left + spot.offset);
           const y = Math.round(baseline - spot.h);
-          if (x >= width || x + spot.w <= -viewPad || x >= pass.clipRight) continue;
-          if (!outgoing) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(pass.left, 0, Math.max(0, pass.clipRight - pass.left), height);
-            ctx.clip();
-          }
+          if (x >= width || x + spot.w <= -viewPad) continue;
           ctx.drawImage(spot.frame, x, y, spot.w, spot.h);
-          if (!outgoing) ctx.restore();
         }
       }
     }
@@ -1100,13 +1070,13 @@ export function createPixelChase(canvas, options = {}) {
 
   function placeFigure(index) {
     if (!figureFrames[index]) return;
-    const order = placedFigures.length;
-    const aisle = Math.floor(order / 8) % 3;
+    const previous = placedFigures[placedFigures.length - 1];
+    const aisle = previous ? previous.aisle : 0;
     placedFigures.push({
       index,
       aisle,
-      slot: order % 8,
-      revealScroll: nextDeskRevealScroll(aisle),
+      slot: previous ? previous.slot + 1 : 0,
+      revealScroll: previous ? previous.revealScroll : nextDeskRevealScroll(aisle),
     });
   }
 
