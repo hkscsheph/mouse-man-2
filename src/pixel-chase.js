@@ -13,6 +13,45 @@ const MOUSE_FOOT_ROW = 20;
 const MIN_SPRITE_SCALE = 0.5;
 const MAX_SPRITE_SCALE = 5;
 const CAT_RETURN_SPEED = 600;
+const STAGE_TABLE_COUNT = 3;
+const STAGE_BUILDINGS_PER_TABLE = 6;
+const DESK_LEG_TOP = 8;
+const DESK_LEG_HEIGHT = 11;
+
+export function stageBuildingSlot(order) {
+  const capacity = STAGE_TABLE_COUNT * STAGE_BUILDINGS_PER_TABLE;
+  const floor = order >= capacity;
+  const position = floor ? order - capacity : order;
+  return {
+    deskIndex: position % STAGE_TABLE_COUNT,
+    slot: Math.floor(position / STAGE_TABLE_COUNT),
+    floor,
+  };
+}
+
+export function stageBuildingTableLayout(frames, deskWidths, referenceWidth) {
+  const rows = deskWidths.map((_, deskIndex) => (
+    Array.from({ length: STAGE_BUILDINGS_PER_TABLE }, (_, slot) => (
+      frames[(slot * STAGE_TABLE_COUNT + deskIndex) % frames.length].width
+    ))
+  ));
+  const maxWidth = Math.max(...frames.map((frame) => frame.width));
+  const scale = Math.min(
+    1.5 * referenceWidth / STAGE_BUILDINGS_PER_TABLE / maxWidth,
+    ...rows.map((row, index) => deskWidths[index] / row.reduce((sum, width) => sum + width, 0)),
+  );
+  const offsets = rows.map((row, index) => {
+    const gap = Math.max(0, (deskWidths[index] - row.reduce((sum, width) => sum + width * scale, 0))
+      / (STAGE_BUILDINGS_PER_TABLE + 1));
+    let position = gap;
+    return row.map((width) => {
+      const offset = position;
+      position += width * scale + gap;
+      return offset;
+    });
+  });
+  return { scale, offsets };
+}
 
 function wrap(value, period) {
   return ((value % period) + period) % period;
@@ -24,6 +63,7 @@ function onePixel(pxFn) {
 
 export function createPixelChase(canvas, options = {}) {
   let ctx = canvas.getContext('2d');
+  const stageMode = canvas.classList.contains('stage-pixel');
   let viewPad = 0;
   let width = BASE_WIDTH;
   let height = 200;
@@ -195,6 +235,7 @@ export function createPixelChase(canvas, options = {}) {
     const { data } = image;
     const background = [data[0], data[1], data[2]];
     const far = (offset) => {
+      if (knockout === 'alpha') return data[offset + 3] >= 128;
       if (knockout === 'pixel') {
         if (data[offset + 3] < 128) return false;
         const red = data[offset];
@@ -234,7 +275,27 @@ export function createPixelChase(canvas, options = {}) {
     const frameSpansX = spans(columns);
     const frameSpansY = spans(rows);
     const rects = [];
-    if (split === 'components') {
+    if (split === 'buildings') {
+      const boundaries = [0, 0.265, 0.525, 0.75, 1].map((fraction) => Math.round(sourceWidth * fraction));
+      const buildingRows = Array.from({ length: 4 }, () => []);
+      for (let column = 0; column < boundaries.length - 1; column += 1) {
+        const x0 = boundaries[column];
+        const x1 = boundaries[column + 1] - 1;
+        const rowCounts = new Array(sourceHeight).fill(0);
+        for (let y = 0; y < sourceHeight; y += 1) {
+          for (let x = x0; x <= x1; x += 1) {
+            if (far((y * sourceWidth + x) * 4)) rowCounts[y] += 1;
+          }
+        }
+        const columnSpans = spans(rowCounts);
+        if (columnSpans.length !== buildingRows.length) {
+          console.error(`Building sprite column ${column + 1} has ${columnSpans.length} rows; expected ${buildingRows.length}.`);
+          return [];
+        }
+        columnSpans.forEach(([y0, y1], row) => buildingRows[row].push([x0, y0, x1, y1]));
+      }
+      rects.push(...buildingRows.flat());
+    } else if (split === 'components') {
       const seen = new Uint8Array(sourceWidth * sourceHeight);
       const parts = [];
       for (let y = 0; y < sourceHeight; y += 1) {
@@ -321,7 +382,11 @@ export function createPixelChase(canvas, options = {}) {
         const nearBackground = (index) => Math.abs(crop.data[index] - background[0])
           + Math.abs(crop.data[index + 1] - background[1])
           + Math.abs(crop.data[index + 2] - background[2]) <= 48;
-        if (knockout === 'pixel') {
+        if (knockout === 'alpha') {
+          for (let i = 0; i < crop.data.length; i += 4) {
+            if (crop.data[i + 3] < 128) crop.data[i + 3] = 0;
+          }
+        } else if (knockout === 'pixel') {
           for (let i = 0; i < crop.data.length; i += 4) {
             crop.data[i + 3] = crop.data[i + 3] >= 128 ? 255 : 0;
           }
@@ -409,7 +474,7 @@ export function createPixelChase(canvas, options = {}) {
           }
         }
         frame.bottomInset = contentBottom < 0 ? 0 : (frameHeight - 1 - contentBottom) / frameHeight;
-        if (split !== 'per-row' && split !== 'components') {
+        if (split !== 'per-row' && split !== 'components' && split !== 'buildings') {
           frames.push(frame);
           return;
         }
@@ -460,13 +525,15 @@ export function createPixelChase(canvas, options = {}) {
   const placedBoxes = [];
   let nextBox = 0;
   /**
-   * A gift box crossing the stage, then leaving with the cat.
+   * A prop crossing the stage, then leaving with the cat.
    * @type {null | { index: number, x: number, y: number, w: number, h: number, phase: 'slide' | 'caught' }}
    */
   let flyingBox = null;
 
   boxSource.addEventListener('load', () => {
-    boxFrames = sliceSpriteFrames(boxSource, new Set(), 'edge');
+    boxFrames = stageMode
+      ? sliceSpriteFrames(boxSource, new Set(), 'alpha', 'buildings')
+      : sliceSpriteFrames(boxSource, new Set(), 'edge');
   }, { once: true });
   boxSource.src = new URL('./3-ess.png', import.meta.url).href;
 
@@ -560,8 +627,8 @@ export function createPixelChase(canvas, options = {}) {
     ctx.fillStyle = '#e0aa62';
     ctx.fillRect(x, y, deskWidth, one);
     ctx.fillStyle = '#795039';
-    ctx.fillRect(x + px(5), y + px(8), px(3), px(11));
-    ctx.fillRect(x + deskWidth - px(8), y + px(8), px(3), px(11));
+    ctx.fillRect(x + px(5), y + px(DESK_LEG_TOP), px(3), px(DESK_LEG_HEIGHT));
+    ctx.fillRect(x + deskWidth - px(8), y + px(DESK_LEG_TOP), px(3), px(DESK_LEG_HEIGHT));
   }
 
   function drawClassroomWall(groundY) {
@@ -670,6 +737,7 @@ export function createPixelChase(canvas, options = {}) {
       ctx.fillRect(x + px(5), groundY + px(8), px(10), Math.max(1, px(1)));
       ctx.fillRect(x + px(20), groundY + px(19), px(7), Math.max(1, px(1)));
     }
+    if (stageMode) drawPlacedBoxes(desks, 'floor');
     drawPlacedFigures(desks);
   }
 
@@ -931,13 +999,22 @@ export function createPixelChase(canvas, options = {}) {
     windowNotes.push(placed);
   }
 
+  function deskWidth(index) {
+    const baseWidth = 42 + (index % 2) * 8;
+    return stageMode ? baseWidth * 2 + (index % 2 === 0 ? 6 : 0) : baseWidth;
+  }
+
+  function deskSpan(index) {
+    return BASE_WIDTH + (stageMode ? deskWidth(1) : deskWidth(index));
+  }
+
   function deskSlots(groundY) {
     const top = groundY - Math.max(px(34), Math.floor(height * 0.18)) - 3;
     const desks = [];
     for (let i = 0; i < 3; i += 1) {
-      const deskWidth = 42 + (i % 2) * 8;
-      const x = Math.floor(px(wrap(i * 126 - scroll * 0.82, BASE_WIDTH + deskWidth) - deskWidth));
-      desks.push({ x, top, w: px(deskWidth) });
+      const tableWidth = deskWidth(i);
+      const x = Math.floor(px(wrap(i * 126 - scroll * 0.82, deskSpan(i)) - tableWidth));
+      desks.push({ x, top, w: px(tableWidth) });
     }
     return desks;
   }
@@ -946,7 +1023,9 @@ export function createPixelChase(canvas, options = {}) {
   const BOX_ROWS = [4, 3, 2, 1];
 
   function boxCarrySize(frame) {
-    const h = Math.max(px(14), Math.round(catSpriteSize() * 0.16));
+    const baseHeight = Math.max(px(14), Math.round(catSpriteSize() * 0.16));
+    const maxHeight = stageMode ? Math.max(...boxFrames.map((building) => building.height)) : frame.height;
+    const h = Math.max(1, Math.round(baseHeight * (stageMode ? 1.5 : 1) * frame.height / maxHeight));
     return {
       w: Math.max(1, Math.round(h * frame.width / frame.height)),
       h,
@@ -971,8 +1050,7 @@ export function createPixelChase(canvas, options = {}) {
   }
 
   function nextDeskRevealScroll(deskIndex) {
-    const deskWidth = 42 + (deskIndex % 2) * 8;
-    const span = BASE_WIDTH + deskWidth;
+    const span = deskSpan(deskIndex);
     const phase = deskIndex * 126 - scroll * 0.82;
     const boundary = Math.floor(phase / span) * span;
     const target = phase - boundary < 1e-4 ? boundary - span : boundary;
@@ -981,6 +1059,37 @@ export function createPixelChase(canvas, options = {}) {
 
   function drawPlacedBoxes(desks, layer) {
     if (!placedBoxes.length) return;
+    if (stageMode) {
+      if (layer === 'below') return;
+      const capacity = STAGE_TABLE_COUNT * STAGE_BUILDINGS_PER_TABLE;
+      const maxFrameWidth = Math.max(...boxFrames.map((frame) => frame.width));
+      const tableCellWidth = Math.min(...desks.map((desk) => desk.w)) / STAGE_BUILDINGS_PER_TABLE;
+      const tableLayout = stageBuildingTableLayout(boxFrames, desks.map((desk) => desk.w), px(84));
+      for (let order = 0; order < placedBoxes.length; order += 1) {
+        const item = placedBoxes[order];
+        const { deskIndex, slot, floor } = stageBuildingSlot(order);
+        if (floor !== (layer === 'floor') || !(scroll > item.revealScroll)) continue;
+        const frame = boxFrames[item.index];
+        const desk = desks[deskIndex];
+        if (!frame || !desk) continue;
+        const floorCount = Math.max(0, Math.ceil((placedBoxes.length - capacity - deskIndex) / STAGE_TABLE_COUNT));
+        const cells = floor ? Math.max(STAGE_BUILDINGS_PER_TABLE, floorCount) : STAGE_BUILDINGS_PER_TABLE;
+        const cellWidth = desk.w / cells;
+        const scale = floor ? Math.min(tableCellWidth, cellWidth) / maxFrameWidth : tableLayout.scale;
+        const w = Math.max(1, frame.width * scale);
+        const h = Math.max(1, frame.height * scale);
+        const left = floor
+          ? desk.x + cellWidth * (slot + 0.5) - w / 2
+          : desk.x + tableLayout.offsets[deskIndex][slot];
+        const baseline = floor
+          ? desk.top + px(DESK_LEG_TOP) + px(DESK_LEG_HEIGHT)
+          : desk.top;
+        if (left < width && left + w > -viewPad) {
+          ctx.drawImage(frame, left, baseline - h, w, h);
+        }
+      }
+      return;
+    }
     const desk = desks[BOX_TABLE];
     if (!desk) return;
     const cellW = desk.w / BOX_ROWS[0];
@@ -1018,7 +1127,8 @@ export function createPixelChase(canvas, options = {}) {
 
   function placeBox(index) {
     if (!boxFrames[index]) return;
-    placedBoxes.push({ index, revealScroll: nextDeskRevealScroll(BOX_TABLE) });
+    const deskIndex = stageMode ? stageBuildingSlot(placedBoxes.length).deskIndex : BOX_TABLE;
+    placedBoxes.push({ index, revealScroll: nextDeskRevealScroll(deskIndex) });
   }
 
   function figureSlideSize(frame) {
@@ -1047,8 +1157,7 @@ export function createPixelChase(canvas, options = {}) {
         .sort((a, b) => a.slot - b.slot);
       if (!group.length) continue;
       const desk = desks[aisle];
-      const deskWidth = 42 + (aisle % 2) * 8;
-      const span = BASE_WIDTH + deskWidth;
+      const span = deskSpan(aisle);
       const phase = aisle * 126 - scroll * 0.82;
       const cycleStartPhase = Math.ceil((phase - 1e-6) / span) * span;
       const currentEntrance = (aisle * 126 - cycleStartPhase) / 0.82;
