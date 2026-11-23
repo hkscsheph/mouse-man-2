@@ -1,4 +1,4 @@
-import { createFallbackQrScanner } from './stage-qr-scanner.js';
+import { createFallbackQrScanner, qrFrameReady } from './stage-qr-scanner.js';
 import { resolveSignalOscUrl, SIGNAL_OSC_ROUTES, signalActionFromOsc, signalControl } from './signal-osc.js';
 import { connectStageSignals } from './stage-ws.js';
 
@@ -246,14 +246,6 @@ async function scanWithFallback(source) {
   return fallbackScanner.detect(source);
 }
 
-function frameReady(source) {
-  if (!source) return false;
-  if (source instanceof HTMLVideoElement) {
-    return source.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && source.videoWidth > 0;
-  }
-  return source.complete && source.naturalWidth > 0;
-}
-
 let scanSource = null;
 let scanGeneration = 0;
 let sourceRequest = 0;
@@ -271,7 +263,7 @@ function startScan() {
     const source = scanSource;
     try {
       let raw = '';
-      if (frameReady(source)) {
+      if (qrFrameReady(source)) {
         if (barcodeDetector) {
           try {
             const codes = await barcodeDetector.detect(source);

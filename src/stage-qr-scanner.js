@@ -10,6 +10,14 @@ function frameSize(source) {
   };
 }
 
+export function qrFrameReady(source) {
+  if (!source) return false;
+  if (source instanceof HTMLVideoElement) {
+    return source.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && source.videoWidth > 0;
+  }
+  return source.naturalWidth > 0 && source.naturalHeight > 0;
+}
+
 function scanSize(width, height) {
   const longEdge = Math.max(width, height);
   if (!longEdge || longEdge <= SCAN_MAX_EDGE) return { width, height };

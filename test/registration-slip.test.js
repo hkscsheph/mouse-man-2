@@ -14,14 +14,14 @@ test('stamp is 竄 plus local yyyymmdd hhMM plus a cat', () => {
   assert.equal(formatRegistrationStamp(new Date(2026, 10, 3, 8, 19)), '竄 20261103 0819 😼');
 });
 
-test('registration slip is three rasters and the QR is half the head', () => {
+test('registration slip is three rasters and the QR spans the full printer head', () => {
   const qr = qrGrid('https://example.test/?m=abc123');
   assert.equal(qr.width, 576);
-  assert.equal(qr.height, 288);
+  assert.equal(qr.height, 576);
   assert.equal(qr.bits[0], 0);
   const span = QRCode.create('https://example.test/?m=abc123', { errorCorrectionLevel: 'M' }).modules.size + 8;
-  const inside = Math.floor((5 * 288) / span) - 1;
-  const x = 144 + inside;
+  const inside = Math.floor((5 * 576) / span) - 1;
+  const x = inside;
   assert.equal(qr.bits[inside * 576 + x], 1);
   assert.equal(qr.bits[inside * 576 + 8], 0);
 

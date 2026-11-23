@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import QRCode from 'qrcode';
-import { createFallbackQrScanner } from '../src/stage-qr-scanner.js';
+import { createFallbackQrScanner, qrFrameReady } from '../src/stage-qr-scanner.js';
 
 const payload = 'https://example.test/?id=12345678';
 
@@ -67,6 +67,16 @@ test('caps a large camera frame before decoding on the main thread', async () =>
     assert.equal(await scanner.detect(fixture.video), payload);
     assert.equal(fixture.canvas.width, 720);
     assert.equal(fixture.canvas.height, 405);
+  });
+});
+
+test('accepts frames from a streaming image while its load is still ongoing', async () => {
+  await withGlobals({
+    HTMLVideoElement: class HTMLVideoElement {},
+    HTMLMediaElement: { HAVE_CURRENT_DATA: 2 },
+  }, async () => {
+    assert.equal(qrFrameReady({ complete: false, naturalWidth: 640, naturalHeight: 480 }), true);
+    assert.equal(qrFrameReady({ complete: false, naturalWidth: 0, naturalHeight: 480 }), false);
   });
 });
 
