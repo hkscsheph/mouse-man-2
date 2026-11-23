@@ -242,17 +242,19 @@ function skinStats(image) {
   };
 }
 
-export function createRegistrationPhoto(canvas) {
+export function createRegistrationPhoto(canvas, { onChange } = {}) {
   const context = canvas.getContext('2d');
-  const photo = new Image();
-  const template = new Image();
+  const backgrounds = {
+    canteen: { photo: new Image(), template: new Image(), error: '' },
+    br_class: { photo: new Image(), template: new Image(), error: '' },
+  };
+  let background = 'canteen';
   const loadedAssets = new Set();
   const participants = [];
   let skinRef = null;
-  let photoLoaded = false;
 
   function portraitSkinRef() {
-    if (!skinRef) skinRef = skinStats(template);
+    if (!skinRef) skinRef = skinStats(backgrounds[background].template);
     return skinRef;
   }
 
@@ -270,6 +272,7 @@ export function createRegistrationPhoto(canvas) {
   }
 
   function draw() {
+    const { photo, template } = backgrounds[background];
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     const width = Math.max(1, Math.round(rect.width * dpr));
@@ -277,7 +280,7 @@ export function createRegistrationPhoto(canvas) {
     if (canvas.width !== width) canvas.width = width;
     if (canvas.height !== height) canvas.height = height;
     context.clearRect(0, 0, width, height);
-    if (!photoLoaded) return;
+    if (!loadedAssets.has(photo)) return;
 
     const scale = Math.min(width / PHOTO_WIDTH, height / PHOTO_HEIGHT);
     const offsetX = (width - PHOTO_WIDTH * scale) / 2;
@@ -320,19 +323,28 @@ export function createRegistrationPhoto(canvas) {
     context.restore();
   }
 
-  function onAssetLoaded(event) {
-    loadedAssets.add(event.currentTarget);
-    if (event.currentTarget === photo) photoLoaded = true;
-    draw();
-  }
-
-  for (const [image, filename, source] of [
-    [photo, 'br_class_cat.jpg', new URL('./br_class_cat.jpg', import.meta.url).href],
-    [template, 'br_class_boys.jpg', new URL('./br_class_boys.jpg', import.meta.url).href],
+  for (const [name, type, filename, source] of [
+    ['canteen', 'photo', 'canteen_class_cat.png', new URL('./canteen_class_cat.png', import.meta.url).href],
+    ['canteen', 'template', 'canteen_class.png', new URL('./canteen_class.png', import.meta.url).href],
+    ['br_class', 'photo', 'br_class_cat.jpg', new URL('./br_class_cat.jpg', import.meta.url).href],
+    ['br_class', 'template', 'br_class_boys.jpg', new URL('./br_class_boys.jpg', import.meta.url).href],
   ]) {
-    image.addEventListener('load', onAssetLoaded, { once: true });
+    const image = backgrounds[name][type];
+    image.addEventListener('load', () => {
+      loadedAssets.add(image);
+      if (background === name) {
+        draw();
+        onChange?.();
+      }
+    }, { once: true });
     image.addEventListener('error', () => {
-      canvas.dataset.error = `Could not load ${filename}`;
+      const error = `Could not load ${filename}`;
+      console.error(error);
+      backgrounds[name].error = error;
+      if (background === name) {
+        canvas.dataset.error = error;
+        onChange?.();
+      }
     }, { once: true });
     image.src = source;
   }
@@ -340,13 +352,13 @@ export function createRegistrationPhoto(canvas) {
 
   return {
     addPortrait(portrait) {
-      if (participants.length >= FACE_SLOTS.length || !loadedAssets.has(template)) return false;
+      if (participants.length >= FACE_SLOTS.length || !loadedAssets.has(backgrounds[background].template)) return false;
       participants.push({ tuned: tunePortrait(portrait) });
       draw();
       return true;
     },
     fillAllPortraits(portrait) {
-      if (!loadedAssets.has(template)) return false;
+      if (!loadedAssets.has(backgrounds[background].template)) return false;
       const tuned = tunePortrait(portrait);
       participants.length = 0;
       for (let index = 0; index < FACE_SLOTS.length; index += 1) {
@@ -365,7 +377,21 @@ export function createRegistrationPhoto(canvas) {
       return Boolean(canvas.dataset.error);
     },
     get ready() {
-      return photoLoaded && loadedAssets.has(template);
+      const { photo, template } = backgrounds[background];
+      return loadedAssets.has(photo) && loadedAssets.has(template);
+    },
+    get background() {
+      return background;
+    },
+    setBackground(name) {
+      if (!Object.hasOwn(backgrounds, name)) throw new RangeError(`Unknown registration background: ${name}`);
+      if (name === background) return;
+      background = name;
+      skinRef = null;
+      if (backgrounds[name].error) canvas.dataset.error = backgrounds[name].error;
+      else delete canvas.dataset.error;
+      draw();
+      onChange?.();
     },
     dispose() {
       window.removeEventListener('resize', draw);

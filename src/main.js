@@ -64,6 +64,7 @@ const registrationStatus = document.querySelector('#registration-status');
 const registrationPrinter = document.querySelector('#registration-printer');
 const registrationCapture = document.querySelector('#registration-capture');
 const registrationPrint = document.querySelector('#registration-print');
+const registrationBackground = document.querySelector('#registration-background');
 const registrationCount = document.querySelector('#registration-count');
 const registrationCards = document.querySelector('#registration-cards');
 const registrationPhotoCanvas = document.querySelector('#registration-photo');
@@ -96,7 +97,9 @@ let printerReachable = null;
 const urlParams = new URLSearchParams(location.search);
 const mode = !urlParams.has('m') && urlParams.get('mode') === 'random' ? 'random' : 'default';
 const registrationMode = !urlParams.has('m') && urlParams.get('mode') === 'reg';
-const registrationPhoto = registrationMode ? createRegistrationPhoto(registrationPhotoCanvas) : null;
+const registrationPhoto = registrationMode ? createRegistrationPhoto(registrationPhotoCanvas, {
+  onChange: () => updateRegistrationControls(latestFace),
+}) : null;
 document.body.classList.toggle('registration-mode', registrationMode);
 registrationRoot.hidden = !registrationMode;
 let showcaseMode = Boolean(urlParams.get('m'));
@@ -737,6 +740,12 @@ tuneToggle.addEventListener('click', () => {
 
 registrationCapture.addEventListener('click', registerParticipant);
 registrationPrint.addEventListener('click', () => window.print());
+registrationBackground.addEventListener('click', () => {
+  const background = registrationPhoto.background === 'canteen' ? 'br_class' : 'canteen';
+  registrationPhoto.setBackground(background);
+  registrationBackground.textContent = `Background: ${background === 'canteen' ? 'Canteen' : 'br_class'}`;
+  registrationBackground.setAttribute('aria-label', `Switch to ${background === 'canteen' ? 'br_class' : 'Canteen'} background`);
+});
 if (registrationMode) {
   registrationCount.textContent = `0 participants registered`;
   updateRegistrationControls(null);

@@ -1,6 +1,6 @@
 from PIL import Image, ImageDraw
 import json
-src='/home/user/uploads/br_class_boys.jpg'
+src='/home/user/uploads/canteen_class.png'
 # Polygon vertices trace visible portions only; occluded body parts are not inferred.
 back=[
 [(277,319),(264,307),(257,287),(261,267),(272,253),(291,244),(293,235),(288,216),(288,200),(296,188),(310,184),(326,189),(334,201),(333,217),(325,235),(326,244),(348,251),(359,267),(360,292),(350,289),(333,293),(325,306),(327,325),(315,344),(298,355),(280,354)],
@@ -51,5 +51,5 @@ for i,p in enumerate(polys):
     d.line(pts+[pts[0]],fill=colors[i%len(colors)],width=2*scale,joint='curve')
 layer=layer.resize(im.size,Image.Resampling.LANCZOS)
 im=Image.alpha_composite(im.convert('RGBA'),layer).convert('RGB');im.save('/home/user/outlined_men.png')
-with open('/home/user/men_polygons.json','w') as f:json.dump({'image':'br_class_boys.jpg','width':1408,'height':770,'note':'Manual visible-silhouette polygon annotations; central cat excluded.','polygons':[{'id':i+1,'label':'man','points':p} for i,p in enumerate(polys)]},f,indent=2)
+with open('/home/user/men_polygons.json','w') as f:json.dump({'image':'canteen_class.png','width':1408,'height':770,'note':'Manual visible-silhouette polygon annotations; central cat excluded.','polygons':[{'id':i+1,'label':'man','points':p} for i,p in enumerate(polys)]},f,indent=2)
 print(len(polys),'polygons saved')
