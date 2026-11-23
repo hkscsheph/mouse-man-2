@@ -6,7 +6,7 @@ import test from 'node:test';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
-import { CAMERA_NUDGE, resolveSignalOscUrl, signalActionFromOsc, signalControl } from '../src/signal-osc.js';
+import { CAMERA_NUDGE, resolveSignalOscUrl, SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT, signalActionFromOsc, signalControl } from '../src/signal-osc.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -67,10 +67,12 @@ test('button vectors keep the on-screen camera step', () => {
 });
 
 test('resolves the signal page OSC socket', () => {
-  assert.equal(resolveSignalOscUrl({ search: '', hostname: 'localhost' }), 'ws://localhost:9001');
-  assert.equal(resolveSignalOscUrl({ search: '', hostname: '192.168.99.31' }), 'ws://192.168.99.31:9001');
+  assert.equal(SIGNAL_OSC_UDP_PORT, 9020);
+  assert.equal(SIGNAL_OSC_WS_PORT, 9021);
+  assert.equal(resolveSignalOscUrl({ search: '', hostname: 'localhost' }), 'ws://localhost:9021');
+  assert.equal(resolveSignalOscUrl({ search: '', hostname: '192.168.99.31' }), 'ws://192.168.99.31:9021');
   assert.equal(resolveSignalOscUrl({ search: '?osc=ws://show.local:9100', hostname: 'localhost' }), 'ws://show.local:9100');
-  assert.equal(resolveSignalOscUrl({ hostname: '::1' }, ''), 'ws://[::1]:9001');
+  assert.equal(resolveSignalOscUrl({ hostname: '::1' }, ''), 'ws://[::1]:9021');
   assert.equal(resolveSignalOscUrl({ hostname: '127.0.0.1' }, 'ws://override:9'), 'ws://override:9');
 });
 

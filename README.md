@@ -32,7 +32,7 @@
 
 `?mode=stage` 只顯示演出，不再開鏡頭掃碼。原本的按鍵仍然可用：`A` 貼上 QR 或老鼠 id，`D` 加入示範來賓，`E` 吃最近的老鼠，`Q` 抓痕放大，`1` 到 `5` 送出物件，`U` 切換校服，`+=` / `-` 縮放像素角色，方向鍵移動 3D 鏡頭。`T` 顯示或隱藏狀態列，預設隱藏。收到的訊號和舞台上的按鍵都會寫進主控台。掃碼、以及同樣的演出動作，也可以由 `?mode=signal` 送出。同一個瀏覽器裡的舞台分頁會直接收到訊號；另一台裝置要先執行 `npm run stage:ws-demo`，兩邊再開同一個 WebSocket。
 
-`?mode=signal` 的每個選項也可以用 OSC 觸發。另開終端機執行 `npm run stage:osc`，訊號頁會連上 `ws://這台電腦:9001`（可用 `?osc=` 或建置時的 `VITE_STAGE_OSC_URL` 改位址）。控制器把 OSC 送到 UDP `9000`（`STAGE_OSC_PORT`）。按下時送大於 0 的值。位址與訊號頁 OSC 清單相同，例如 `/signal/eat`、`/signal/scratch`、`/signal/prop/figure`、`/signal/camera/left`、`/signal/webcam`、`/signal/ipcam`、`/signal/admit`。
+`?mode=signal` 的每個選項也可以用 OSC 觸發。另開終端機執行 `npm run stage:osc`，訊號頁會連上 `ws://這台電腦:9021`（可用 `?osc=` 或建置時的 `VITE_STAGE_OSC_URL` 改位址）。控制器把 OSC 送到 UDP `9020`（`STAGE_OSC_PORT`）。按下時送大於 0 的值。位址與訊號頁 OSC 清單相同，例如 `/signal/eat`、`/signal/scratch`、`/signal/prop/figure`、`/signal/camera/left`、`/signal/webcam`、`/signal/ipcam`、`/signal/admit`。
 
 掃 QR 會還原已儲存的毛色、五官、臉部與部位調整。快照讀不到就顯示錯誤，不會換成別隻老鼠。QR 的 `m` 也帶著像素鼠的毛色。訊號頁的「Demo guest」可加入一隻沒有真實五官的示範來賓。
 
@@ -128,7 +128,7 @@ The stage keeps its keyboard controls and also follows `?mode=signal`. That page
 
 ### OSC
 
-`npm run stage:osc` listens on UDP port `9000` and forwards each message to the open `?mode=signal` page at `ws://<this-host>:9001`. That page runs the matching option, then sends the usual stage signal. A press is any value above 0. The page lists every address under **OSC**. Ports can be changed with `STAGE_OSC_PORT` and `STAGE_OSC_WS_PORT`. The page address is `?osc=`, then build-time `VITE_STAGE_OSC_URL`, then `ws://<page-host>:9001`.
+`npm run stage:osc` listens on UDP port `9020` and forwards each message to the open `?mode=signal` page at `ws://<this-host>:9021`. That page runs the matching option, then sends the usual stage signal. A press is any value above 0. The page lists every address under **OSC**. Ports can be changed with `STAGE_OSC_PORT` and `STAGE_OSC_WS_PORT`. The page address is `?osc=`, then build-time `VITE_STAGE_OSC_URL`, then `ws://<page-host>:9021`. These two ports stay clear of Central’s UDP `9000` and OscForward’s UDP `9001` on the same PC.
 
 | Address | Option |
 | --- | --- |
