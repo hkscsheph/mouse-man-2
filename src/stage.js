@@ -39,6 +39,7 @@ hud.innerHTML = `
   <p id="stage-status" data-state="idle" role="status" aria-live="polite">Waiting for a signal.</p>
   <p id="stage-ws-status">WebSocket: connecting…</p>
   <p id="stage-count">Active mice: 0</p>
+  <p id="stage-prop-mode">Background effects: animated (F to toggle)</p>
 `;
 document.body.appendChild(hud);
 
@@ -120,6 +121,7 @@ const propStatus = {
   poster: 'A poster slides across the stage…',
   note: 'A note slides across the stage…',
 };
+let immediateProps = false;
 pixel.setPropListener((kind) => setStatus(propStatus[kind]));
 
 function layoutStage() {
@@ -339,6 +341,7 @@ function handleStageMessage(message) {
   if (message?.type === 'prop') {
     const result = pixel.requestProp(message.kind);
     if (result === 'started') setStatus(propStatus[message.kind]);
+    else if (result === 'placed') setStatus('Background item added immediately.');
     else if (result === 'queued') setStatus('Queued. The cat will bring it in next.');
     else setStatus('The cat is busy');
     return;
@@ -701,6 +704,14 @@ window.addEventListener('keydown', (event) => {
     }
   }
   if (event.repeat) return;
+  if ((event.key === 'f' || event.key === 'F') && !isEditingControl && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    event.preventDefault();
+    immediateProps = !immediateProps;
+    pixel.setImmediateProps(immediateProps);
+    document.querySelector('#stage-prop-mode').textContent = `Background effects: ${immediateProps ? 'immediate' : 'animated'} (F to toggle)`;
+    setStatus(`Background effects ${immediateProps ? 'appear immediately' : 'are animated'}.`);
+    return;
+  }
   if ((event.key === 't' || event.key === 'T') && !isEditingControl) {
     event.preventDefault();
     handleStageMessage({ type: 'hud' });

@@ -29,6 +29,17 @@ export function stageBuildingSlot(order) {
   };
 }
 
+export function stageBuildingRowOffsets(widths, availableWidth, scale) {
+  const gap = Math.max(0, (availableWidth - widths.reduce((sum, width) => sum + width * scale, 0))
+    / (widths.length + 1));
+  let position = gap;
+  return widths.map((width) => {
+    const offset = position;
+    position += width * scale + gap;
+    return offset;
+  });
+}
+
 export function stageBuildingTableLayout(frames, deskWidths, referenceWidth) {
   const rows = deskWidths.map((_, deskIndex) => (
     Array.from({ length: STAGE_BUILDINGS_PER_TABLE }, (_, slot) => (
@@ -40,16 +51,7 @@ export function stageBuildingTableLayout(frames, deskWidths, referenceWidth) {
     1.5 * referenceWidth / STAGE_BUILDINGS_PER_TABLE / maxWidth,
     ...rows.map((row, index) => deskWidths[index] / row.reduce((sum, width) => sum + width, 0)),
   );
-  const offsets = rows.map((row, index) => {
-    const gap = Math.max(0, (deskWidths[index] - row.reduce((sum, width) => sum + width * scale, 0))
-      / (STAGE_BUILDINGS_PER_TABLE + 1));
-    let position = gap;
-    return row.map((width) => {
-      const offset = position;
-      position += width * scale + gap;
-      return offset;
-    });
-  });
+  const offsets = rows.map((row, index) => stageBuildingRowOffsets(row, deskWidths[index], scale));
   return { scale, offsets };
 }
 
@@ -787,9 +789,9 @@ export function createPixelChase(canvas, options = {}) {
     }
   }
 
-  function hangDrawing(index) {
+  function hangDrawing(index, immediate = false) {
     if (!drawingFrames[index]) return;
-    hungDrawings.push({ index, fromTile: nextIncomingBoardTile() });
+    hungDrawings.push({ index, fromTile: immediate ? -Infinity : nextIncomingBoardTile() });
   }
 
   function posterWallBox(frame) {
@@ -867,7 +869,7 @@ export function createPixelChase(canvas, options = {}) {
     }
   }
 
-  function hangPoster(index) {
+  function hangPoster(index, immediate = false) {
     if (!posterFrames[index]) return;
     let placed = null;
     let bestCover = Infinity;
@@ -883,7 +885,7 @@ export function createPixelChase(canvas, options = {}) {
     const rect = posterRect(placed);
     const scrollPx = px(scroll / 2);
     const localX = rect.gapLeft + rect.x;
-    placed.fromTile = Math.ceil((width + scrollPx - localX) / width);
+    placed.fromTile = immediate ? -Infinity : Math.ceil((width + scrollPx - localX) / width);
     hungPosters.push(placed);
   }
 
@@ -979,7 +981,7 @@ export function createPixelChase(canvas, options = {}) {
     }
   }
 
-  function placeNote(index) {
+  function placeNote(index, immediate = false) {
     if (!noteFrames[index]) return;
     let placed = null;
     let bestCover = Infinity;
@@ -995,7 +997,7 @@ export function createPixelChase(canvas, options = {}) {
     const rect = noteRect(placed);
     const scrollPx = px(scroll / 2);
     const localX = rect.windowX + rect.x;
-    placed.fromTile = Math.ceil((width + scrollPx - localX) / width);
+    placed.fromTile = immediate ? -Infinity : Math.ceil((width + scrollPx - localX) / width);
     windowNotes.push(placed);
   }
 
@@ -1062,9 +1064,13 @@ export function createPixelChase(canvas, options = {}) {
     if (stageMode) {
       if (layer === 'below') return;
       const capacity = STAGE_TABLE_COUNT * STAGE_BUILDINGS_PER_TABLE;
-      const maxFrameWidth = Math.max(...boxFrames.map((frame) => frame.width));
-      const tableCellWidth = Math.min(...desks.map((desk) => desk.w)) / STAGE_BUILDINGS_PER_TABLE;
       const tableLayout = stageBuildingTableLayout(boxFrames, desks.map((desk) => desk.w), px(84));
+      const floorOffsets = layer === 'floor' ? desks.map((desk, deskIndex) => {
+        const widths = placedBoxes.slice(capacity)
+          .filter((_, index) => index % STAGE_TABLE_COUNT === deskIndex)
+          .map((item) => boxFrames[item.index].width);
+        return stageBuildingRowOffsets(widths, desk.w, tableLayout.scale);
+      }) : [];
       for (let order = 0; order < placedBoxes.length; order += 1) {
         const item = placedBoxes[order];
         const { deskIndex, slot, floor } = stageBuildingSlot(order);
@@ -1072,15 +1078,9 @@ export function createPixelChase(canvas, options = {}) {
         const frame = boxFrames[item.index];
         const desk = desks[deskIndex];
         if (!frame || !desk) continue;
-        const floorCount = Math.max(0, Math.ceil((placedBoxes.length - capacity - deskIndex) / STAGE_TABLE_COUNT));
-        const cells = floor ? Math.max(STAGE_BUILDINGS_PER_TABLE, floorCount) : STAGE_BUILDINGS_PER_TABLE;
-        const cellWidth = desk.w / cells;
-        const scale = floor ? Math.min(tableCellWidth, cellWidth) / maxFrameWidth : tableLayout.scale;
-        const w = Math.max(1, frame.width * scale);
-        const h = Math.max(1, frame.height * scale);
-        const left = floor
-          ? desk.x + cellWidth * (slot + 0.5) - w / 2
-          : desk.x + tableLayout.offsets[deskIndex][slot];
+        const w = Math.max(1, frame.width * tableLayout.scale);
+        const h = Math.max(1, frame.height * tableLayout.scale);
+        const left = desk.x + (floor ? floorOffsets[deskIndex][slot] : tableLayout.offsets[deskIndex][slot]);
         const baseline = floor
           ? desk.top + px(DESK_LEG_TOP) + px(DESK_LEG_HEIGHT)
           : desk.top;
@@ -1125,10 +1125,10 @@ export function createPixelChase(canvas, options = {}) {
     }
   }
 
-  function placeBox(index) {
+  function placeBox(index, immediate = false) {
     if (!boxFrames[index]) return;
     const deskIndex = stageMode ? stageBuildingSlot(placedBoxes.length).deskIndex : BOX_TABLE;
-    placedBoxes.push({ index, revealScroll: nextDeskRevealScroll(deskIndex) });
+    placedBoxes.push({ index, revealScroll: immediate ? -Infinity : nextDeskRevealScroll(deskIndex) });
   }
 
   function figureSlideSize(frame) {
@@ -1192,7 +1192,7 @@ export function createPixelChase(canvas, options = {}) {
     }
   }
 
-  function placeFigure(index) {
+  function placeFigure(index, immediate = false) {
     if (!figureFrames[index]) return;
     const previous = placedFigures[placedFigures.length - 1];
     const aisle = previous ? previous.aisle : 0;
@@ -1200,7 +1200,8 @@ export function createPixelChase(canvas, options = {}) {
       index,
       aisle,
       slot: previous ? previous.slot + 1 : 0,
-      revealScroll: previous ? previous.revealScroll : nextDeskRevealScroll(aisle),
+      revealScroll: immediate ? -Infinity : previous && previous.revealScroll !== -Infinity
+        ? previous.revealScroll : nextDeskRevealScroll(aisle),
     });
   }
 
@@ -1317,6 +1318,7 @@ export function createPixelChase(canvas, options = {}) {
    */
   const propQueue = [];
   let onPropStart = null;
+  let immediateProps = false;
 
   function propBusy() {
     return Boolean(catChase || flyingDrawing || flyingBox || flyingPoster || flyingFigure || flyingNote);
@@ -1342,6 +1344,15 @@ export function createPixelChase(canvas, options = {}) {
   }
 
   function requestProp(kind) {
+    if (immediateProps) {
+      if (kind === 'drawing' && drawingFrames.length) hangDrawing(nextDrawing++ % drawingFrames.length, true);
+      else if (kind === 'box' && boxFrames.length) placeBox(nextBox++ % boxFrames.length, true);
+      else if (kind === 'poster' && posterFrames.length) hangPoster(nextPoster++ % posterFrames.length, true);
+      else if (kind === 'figure' && figureFrames.length) placeFigure(nextFigure++ % figureFrames.length, true);
+      else if (kind === 'note' && noteFrames.length) placeNote(nextNote++ % noteFrames.length, true);
+      else return 'unavailable';
+      return 'placed';
+    }
     if (propBusy()) {
       propQueue.push(kind);
       return 'queued';
@@ -2061,6 +2072,9 @@ export function createPixelChase(canvas, options = {}) {
     presentPoster,
     presentNote,
     requestProp,
+    setImmediateProps(enabled) {
+      immediateProps = enabled;
+    },
     setPropListener(listener) {
       onPropStart = listener;
     },

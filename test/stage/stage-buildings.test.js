@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { stageBuildingSlot, stageBuildingTableLayout } from '../../src/pixel-chase.js';
+import { stageBuildingRowOffsets, stageBuildingSlot, stageBuildingTableLayout } from '../../src/pixel-chase.js';
 
 test('all 16 buildings fit on the tables before overflow uses the floor', () => {
   const slots = Array.from({ length: 18 }, (_, order) => stageBuildingSlot(order));
@@ -13,6 +13,18 @@ test('all 16 buildings fit on the tables before overflow uses the floor', () => 
   assert.deepEqual(stageBuildingSlot(18), { deskIndex: 0, slot: 0, floor: true });
   assert.deepEqual(stageBuildingSlot(20), { deskIndex: 2, slot: 0, floor: true });
   assert.deepEqual(stageBuildingSlot(21), { deskIndex: 0, slot: 1, floor: true });
+});
+
+test('floor buildings retain their scale and are spaced without overlap', () => {
+  const widths = [159, 373, 222, 330];
+  const scale = 0.22;
+  const offsets = stageBuildingRowOffsets(widths, 360, scale);
+  for (let i = 1; i < widths.length; i += 1) {
+    assert.ok(offsets[i] >= offsets[i - 1] + widths[i - 1] * scale);
+  }
+  assert.ok(offsets.at(-1) + widths.at(-1) * scale <= 360);
+  const overflow = stageBuildingRowOffsets([400, 400, 400], 100, scale);
+  assert.deepEqual(overflow, [0, 88, 176]);
 });
 
 test('table buildings are 1.5 times larger and fit without overlapping', () => {
