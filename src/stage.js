@@ -27,6 +27,12 @@ const pixelCanvas = document.querySelector('#view');
 pixelCanvas.classList.add('pixelated', 'stage-pixel');
 const initialPixelSpriteScale = 3;
 
+const photoBackground = document.createElement('div');
+photoBackground.id = 'stage-photo-background';
+photoBackground.setAttribute('aria-hidden', 'true');
+photoBackground.style.backgroundImage = `url("${import.meta.env.BASE_URL}canteen_mouseview.webp")`;
+document.body.prepend(photoBackground);
+
 const photoCanvas = document.createElement('canvas');
 photoCanvas.id = 'stage-photo';
 photoCanvas.setAttribute('aria-label', 'Class photo');
@@ -98,7 +104,7 @@ function updateCount() {
 
 const admittedIds = new Set();
 
-const photo = createStagePhoto(photoCanvas, { pinStandBottom: true });
+const photo = createStagePhoto(photoCanvas, { pinStandBottom: true, showBackdrop: false });
 const pixel = createPixelChase(pixelCanvas, {
   initialCount: 0,
   initialSpriteScale: initialPixelSpriteScale,

@@ -436,6 +436,40 @@ body.stage-mode #share {
   background: linear-gradient(180deg, #e8dcc8 0%, #cbb896 100%);
 }
 
+body.stage-mode #stage-photo-background {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  height: 48vh;
+  overflow: hidden;
+  z-index: 0;
+  background-color: #fff;
+  pointer-events: none;
+}
+
+body.stage-mode #stage-photo-background::before {
+  position: absolute;
+  inset: -5px;
+  background-image: inherit;
+  background-position: center;
+  background-size: cover;
+  content: "";
+  filter: blur(3px);
+}
+
+body.stage-mode #stage-photo-background::after {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.28);
+  content: "";
+}
+
+body.stage-mode #stage-photo {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+
 #view.stage-pixel {
   flex: 1 1 auto;
   width: 100%;
