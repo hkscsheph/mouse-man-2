@@ -64,6 +64,16 @@ test('button vectors keep the on-screen camera step', () => {
   assert.equal(signalControl('camera', '0,0,1').label, 'Camera up');
   assert.equal(signalControl('prop', 'poster').label, 'Poster');
   assert.equal(signalControl('admit', '  '), null);
+  assert.deepEqual(signalControl('fps'), {
+    op: 'send',
+    payload: { type: 'fps' },
+    label: 'FPS',
+  });
+  assert.deepEqual(signalControl('backgroundEffects'), {
+    op: 'send',
+    payload: { type: 'backgroundEffects' },
+    label: 'Background effects',
+  });
 });
 
 test('resolves the signal page OSC socket', () => {

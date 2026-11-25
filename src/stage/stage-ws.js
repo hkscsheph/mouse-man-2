@@ -27,7 +27,7 @@ export function createSignalId(cryptoApi = globalThis.crypto) {
 
 /**
  * @typedef {{
- *   type: 'catEat' | 'catSweep' | 'restartAll' | 'admit' | 'scratch' | 'prop' | 'uniform' | 'spriteScale' | 'camera' | 'hud',
+ *   type: 'catEat' | 'catSweep' | 'restartAll' | 'admit' | 'scratch' | 'prop' | 'uniform' | 'spriteScale' | 'camera' | 'hud' | 'fps' | 'backgroundEffects',
  *   id?: string,
  *   raw?: string,
  *   kind?: string,
@@ -41,7 +41,8 @@ export function createSignalId(cryptoApi = globalThis.crypto) {
 export function isStageSignal(message) {
   if (!message || typeof message.type !== 'string') return false;
   if (message.type === 'catEat' || message.type === 'catSweep' || message.type === 'restartAll') return true;
-  if (message.type === 'admit' || message.type === 'scratch' || message.type === 'uniform' || message.type === 'hud') return true;
+  if (message.type === 'admit' || message.type === 'scratch' || message.type === 'uniform' || message.type === 'hud'
+    || message.type === 'fps' || message.type === 'backgroundEffects') return true;
   if (message.type === 'prop') return PROP_KINDS.has(message.kind);
   if (message.type === 'spriteScale') return Number.isFinite(Number(message.delta)) && Number(message.delta) !== 0;
   if (message.type === 'camera') return Array.isArray(message.move);

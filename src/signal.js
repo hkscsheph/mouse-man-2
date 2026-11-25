@@ -19,7 +19,7 @@ root.innerHTML = `
   <h1>Stage signals</h1>
   <p id="signal-status" role="status" aria-live="polite">Starting camera…</p>
   <p id="signal-ws" role="status">Connecting to the stage…</p>
-  <p id="signal-keys">Keys match the stage: <kbd>A</kbd> focuses the id field, <kbd>D</kbd> demo guest, <kbd>E</kbd> eat, <kbd>Q</kbd> scratch, <kbd>1</kbd>–<kbd>5</kbd> props, <kbd>U</kbd> uniforms, <kbd>+</kbd>/<kbd>-</kbd> size, arrows move the camera, <kbd>T</kbd> toggles the stage HUD.</p>
+  <p id="signal-keys">Keys match the stage: <kbd>A</kbd> focuses the id field, <kbd>D</kbd> demo guest, <kbd>E</kbd> eat, <kbd>Q</kbd> scratch, <kbd>1</kbd>–<kbd>5</kbd> props, <kbd>U</kbd> uniforms, <kbd>+</kbd>/<kbd>-</kbd> size, arrows move the camera, <kbd>F</kbd> toggles background effects, <kbd>H</kbd> cycles FPS (30/45/60), <kbd>T</kbd> toggles the stage HUD.</p>
   <details id="signal-osc-panel">
     <summary>OSC</summary>
     <p id="signal-osc" role="status">OSC offline</p>
@@ -35,7 +35,7 @@ root.innerHTML = `
     <form id="signal-ipcam-form">
       <label for="signal-ipcam-url">IP camera address</label>
       <input id="signal-ipcam-url" type="text" autocomplete="off" placeholder="rtsp://192.168.1.64/stream" spellcheck="false">
-      <button type="submit">Use stream</button>
+      <button type="submit">Use stream [Enter]</button>
     </form>
   </section>
   <video id="signal-cam" playsinline muted autoplay aria-label="QR scanner camera"></video>
@@ -43,40 +43,42 @@ root.innerHTML = `
   <form id="signal-admit">
     <label for="signal-id">Participant QR or mouse id</label>
     <input id="signal-id" type="text" autocomplete="off" placeholder="Paste a QR link or mouse id">
-    <button type="submit">Admit</button>
+    <button type="submit">Admit [Enter]</button>
   </form>
   <section>
     <h2>Show</h2>
     <div class="signal-actions">
-      <button type="button" data-signal="demo">Demo guest</button>
-      <button type="button" data-signal="eat">Eat closest</button>
+      <button type="button" data-signal="demo">Demo guest [D]</button>
+      <button type="button" data-signal="eat">Eat closest [E]</button>
       <button type="button" data-signal="sweep">Clear the stage</button>
-      <button type="button" data-signal="scratch">Scratch zoom</button>
+      <button type="button" data-signal="scratch">Scratch zoom [Q]</button>
       <button type="button" data-signal="restart">Restart</button>
     </div>
   </section>
   <section>
     <h2>Bring on</h2>
     <div class="signal-actions">
-      <button type="button" data-prop="figure">Figure</button>
-      <button type="button" data-prop="drawing">Drawing</button>
-      <button type="button" data-prop="box">Gift</button>
-      <button type="button" data-prop="poster">Poster</button>
-      <button type="button" data-prop="note">Note</button>
+      <button type="button" data-prop="figure">Figure [1]</button>
+      <button type="button" data-prop="drawing">Drawing [2]</button>
+      <button type="button" data-prop="box">Gift [3]</button>
+      <button type="button" data-prop="poster">Poster [4]</button>
+      <button type="button" data-prop="note">Note [5]</button>
     </div>
   </section>
   <section>
     <h2>View</h2>
     <div class="signal-actions">
-      <button type="button" data-signal="uniform">Uniforms</button>
-      <button type="button" data-signal="larger">Larger cat</button>
-      <button type="button" data-signal="smaller">Smaller cat</button>
-      <button type="button" data-move="-1,0,0">Camera left</button>
-      <button type="button" data-move="1,0,0">Camera right</button>
-      <button type="button" data-move="0,-1,0">Camera closer</button>
-      <button type="button" data-move="0,1,0">Camera farther</button>
-      <button type="button" data-move="0,0,1">Camera up</button>
-      <button type="button" data-move="0,0,-1">Camera down</button>
+      <button type="button" data-signal="uniform">Uniforms [U]</button>
+      <button type="button" data-signal="larger">Larger cat [+]</button>
+      <button type="button" data-signal="smaller">Smaller cat [-]</button>
+      <button type="button" data-move="-1,0,0">Camera left [←]</button>
+      <button type="button" data-move="1,0,0">Camera right [→]</button>
+      <button type="button" data-move="0,-1,0">Camera closer [↑]</button>
+      <button type="button" data-move="0,1,0">Camera farther [↓]</button>
+      <button type="button" data-move="0,0,1">Camera up [Space+↑]</button>
+      <button type="button" data-move="0,0,-1">Camera down [Space+↓]</button>
+      <button type="button" data-signal="backgroundEffects">Background effects [F]</button>
+      <button type="button" data-signal="fps">FPS [H]</button>
     </div>
   </section>
 `;
@@ -203,6 +205,12 @@ window.addEventListener('keydown', (event) => {
   } else if (key === 'u') {
     event.preventDefault();
     applyAction(signalControl('uniform'));
+  } else if (key === 'f') {
+    event.preventDefault();
+    applyAction(signalControl('backgroundEffects'));
+  } else if (key === 'h') {
+    event.preventDefault();
+    applyAction(signalControl('fps'));
   } else if (key === 'q') {
     event.preventDefault();
     applyAction(signalControl('scratch'));

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createMouse, disposeMouse, setMouseUniform, UNIFORM_COLORS } from '../mouse.js';
+import { createFrameRateLimiter } from './frame-rate.js';
 import { createScratchStyle, drawScratches } from './stage-scratch.js';
 
 const COLS = 10;
@@ -145,7 +146,9 @@ export function createStagePhoto(canvas, {
   idle = false,
   pinStandBottom = false,
   showBackdrop = true,
+  getFps,
 } = {}) {
+  const shouldAnimateFrame = createFrameRateLimiter(getFps);
   let rowRise = DEFAULT_ROW_RISE;
   let cameraHeight = DEFAULT_CAMERA_HEIGHT;
   let cameraX = 0;
@@ -588,9 +591,14 @@ export function createStagePhoto(canvas, {
     return new Promise((resolve) => {
       const start = performance.now();
       const dur = 250;
+      const shouldRenderFrame = createFrameRateLimiter(getFps);
       function tick(now) {
         if (!roster.includes(entry)) {
           resolve(false);
+          return;
+        }
+        if (!shouldRenderFrame(now)) {
+          requestAnimationFrame(tick);
           return;
         }
         const t = Math.min(1, (now - start) / dur);
@@ -657,6 +665,10 @@ export function createStagePhoto(canvas, {
   function animate(now) {
     if (!running) {
       animating = false;
+      return;
+    }
+    if (!shouldAnimateFrame(now)) {
+      requestAnimationFrame(animate);
       return;
     }
     const time = now / 1000;

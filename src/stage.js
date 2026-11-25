@@ -1,5 +1,6 @@
 import { createPixelChase } from './pixel-chase.js';
 import { createStagePhoto, DEFAULT_STAGE_UNIFORM_ENABLED } from './stage/stage-photo.js';
+import { createFrameRateLimiter } from './stage/frame-rate.js';
 import { createScratchSound } from './stage/stage-sound.js';
 import { connectStageWebSocket } from './stage/stage-ws.js';
 import {
@@ -26,6 +27,9 @@ if (gate) gate.hidden = true;
 const pixelCanvas = document.querySelector('#view');
 pixelCanvas.classList.add('pixelated', 'stage-pixel');
 const initialPixelSpriteScale = 3;
+const FPS_LEVELS = [30, 45, 60];
+let stageFps = 60;
+let measuredFps = null;
 
 const photoBackground = document.createElement('div');
 photoBackground.id = 'stage-photo-background';
@@ -45,6 +49,7 @@ hud.innerHTML = `
   <p id="stage-status" data-state="idle" role="status" aria-live="polite">Waiting for a signal.</p>
   <p id="stage-ws-status">WebSocket: connecting…</p>
   <p id="stage-count">Active mice: 0</p>
+  <p id="stage-fps">FPS: -- / 60</p>
   <p id="stage-prop-mode">Background effects: animated (F to toggle)</p>
 `;
 document.body.appendChild(hud);
@@ -97,6 +102,12 @@ function setWsStatus(text) {
   if (el) el.textContent = text;
 }
 
+function updateFpsReadout(fps) {
+  if (Number.isFinite(fps)) measuredFps = fps;
+  const el = document.querySelector('#stage-fps');
+  if (el) el.textContent = `FPS: ${measuredFps ?? '--'} / ${stageFps}`;
+}
+
 function updateCount() {
   const el = document.querySelector('#stage-count');
   if (el) el.textContent = `Active mice: ${photo.listIds().length}`;
@@ -104,7 +115,12 @@ function updateCount() {
 
 const admittedIds = new Set();
 
-const photo = createStagePhoto(photoCanvas, { idle: true, pinStandBottom: true, showBackdrop: false });
+const photo = createStagePhoto(photoCanvas, {
+  idle: true,
+  pinStandBottom: true,
+  showBackdrop: false,
+  getFps: () => stageFps,
+});
 const pixel = createPixelChase(pixelCanvas, {
   initialCount: 0,
   initialSpriteScale: initialPixelSpriteScale,
@@ -114,6 +130,8 @@ const pixel = createPixelChase(pixelCanvas, {
   mouseWanderRange: 10,
   mouseRunFrameDuration: 150,
   catSpeedVariation: 0.3,
+  getFps: () => stageFps,
+  onFps: updateFpsReadout,
   getSize: () => ({
     width: pixelCanvas.clientWidth || window.innerWidth,
     height: pixelCanvas.clientHeight || Math.floor(window.innerHeight * 0.52),
@@ -344,6 +362,20 @@ function handleStageMessage(message) {
     hud.hidden = typeof message.hidden === 'boolean' ? message.hidden : !hud.hidden;
     return;
   }
+  if (message?.type === 'fps') {
+    const currentIndex = FPS_LEVELS.indexOf(stageFps);
+    stageFps = FPS_LEVELS[(currentIndex + 1) % FPS_LEVELS.length];
+    updateFpsReadout();
+    setStatus(`FPS cap: ${stageFps}`);
+    return;
+  }
+  if (message?.type === 'backgroundEffects') {
+    immediateProps = !immediateProps;
+    pixel.setImmediateProps(immediateProps);
+    document.querySelector('#stage-prop-mode').textContent = `Background effects: ${immediateProps ? 'immediate' : 'animated'} (F to toggle)`;
+    setStatus(`Background effects ${immediateProps ? 'appear immediately' : 'are animated'}.`);
+    return;
+  }
   if (message?.type === 'prop') {
     const result = pixel.requestProp(message.kind);
     if (result === 'started') setStatus(propStatus[message.kind]);
@@ -533,12 +565,17 @@ function playCatScratch() {
 
   const framesPromise = loadCatScratchFrames().catch(() => null);
   const started = performance.now();
+  const shouldRenderFrame = createFrameRateLimiter(() => stageFps);
   let shownFrame = first.frame;
   const ease = (t) => t * t * (3 - 2 * t);
 
   const approach = (now) => {
     if (!overlay.isConnected) return;
     try {
+    if (!shouldRenderFrame(now)) {
+      requestAnimationFrame(approach);
+      return;
+    }
     const t = Math.min(1, (now - started) / duration);
     const k = ease(t);
     fade.style.opacity = String(k);
@@ -642,6 +679,7 @@ async function startScratchGif(framesPromise, overlay, runCat, startCatHeight) {
   };
   drawFrame(frames[0], 0);
   const gifStarted = performance.now();
+  const shouldRenderFrame = createFrameRateLimiter(() => stageFps);
   const gifDuration = Math.max(1, frames.reduce((total, item) => total + item.duration, 0));
   const foundScratch = frames.findIndex((item) => item.scratch);
   const scratchIndex = foundScratch < 0 ? frames.length - 1 : foundScratch;
@@ -651,6 +689,10 @@ async function startScratchGif(framesPromise, overlay, runCat, startCatHeight) {
   let nextAt = gifStarted + frames[0].duration;
   const tick = (now) => {
     if (!overlay.isConnected) return;
+    if (!shouldRenderFrame(now)) {
+      requestAnimationFrame(tick);
+      return;
+    }
     while (frameIndex < frames.length - 1 && now >= nextAt) {
       frameIndex += 1;
       nextAt += frames[frameIndex].duration;
@@ -710,12 +752,14 @@ window.addEventListener('keydown', (event) => {
     }
   }
   if (event.repeat) return;
+  if ((event.key === 'h' || event.key === 'H') && !isEditingControl && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    event.preventDefault();
+    handleStageMessage({ type: 'fps' });
+    return;
+  }
   if ((event.key === 'f' || event.key === 'F') && !isEditingControl && !event.ctrlKey && !event.metaKey && !event.altKey) {
     event.preventDefault();
-    immediateProps = !immediateProps;
-    pixel.setImmediateProps(immediateProps);
-    document.querySelector('#stage-prop-mode').textContent = `Background effects: ${immediateProps ? 'immediate' : 'animated'} (F to toggle)`;
-    setStatus(`Background effects ${immediateProps ? 'appear immediately' : 'are animated'}.`);
+    handleStageMessage({ type: 'backgroundEffects' });
     return;
   }
   if ((event.key === 't' || event.key === 'T') && !isEditingControl) {

@@ -2,6 +2,7 @@
  * Scrollable pixel classroom with running/catching cat poses and dynamic mouse sprites.
  * Used by standalone pixel mode and main-stage mode.
  */
+import { createFrameRateLimiter } from './stage/frame-rate.js';
 
 const BASE_WIDTH = 320;
 const CAT_FRAME_SIZE = 66;
@@ -78,6 +79,7 @@ export function createPixelChase(canvas, options = {}) {
   const mouseWanderRange = Math.max(0, Number(options.mouseWanderRange) || 0);
   const mouseRunFrameDuration = Math.max(1, Number(options.mouseRunFrameDuration) || 105);
   const catSpeedVariation = Math.min(0.5, Math.max(0, Number(options.catSpeedVariation) || 0));
+  const shouldRenderFrame = createFrameRateLimiter(options.getFps);
   const requestedPosterWallScale = Number(options.posterWallScale ?? 1);
   const posterWallScale = Number.isFinite(requestedPosterWallScale) && requestedPosterWallScale > 0
     ? requestedPosterWallScale
@@ -87,6 +89,8 @@ export function createPixelChase(canvas, options = {}) {
     ? requestedNoteWallScale
     : 1;
   let lastFrame = performance.now();
+  let fpsSampleStart = 0;
+  let fpsFrameCount = 0;
   let scroll = 0;
   let catHidden = false;
   let catRunTime = 0;
@@ -1613,6 +1617,10 @@ export function createPixelChase(canvas, options = {}) {
 
   function frame(now) {
     if (!running) return;
+    if (!shouldRenderFrame(now)) {
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     const dt = Math.min(0.05, (now - lastFrame) / 1000);
     lastFrame = now;
     const catSpeed = 1 + catSpeedVariation * Math.sin(now * 0.0005);
@@ -1745,6 +1753,16 @@ export function createPixelChase(canvas, options = {}) {
     }
 
     paintScene(now);
+    if (typeof options.onFps === 'function') {
+      if (!fpsSampleStart) fpsSampleStart = now;
+      fpsFrameCount += 1;
+      const elapsed = now - fpsSampleStart;
+      if (elapsed >= 1000) {
+        options.onFps(Math.round(fpsFrameCount * 1000 / elapsed));
+        fpsSampleStart = now;
+        fpsFrameCount = 0;
+      }
+    }
     raf = requestAnimationFrame(frame);
   }
 

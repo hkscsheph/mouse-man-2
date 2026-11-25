@@ -14,6 +14,8 @@
 | `?mode=signal` | 舞台訊號。用鏡頭或區域網路 IP 攝影機掃 QR，並把入場、吃鼠、抓痕放大，以及 `1` 到 `5` 的物件訊號送給主舞台。 |
 | `?mode=trans` | 傳輸畫面。只顯示主舞台下半的 3D 合照，並依序讀取共用資料夾裡的報到資料。 |
 
+遠端裝置透過 HTTP 使用 `?mode=reg` 時，Chrome 可能會封鎖鏡頭。請在該裝置開啟 `chrome://flags/#unsafely-treat-insecure-origin-as-secure`，將網站來源（例如 `http://192.168.1.20:5173`，不要加路徑）加入 **Insecure origins treated as secure**，設為 **Enabled** 後重新啟動 Chrome。此設定會降低安全性；正式使用請改用 HTTPS。
+
 預設路線加上 `?stage` 仍會顯示舊的示範老鼠。合照裡的紫衣與海軍藍都用靛藍，以維持五色校服。中央的貓老師不佔老鼠位置。
 
 ## 單人與報到
@@ -30,7 +32,7 @@
 
 ## 主舞台
 
-`?mode=stage` 只顯示演出，不再開鏡頭掃碼。下方 3D 合照中的人物會偶爾揮手、點頭、張望或聳肩。原本的按鍵仍然可用：`A` 貼上 QR 或老鼠 id，`D` 加入示範來賓，`E` 吃最近的老鼠，`Q` 抓痕放大，`1` 到 `5` 送出物件，`U` 切換校服，`+=` / `-` 縮放像素角色，方向鍵移動 3D 鏡頭。`T` 顯示或隱藏狀態列，預設隱藏。收到的訊號和舞台上的按鍵都會寫進主控台。掃碼、以及同樣的演出動作，也可以由 `?mode=signal` 送出。同一個瀏覽器裡的舞台分頁會直接收到訊號；跨裝置時，在主機執行 `npm run stage:osc` 並允許 TCP `9021` 入站，所有裝置共用同一個 WebSocket。
+`?mode=stage` 只顯示演出，不再開鏡頭掃碼。下方 3D 合照中的人物會偶爾揮手、點頭、張望或聳肩。原本的按鍵仍然可用：`A` 貼上 QR 或老鼠 id，`D` 加入示範來賓，`E` 吃最近的老鼠，`Q` 抓痕放大，`1` 到 `5` 送出物件，`U` 切換校服，`F` 切換背景效果，`H` 在 30、45、60 FPS 間循環，`+=` / `-` 縮放像素角色，方向鍵移動 3D 鏡頭。HUD 會顯示實際 FPS 與上限。`T` 顯示或隱藏狀態列，預設隱藏。收到的訊號和舞台上的按鍵都會寫進主控台。掃碼、以及同樣的演出動作，也可以由 `?mode=signal` 送出。同一個瀏覽器裡的舞台分頁會直接收到訊號；跨裝置時，在主機執行 `npm run stage:osc` 並允許 TCP `9021` 入站，所有裝置共用同一個 WebSocket。
 
 `?mode=signal` 的每個選項也可以用 OSC 觸發。另開終端機執行 `npm run stage:osc`；訊號頁與舞台共用 `ws://這台電腦:9021`（可用 `?osc=`、`?ws=` 或建置時的 URL 設定改位址）。控制器把 OSC 送到 UDP `9020`（`STAGE_OSC_PORT`）。按下時送大於 0 的值。位址與訊號頁 OSC 清單相同，例如 `/signal/eat`、`/signal/scratch`、`/signal/prop/figure`、`/signal/camera/left`、`/signal/webcam`、`/signal/ipcam`、`/signal/admit`。
 
@@ -40,7 +42,7 @@
 
 有 `BarcodeDetector` 時，訊號頁用它掃碼，否則用 `jsQR`。訊號頁預設用這台裝置的鏡頭，也可以改成區域網路上的 IP 攝影機。位址可以是 `http://`、`https://` 或 `rtsp://`，例如 `rtsp://192.168.1.64/Streaming/Channels/102`，或在網址加上 `?ipcam=`。`rtsp://` 由開發伺服器轉成瀏覽器能顯示的影像。舞台畫面不再開啟鏡頭。合照預設穿校服。像素角色起始 300%，可從訊號頁放大或縮小。訊號頁可以用與舞台相同的按鍵送出訊號。
 
-WebSocket 位址依序為 `?ws=`、建置時的 `VITE_STAGE_WS_URL`、否則使用頁面主機名稱的 TCP `9021`（本機網址會連到 `localhost`）。舞台訊號與 OSC 轉換後的指令共用這個 WebSocket。JSON 文字的 `type` 可以是 `admit`、`catEat`、`catSweep`、`restartAll`、`scratch`、`prop`、`uniform`、`spriteScale`、`camera`。`admit` 的 `raw` 是 QR 內容，省略就是示範來賓。`prop` 的 `kind` 是 `figure`、`drawing`、`box`、`poster` 或 `note`。父頁面也可以送同一份內容：
+WebSocket 位址依序為 `?ws=`、建置時的 `VITE_STAGE_WS_URL`、否則使用頁面主機名稱的 TCP `9021`（本機網址會連到 `localhost`）。舞台訊號與 OSC 轉換後的指令共用這個 WebSocket。JSON 文字的 `type` 可以是 `admit`、`catEat`、`catSweep`、`restartAll`、`scratch`、`prop`、`uniform`、`spriteScale`、`camera`、`fps` 或 `backgroundEffects`。`fps` 循環 FPS 上限，`backgroundEffects` 切換背景效果。`admit` 的 `raw` 是 QR 內容，省略就是示範來賓。`prop` 的 `kind` 是 `figure`、`drawing`、`box`、`poster` 或 `note`。父頁面也可以送同一份內容：
 
 ```js
 window.postMessage({ channel: 'stage-ws', payload: { type: 'catEat' } }, '*');
@@ -85,6 +87,8 @@ Uniform mode uses textured, short-sleeved shirts with the school badge on the le
 
 ## Registration (`?mode=reg`)
 
+When using registration on a remote device over HTTP, Chrome may block webcam access. On that device, open `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, add the site's origin (for example, `http://192.168.1.20:5173`, without a path) under **Insecure origins treated as secure**, set it to **Enabled**, and relaunch Chrome. This weakens security; use HTTPS for regular or production use.
+
 Registration starts with the black-cat teacher alone in the class scene. Each capture adds one student from the boys' class-photo template and replaces the student's face with the captured portrait. Face appearance is not used to infer gender. Student silhouettes are clipped to the manual polygon annotations in `polygons_boy.json`. Press **Q** to capture, **A** to place the current webcam face into all 30 silhouette slots (visual demo; no per-slot QR), and **T** to toggle the registration panel and webcam thumbnail. Press **P** to toggle printer mode. While it is on, each successful registration prints a slip on the LAN printer (`192.168.0.191:9100`, override with `PRINTER_HOST`): line 1 is `竄 ` plus the local time as `yyyymmdd hhMM` plus ` 🐈`, line 2 is a full-width QR code, and line 3 is 🐭🐁🪤🐀🐹🧀. The dev server must be running so the page can reach that port. The existing mouse-saving and printable QR-card flow is preserved. Each successful capture writes `<id>.json` (portrait plus mouse traits, face patches, and tuning) and `<id>.png` (the front-facing student card) into one folder, `.dev-data/transfer/` (override with `TRANSFER_DIR`, including a network share). The printed QR is scanned by `?mode=signal` with the webcam or an IP camera. `?mode=stage` then admits that mouse from the JSON in that folder. Point `?mode=trans` at the same dev server, or at a server using that same folder, to show those mice.
 
 ## Transfer display (`?mode=trans`)
@@ -93,9 +97,9 @@ This is the bottom half of the main stage: the 3D class photo, full screen, with
 
 ## Main stage (`?mode=stage`)
 
-This page does not open a camera. The 3D figures in the lower class photo occasionally wave, nod, look around, or shrug. The previous keys still work: `A` pastes a QR or mouse id, `D` admits a demo guest, `E` eats the closest mouse, `Q` plays the scratch zoom, `1` through `5` bring on a prop, `U` toggles uniforms, `+=` / `-` resize the pixel cast, and the arrow keys move the 3D camera (`Space` with Up or Down pans vertically). Press `T` to show or hide the status line; it starts hidden. Each received signal and each stage key is logged in the console. `?mode=signal` can scan QR codes and send the same events. Stage tabs in the same browser receive those signals directly. For a second device, run `npm run stage:osc` on the host and connect the pages to its shared WebSocket.
+This page does not open a camera. The 3D figures in the lower class photo occasionally wave, nod, look around, or shrug. The previous keys still work: `A` pastes a QR or mouse id, `D` admits a demo guest, `E` eats the closest mouse, `Q` plays the scratch zoom, `1` through `5` bring on a prop, `U` toggles uniforms, `F` toggles background effects, `H` cycles the FPS cap through 30, 45, and 60, `+=` / `-` resize the pixel cast, and the arrow keys move the 3D camera (`Space` with Up or Down pans vertically). The HUD shows actual FPS and the cap. Press `T` to show or hide the status line; it starts hidden. Each received signal and each stage key is logged in the console. `?mode=signal` can scan QR codes and send the same events. Stage tabs in the same browser receive those signals directly. For a second device, run `npm run stage:osc` on the host and connect the pages to its shared WebSocket.
 
-Split screen: **pixel chase** on top, **class photo** (3D mice) on the bottom. Stage pixel mice wander slowly and face away from the cat; the cat smoothly varies its run speed. The standalone pixel mode keeps its existing movement. The class photo shows up to 30 standing 3D mice center-out in three stepped rows of ten; they wear uniforms by default. Row rise stays at `0.8` and camera height starts at `1.8`. The signal page uses the same keys to emit those signals: `A` focuses the id field, `D` admits a demo guest, `E` eats, `Q` scratches, `1` through `5` bring on props, `U` toggles uniforms, `+=` / `-` resize the pixel cast, the arrow keys move the camera, and `T` toggles the stage HUD.
+Split screen: **pixel chase** on top, **class photo** (3D mice) on the bottom. Stage pixel mice wander slowly and face away from the cat; the cat smoothly varies its run speed. The standalone pixel mode keeps its existing movement. The class photo shows up to 30 standing 3D mice center-out in three stepped rows of ten; they wear uniforms by default. Row rise stays at `0.8` and camera height starts at `1.8`. The signal page uses the same keys to emit those signals: `A` focuses the id field, `D` admits a demo guest, `E` eats, `Q` scratches, `1` through `5` bring on props, `U` toggles uniforms, `F` toggles background effects, `H` cycles FPS, `+=` / `-` resize the pixel cast, the arrow keys move the camera, and `T` toggles the stage HUD.
 
 Shirt colors follow the corresponding front, middle, and back positions in `br_class.jpg`. The photo's purple and navy shirts both use indigo to retain the five-color uniform palette; the central cat teacher has no mouse slot.
 
@@ -161,7 +165,7 @@ JSON text frames only.
 
 | Field | Type | Required | Meaning |
 | --- | --- | --- | --- |
-| `type` | string | yes | `admit` adds the QR in `raw`, or a demo guest when `raw` is omitted. `catEat` eats one mouse. `catSweep` eats every mouse still alive, one after another. `restartAll` clears the stage. `scratch` plays the cat zoom. `prop` brings on `kind`: `figure`, `drawing`, `box`, `poster`, or `note`. `uniform` toggles uniforms. `spriteScale` changes pixel size by `delta`. `camera` moves the 3D camera by `move`: `[x, depth, height]`. A `catEat` or prop that arrives during a chase waits in a queue. |
+| `type` | string | yes | `admit` adds the QR in `raw`, or a demo guest when `raw` is omitted. `catEat` eats one mouse. `catSweep` eats every mouse still alive, one after another. `restartAll` clears the stage. `scratch` plays the cat zoom. `prop` brings on `kind`: `figure`, `drawing`, `box`, `poster`, or `note`. `uniform` toggles uniforms. `spriteScale` changes pixel size by `delta`. `camera` moves the 3D camera by `move`: `[x, depth, height]`. `fps` cycles the stage FPS cap; `backgroundEffects` toggles background animations. A `catEat` or prop that arrives during a chase waits in a queue. |
 | `id` | string | no | On `catEat`, the mouse to remove. Omit it and the closest mouse is taken. |
 | `raw` | string | no | QR text or mouse id for `admit`. |
 | `signalId` | string | no | Duplicate deliveries of the same signal are ignored. |
