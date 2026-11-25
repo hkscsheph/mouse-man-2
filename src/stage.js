@@ -104,7 +104,7 @@ function updateCount() {
 
 const admittedIds = new Set();
 
-const photo = createStagePhoto(photoCanvas, { pinStandBottom: true, showBackdrop: false });
+const photo = createStagePhoto(photoCanvas, { idle: true, pinStandBottom: true, showBackdrop: false });
 const pixel = createPixelChase(pixelCanvas, {
   initialCount: 0,
   initialSpriteScale: initialPixelSpriteScale,
