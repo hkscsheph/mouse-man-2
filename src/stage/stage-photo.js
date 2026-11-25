@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { createMouse, disposeMouse, setMouseUniform, UNIFORM_COLORS } from './mouse.js';
+import { createMouse, disposeMouse, setMouseUniform, UNIFORM_COLORS } from '../mouse.js';
+import { createFrameRateLimiter } from './frame-rate.js';
 import { createScratchStyle, drawScratches } from './stage-scratch.js';
 
 const COLS = 10;
@@ -141,7 +142,13 @@ function poseClassMouse(entry, time) {
   }
 }
 
-export function createStagePhoto(canvas, { idle = false, pinStandBottom = false } = {}) {
+export function createStagePhoto(canvas, {
+  idle = false,
+  pinStandBottom = false,
+  showBackdrop = true,
+  getFps,
+} = {}) {
+  const shouldAnimateFrame = createFrameRateLimiter(getFps);
   let rowRise = DEFAULT_ROW_RISE;
   let cameraHeight = DEFAULT_CAMERA_HEIGHT;
   let cameraX = 0;
@@ -180,7 +187,7 @@ export function createStagePhoto(canvas, { idle = false, pinStandBottom = false 
     new THREE.MeshStandardMaterial({ color: 0xd9cbb0, roughness: 0.92 }),
   );
   backdrop.position.set(0, 1.05, -0.6);
-  scene.add(backdrop);
+  if (showBackdrop) scene.add(backdrop);
 
   const stepMaterial = new THREE.MeshStandardMaterial({ color: 0x79553b, roughness: 0.86 });
   const stepGeometry = new THREE.BoxGeometry(7, STEP_HEIGHT, STEP_DEPTH);
@@ -198,7 +205,7 @@ export function createStagePhoto(canvas, { idle = false, pinStandBottom = false 
     new THREE.MeshStandardMaterial({ color: 0x345c50, roughness: 0.85 }),
   );
   banner.position.set(0, 1.85, -0.55);
-  scene.add(banner);
+  if (showBackdrop) scene.add(banner);
 
   const scratchCanvas = document.createElement('canvas');
   scratchCanvas.className = 'stage-scratch-layer';
@@ -584,9 +591,14 @@ export function createStagePhoto(canvas, { idle = false, pinStandBottom = false 
     return new Promise((resolve) => {
       const start = performance.now();
       const dur = 250;
+      const shouldRenderFrame = createFrameRateLimiter(getFps);
       function tick(now) {
         if (!roster.includes(entry)) {
           resolve(false);
+          return;
+        }
+        if (!shouldRenderFrame(now)) {
+          requestAnimationFrame(tick);
           return;
         }
         const t = Math.min(1, (now - start) / dur);
@@ -653,6 +665,10 @@ export function createStagePhoto(canvas, { idle = false, pinStandBottom = false 
   function animate(now) {
     if (!running) {
       animating = false;
+      return;
+    }
+    if (!shouldAnimateFrame(now)) {
+      requestAnimationFrame(animate);
       return;
     }
     const time = now / 1000;

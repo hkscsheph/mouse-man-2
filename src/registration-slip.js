@@ -8,7 +8,7 @@ export function formatRegistrationStamp(date) {
   return `竄 ${stamp} 😼`;
 }
 
-export function qrGrid(text, width = PRINTER_HEAD / 2) {
+export function qrGrid(text, width = PRINTER_HEAD / 3 * 2) {
   if (!text) throw new Error('empty qr');
   const qr = QRCode.create(text, { errorCorrectionLevel: 'M' });
   const modules = qr.modules.size;

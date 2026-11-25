@@ -81,6 +81,10 @@ export function signalControl(name, value) {
       return sendAction({ type: 'catSweep' }, 'Clear the stage');
     case 'scratch':
       return sendAction({ type: 'scratch' }, 'Scratch zoom');
+    case 'fps':
+      return sendAction({ type: 'fps' }, 'FPS');
+    case 'backgroundEffects':
+      return sendAction({ type: 'backgroundEffects' }, 'Background effects');
     case 'restart':
       return sendAction({ type: 'restartAll' }, 'Restart');
     case 'uniform':

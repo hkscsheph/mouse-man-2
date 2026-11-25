@@ -1,4 +1,6 @@
-const DEFAULT_WS = 'ws://localhost:8787';
+import { SIGNAL_OSC_WS_PORT } from '../signal/signal-osc.js';
+
+const DEFAULT_WS = `ws://localhost:${SIGNAL_OSC_WS_PORT}`;
 
 export function resolveStageWsUrl() {
   const params = new URLSearchParams(location.search);
@@ -7,7 +9,7 @@ export function resolveStageWsUrl() {
   const fromEnv = import.meta.env.VITE_STAGE_WS_URL;
   if (fromEnv) return fromEnv;
   const host = location.hostname;
-  if (host && host !== 'localhost' && host !== '127.0.0.1') return `ws://${host}:8787`;
+  if (host && host !== 'localhost' && host !== '127.0.0.1') return `ws://${host}:${SIGNAL_OSC_WS_PORT}`;
   return DEFAULT_WS;
 }
 
@@ -15,9 +17,17 @@ export const STAGE_SIGNAL_CHANNEL = 'mouse-stage';
 
 const PROP_KINDS = new Set(['figure', 'drawing', 'box', 'poster', 'note']);
 
+export function createSignalId(cryptoApi = globalThis.crypto) {
+  if (typeof cryptoApi?.randomUUID === 'function') return cryptoApi.randomUUID();
+  if (typeof cryptoApi?.getRandomValues === 'function') {
+    return Array.from(cryptoApi.getRandomValues(new Uint8Array(16)), (value) => value.toString(16).padStart(2, '0')).join('');
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
 /**
  * @typedef {{
- *   type: 'catEat' | 'catSweep' | 'restartAll' | 'admit' | 'scratch' | 'prop' | 'uniform' | 'spriteScale' | 'camera' | 'hud',
+ *   type: 'catEat' | 'catSweep' | 'restartAll' | 'admit' | 'scratch' | 'prop' | 'uniform' | 'spriteScale' | 'camera' | 'hud' | 'fps' | 'backgroundEffects',
  *   id?: string,
  *   raw?: string,
  *   kind?: string,
@@ -31,7 +41,8 @@ const PROP_KINDS = new Set(['figure', 'drawing', 'box', 'poster', 'note']);
 export function isStageSignal(message) {
   if (!message || typeof message.type !== 'string') return false;
   if (message.type === 'catEat' || message.type === 'catSweep' || message.type === 'restartAll') return true;
-  if (message.type === 'admit' || message.type === 'scratch' || message.type === 'uniform' || message.type === 'hud') return true;
+  if (message.type === 'admit' || message.type === 'scratch' || message.type === 'uniform' || message.type === 'hud'
+    || message.type === 'fps' || message.type === 'backgroundEffects') return true;
   if (message.type === 'prop') return PROP_KINDS.has(message.kind);
   if (message.type === 'spriteScale') return Number.isFinite(Number(message.delta)) && Number(message.delta) !== 0;
   if (message.type === 'camera') return Array.isArray(message.move);
@@ -143,7 +154,7 @@ export function connectStageSignals(options = {}) {
     send(payload) {
       const message = {
         ...payload,
-        signalId: payload?.signalId || crypto.randomUUID(),
+        signalId: payload?.signalId || createSignalId(),
       };
       try {
         const channel = new BroadcastChannel(STAGE_SIGNAL_CHANNEL);

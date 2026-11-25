@@ -1,12 +1,13 @@
 import { createPixelChase } from './pixel-chase.js';
-import { createStagePhoto, DEFAULT_STAGE_UNIFORM_ENABLED } from './stage-photo.js';
-import { createScratchSound } from './stage-sound.js';
-import { connectStageWebSocket } from './stage-ws.js';
+import { createStagePhoto, DEFAULT_STAGE_UNIFORM_ENABLED } from './stage/stage-photo.js';
+import { createFrameRateLimiter } from './stage/frame-rate.js';
+import { createScratchSound } from './stage/stage-sound.js';
+import { connectStageWebSocket } from './stage/stage-ws.js';
 import {
   parseMouseFurColorFromQrText,
   parseMouseIdFromQrText,
   resolveParticipant,
-} from './stage-face.js';
+} from './stage/stage-face.js';
 import { listTransferRecords } from './transfer-folder.js';
 
 document.title = 'Main Stage — Mouse Exhibition';
@@ -26,6 +27,15 @@ if (gate) gate.hidden = true;
 const pixelCanvas = document.querySelector('#view');
 pixelCanvas.classList.add('pixelated', 'stage-pixel');
 const initialPixelSpriteScale = 3;
+const FPS_LEVELS = [30, 45, 60];
+let stageFps = 60;
+let measuredFps = null;
+
+const photoBackground = document.createElement('div');
+photoBackground.id = 'stage-photo-background';
+photoBackground.setAttribute('aria-hidden', 'true');
+photoBackground.style.backgroundImage = `url("${import.meta.env.BASE_URL}canteen_mouseview.webp")`;
+document.body.prepend(photoBackground);
 
 const photoCanvas = document.createElement('canvas');
 photoCanvas.id = 'stage-photo';
@@ -39,6 +49,8 @@ hud.innerHTML = `
   <p id="stage-status" data-state="idle" role="status" aria-live="polite">Waiting for a signal.</p>
   <p id="stage-ws-status">WebSocket: connecting…</p>
   <p id="stage-count">Active mice: 0</p>
+  <p id="stage-fps">FPS: -- / 60</p>
+  <p id="stage-prop-mode">Background effects: animated (F to toggle)</p>
 `;
 document.body.appendChild(hud);
 
@@ -90,6 +102,12 @@ function setWsStatus(text) {
   if (el) el.textContent = text;
 }
 
+function updateFpsReadout(fps) {
+  if (Number.isFinite(fps)) measuredFps = fps;
+  const el = document.querySelector('#stage-fps');
+  if (el) el.textContent = `FPS: ${measuredFps ?? '--'} / ${stageFps}`;
+}
+
 function updateCount() {
   const el = document.querySelector('#stage-count');
   if (el) el.textContent = `Active mice: ${photo.listIds().length}`;
@@ -97,14 +115,23 @@ function updateCount() {
 
 const admittedIds = new Set();
 
-const photo = createStagePhoto(photoCanvas, { pinStandBottom: true });
+const photo = createStagePhoto(photoCanvas, {
+  idle: true,
+  pinStandBottom: true,
+  showBackdrop: false,
+  getFps: () => stageFps,
+});
 const pixel = createPixelChase(pixelCanvas, {
   initialCount: 0,
   initialSpriteScale: initialPixelSpriteScale,
+  posterWallScale: 1.5,
+  noteWallScale: 0.75,
   mouseWanderSpeed: 0.45,
   mouseWanderRange: 10,
   mouseRunFrameDuration: 150,
   catSpeedVariation: 0.3,
+  getFps: () => stageFps,
+  onFps: updateFpsReadout,
   getSize: () => ({
     width: pixelCanvas.clientWidth || window.innerWidth,
     height: pixelCanvas.clientHeight || Math.floor(window.innerHeight * 0.52),
@@ -118,6 +145,7 @@ const propStatus = {
   poster: 'A poster slides across the stage…',
   note: 'A note slides across the stage…',
 };
+let immediateProps = false;
 pixel.setPropListener((kind) => setStatus(propStatus[kind]));
 
 function layoutStage() {
@@ -334,9 +362,24 @@ function handleStageMessage(message) {
     hud.hidden = typeof message.hidden === 'boolean' ? message.hidden : !hud.hidden;
     return;
   }
+  if (message?.type === 'fps') {
+    const currentIndex = FPS_LEVELS.indexOf(stageFps);
+    stageFps = FPS_LEVELS[(currentIndex + 1) % FPS_LEVELS.length];
+    updateFpsReadout();
+    setStatus(`FPS cap: ${stageFps}`);
+    return;
+  }
+  if (message?.type === 'backgroundEffects') {
+    immediateProps = !immediateProps;
+    pixel.setImmediateProps(immediateProps);
+    document.querySelector('#stage-prop-mode').textContent = `Background effects: ${immediateProps ? 'immediate' : 'animated'} (F to toggle)`;
+    setStatus(`Background effects ${immediateProps ? 'appear immediately' : 'are animated'}.`);
+    return;
+  }
   if (message?.type === 'prop') {
     const result = pixel.requestProp(message.kind);
     if (result === 'started') setStatus(propStatus[message.kind]);
+    else if (result === 'placed') setStatus('Background item added immediately.');
     else if (result === 'queued') setStatus('Queued. The cat will bring it in next.');
     else setStatus('The cat is busy');
     return;
@@ -372,6 +415,7 @@ connectStageWebSocket((msg) => handleStageMessage(msg), {
 let uniformsEnabled = DEFAULT_STAGE_UNIFORM_ENABLED;
 let catScratchFrames = null;
 let catScratchPlaying = false;
+let catScratchOverlay = null;
 
 function prepareScratchFrame(source) {
   const frame = document.createElement('canvas');
@@ -463,7 +507,14 @@ function placeCatSprite(element, x, y, w, h) {
 }
 
 function playCatScratch() {
-  if (catScratchPlaying) return;
+  if (catScratchPlaying) {
+    catScratchPlaying = false;
+    catScratchOverlay?.remove();
+    catScratchOverlay = null;
+    pixel.setCatHidden(false);
+    setStatus('Stage running.');
+    return;
+  }
   catScratchPlaying = true;
   setStatus('The cat scratches…');
   try {
@@ -518,16 +569,22 @@ function playCatScratch() {
   paintRunFrame(first.frame);
   overlay.append(scene, fade, cat);
   document.body.append(overlay);
+  catScratchOverlay = overlay;
   pixel.setCatHidden(true);
 
   const framesPromise = loadCatScratchFrames().catch(() => null);
   const started = performance.now();
+  const shouldRenderFrame = createFrameRateLimiter(() => stageFps);
   let shownFrame = first.frame;
   const ease = (t) => t * t * (3 - 2 * t);
 
   const approach = (now) => {
     if (!overlay.isConnected) return;
     try {
+    if (!shouldRenderFrame(now)) {
+      requestAnimationFrame(approach);
+      return;
+    }
     const t = Math.min(1, (now - started) / duration);
     const k = ease(t);
     fade.style.opacity = String(k);
@@ -573,6 +630,7 @@ function playCatScratch() {
       pixel.setCatHidden(false);
       overlay.remove();
       catScratchPlaying = false;
+      catScratchOverlay = null;
       setStatus('The cat could not zoom in.');
       console.error(error);
     }
@@ -582,6 +640,7 @@ function playCatScratch() {
     pixel.setCatHidden?.(false);
     document.querySelector('.stage-cat-zoom')?.remove();
     catScratchPlaying = false;
+    catScratchOverlay = null;
     setStatus('The cat could not zoom in.');
     console.error(error);
   }
@@ -631,6 +690,7 @@ async function startScratchGif(framesPromise, overlay, runCat, startCatHeight) {
   };
   drawFrame(frames[0], 0);
   const gifStarted = performance.now();
+  const shouldRenderFrame = createFrameRateLimiter(() => stageFps);
   const gifDuration = Math.max(1, frames.reduce((total, item) => total + item.duration, 0));
   const foundScratch = frames.findIndex((item) => item.scratch);
   const scratchIndex = foundScratch < 0 ? frames.length - 1 : foundScratch;
@@ -640,6 +700,10 @@ async function startScratchGif(framesPromise, overlay, runCat, startCatHeight) {
   let nextAt = gifStarted + frames[0].duration;
   const tick = (now) => {
     if (!overlay.isConnected) return;
+    if (!shouldRenderFrame(now)) {
+      requestAnimationFrame(tick);
+      return;
+    }
     while (frameIndex < frames.length - 1 && now >= nextAt) {
       frameIndex += 1;
       nextAt += frames[frameIndex].duration;
@@ -699,6 +763,16 @@ window.addEventListener('keydown', (event) => {
     }
   }
   if (event.repeat) return;
+  if ((event.key === 'h' || event.key === 'H') && !isEditingControl && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    event.preventDefault();
+    handleStageMessage({ type: 'fps' });
+    return;
+  }
+  if ((event.key === 'f' || event.key === 'F') && !isEditingControl && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    event.preventDefault();
+    handleStageMessage({ type: 'backgroundEffects' });
+    return;
+  }
   if ((event.key === 't' || event.key === 'T') && !isEditingControl) {
     event.preventDefault();
     handleStageMessage({ type: 'hud' });

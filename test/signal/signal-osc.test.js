@@ -6,9 +6,9 @@ import test from 'node:test';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
-import { CAMERA_NUDGE, resolveSignalOscUrl, SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT, signalActionFromOsc, signalControl } from '../src/signal-osc.js';
+import { CAMERA_NUDGE, resolveSignalOscUrl, SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT, signalActionFromOsc, signalControl } from '../../src/signal/signal-osc.js';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 function oscString(text) {
   const raw = Buffer.from(`${text}\0`);
@@ -64,6 +64,16 @@ test('button vectors keep the on-screen camera step', () => {
   assert.equal(signalControl('camera', '0,0,1').label, 'Camera up');
   assert.equal(signalControl('prop', 'poster').label, 'Poster');
   assert.equal(signalControl('admit', '  '), null);
+  assert.deepEqual(signalControl('fps'), {
+    op: 'send',
+    payload: { type: 'fps' },
+    label: 'FPS',
+  });
+  assert.deepEqual(signalControl('backgroundEffects'), {
+    op: 'send',
+    payload: { type: 'backgroundEffects' },
+    label: 'Background effects',
+  });
 });
 
 test('resolves the signal page OSC socket', () => {
@@ -76,7 +86,7 @@ test('resolves the signal page OSC socket', () => {
   assert.equal(resolveSignalOscUrl({ hostname: '127.0.0.1' }, 'ws://override:9'), 'ws://override:9');
 });
 
-test('relays an OSC button to connected signal pages', async () => {
+test('relays OSC input and stage signals through the shared WebSocket server', async () => {
   const oscPort = 20000 + Math.floor(Math.random() * 10000);
   const wsPort = oscPort + 10000;
   const child = spawn(process.execPath, ['scripts/stage-osc.mjs'], {
@@ -113,7 +123,15 @@ test('relays an OSC button to connected signal pages', async () => {
     });
     const socket = new WebSocket(`ws://127.0.0.1:${wsPort}`);
     await once(socket, 'open');
-    const incoming = once(socket, 'message');
+    const incoming = new Promise((resolvePromise) => {
+      const onMessage = (data) => {
+        const message = JSON.parse(data.toString());
+        if (message.address !== '/signal/scratch') return;
+        socket.off('message', onMessage);
+        resolvePromise(message);
+      };
+      socket.on('message', onMessage);
+    });
     const udp = dgram.createSocket('udp4');
     const packet = Buffer.concat([oscString('/signal/scratch'), oscString(',f'), (() => {
       const buffer = Buffer.alloc(4);
@@ -127,8 +145,13 @@ test('relays an OSC button to connected signal pages', async () => {
         else resolvePromise();
       });
     });
-    const [data] = await incoming;
-    assert.equal(JSON.parse(data.toString()).address, '/signal/scratch');
+    const oscMessage = await incoming;
+    assert.equal(oscMessage.address, '/signal/scratch');
+    const stageSignal = { type: 'catEat', signalId: 'test-signal' };
+    const stageIncoming = once(socket, 'message');
+    socket.send(JSON.stringify(stageSignal));
+    const [stageData] = await stageIncoming;
+    assert.deepEqual(JSON.parse(stageData.toString()), stageSignal);
     socket.close();
   } finally {
     if (child.exitCode === null) child.kill();

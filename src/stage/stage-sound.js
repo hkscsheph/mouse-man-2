@@ -31,7 +31,7 @@ export function createScratchSound({
   }
 
   const ready = Promise.resolve()
-    .then(() => fetchAudio(new URL('./cat-angry-meow.mp3', import.meta.url).href))
+    .then(() => fetchAudio(new URL('../cat-angry-meow.mp3', import.meta.url).href))
     .then((response) => {
       if (!response.ok) throw new Error(`Scratch sound request failed: ${response.status}`);
       return response.arrayBuffer();

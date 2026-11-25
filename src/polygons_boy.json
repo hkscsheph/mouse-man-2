@@ -1,5 +1,5 @@
 {
-  "image": "br_class_boys.jpg",
+  "image": "canteen_class.png",
   "width": 1408,
   "height": 770,
   "note": "30 adjoining coverage polygons, not strict person segmentation. The group upper silhouette defines the top boundary; spaces between people, legs and chairs, the central cat/chair area, and floor down to the image bottom are covered. Sky and buildings outside the group region remain uncovered. Pixel-edge coordinates: y=770 is the bottom edge. Shared borders are identical; no gaps or area overlaps within the coverage region.",
