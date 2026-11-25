@@ -1,4 +1,6 @@
-const DEFAULT_WS = 'ws://localhost:8787';
+import { SIGNAL_OSC_WS_PORT } from '../signal/signal-osc.js';
+
+const DEFAULT_WS = `ws://localhost:${SIGNAL_OSC_WS_PORT}`;
 
 export function resolveStageWsUrl() {
   const params = new URLSearchParams(location.search);
@@ -7,13 +9,21 @@ export function resolveStageWsUrl() {
   const fromEnv = import.meta.env.VITE_STAGE_WS_URL;
   if (fromEnv) return fromEnv;
   const host = location.hostname;
-  if (host && host !== 'localhost' && host !== '127.0.0.1') return `ws://${host}:8787`;
+  if (host && host !== 'localhost' && host !== '127.0.0.1') return `ws://${host}:${SIGNAL_OSC_WS_PORT}`;
   return DEFAULT_WS;
 }
 
 export const STAGE_SIGNAL_CHANNEL = 'mouse-stage';
 
 const PROP_KINDS = new Set(['figure', 'drawing', 'box', 'poster', 'note']);
+
+export function createSignalId(cryptoApi = globalThis.crypto) {
+  if (typeof cryptoApi?.randomUUID === 'function') return cryptoApi.randomUUID();
+  if (typeof cryptoApi?.getRandomValues === 'function') {
+    return Array.from(cryptoApi.getRandomValues(new Uint8Array(16)), (value) => value.toString(16).padStart(2, '0')).join('');
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
 
 /**
  * @typedef {{
@@ -143,7 +153,7 @@ export function connectStageSignals(options = {}) {
     send(payload) {
       const message = {
         ...payload,
-        signalId: payload?.signalId || crypto.randomUUID(),
+        signalId: payload?.signalId || createSignalId(),
       };
       try {
         const channel = new BroadcastChannel(STAGE_SIGNAL_CHANNEL);

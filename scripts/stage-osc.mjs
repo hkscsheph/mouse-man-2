@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * OSC input for ?mode=signal.
+ * Shared stage/OSC WebSocket relay and OSC input for ?mode=signal.
  * Usage: npm run stage:osc
- * Listens for OSC on UDP 9020 and forwards each message to signal pages on ws://0.0.0.0:9021.
+ * Listens for stage and OSC WebSocket clients on port 9021 and OSC input on UDP 9020.
  */
 import { randomUUID } from 'node:crypto';
 import dgram from 'node:dgram';
@@ -41,8 +41,20 @@ function broadcast(message) {
 }
 
 wss.on('connection', (socket) => {
-  console.log('signal page connected');
-  socket.on('error', () => {});
+  console.log('stage/signal page connected');
+  socket.send(JSON.stringify({ type: 'hello', message: 'stage relay ready' }));
+  socket.on('message', (data) => {
+    let message;
+    try {
+      message = JSON.parse(data.toString());
+    } catch {
+      return;
+    }
+    if (!message || typeof message.type !== 'string' || message.type === 'hello') return;
+    broadcast(message);
+    console.log('Stage signal', message);
+  });
+  socket.on('error', (error) => console.error('WebSocket client error:', error));
 });
 
 let udpStarted = false;
@@ -52,9 +64,11 @@ function startUdp() {
   udp.bind(OSC_PORT, '0.0.0.0', () => {
     const lans = lanAddresses();
     console.log(`OSC listening on udp://0.0.0.0:${OSC_PORT}`);
-    console.log(`Signal pages connect to ws://localhost:${WS_PORT}`);
+    console.log(`Stage/signal pages connect to ws://localhost:${WS_PORT}`);
     if (lans.length) console.log(`Other devices can send OSC to ${lans.join(', ')} port ${OSC_PORT}`);
+    if (lans.length) console.log(`Other devices can connect to ws://${lans.join(`:${WS_PORT}, ws://`)}:${WS_PORT}`);
     console.log('Open ?mode=signal. A press sends a value above 0.');
+    console.log('Press Enter to broadcast {"type":"catEat"}; type id=abc123 then Enter for targeted eat; q to quit');
   });
 }
 
@@ -81,4 +95,22 @@ udp.on('message', (packet, remote) => {
 udp.on('error', (error) => {
   console.error(error);
   process.exit(1);
+});
+
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  const line = chunk.trim();
+  if (!line) {
+    broadcast({ type: 'catEat' });
+    return;
+  }
+  if (line === 'q' || line === 'quit') {
+    process.exit(0);
+  }
+  const idMatch = line.match(/^id=(.+)$/);
+  if (idMatch) {
+    broadcast({ type: 'catEat', id: idMatch[1] });
+    return;
+  }
+  console.log('Unknown command. Enter = eat next, id=<id> = eat id, q = quit');
 });
