@@ -415,6 +415,7 @@ connectStageWebSocket((msg) => handleStageMessage(msg), {
 let uniformsEnabled = DEFAULT_STAGE_UNIFORM_ENABLED;
 let catScratchFrames = null;
 let catScratchPlaying = false;
+let catScratchOverlay = null;
 
 function prepareScratchFrame(source) {
   const frame = document.createElement('canvas');
@@ -506,7 +507,14 @@ function placeCatSprite(element, x, y, w, h) {
 }
 
 function playCatScratch() {
-  if (catScratchPlaying) return;
+  if (catScratchPlaying) {
+    catScratchPlaying = false;
+    catScratchOverlay?.remove();
+    catScratchOverlay = null;
+    pixel.setCatHidden(false);
+    setStatus('Stage running.');
+    return;
+  }
   catScratchPlaying = true;
   setStatus('The cat scratches…');
   try {
@@ -561,6 +569,7 @@ function playCatScratch() {
   paintRunFrame(first.frame);
   overlay.append(scene, fade, cat);
   document.body.append(overlay);
+  catScratchOverlay = overlay;
   pixel.setCatHidden(true);
 
   const framesPromise = loadCatScratchFrames().catch(() => null);
@@ -621,6 +630,7 @@ function playCatScratch() {
       pixel.setCatHidden(false);
       overlay.remove();
       catScratchPlaying = false;
+      catScratchOverlay = null;
       setStatus('The cat could not zoom in.');
       console.error(error);
     }
@@ -630,6 +640,7 @@ function playCatScratch() {
     pixel.setCatHidden?.(false);
     document.querySelector('.stage-cat-zoom')?.remove();
     catScratchPlaying = false;
+    catScratchOverlay = null;
     setStatus('The cat could not zoom in.');
     console.error(error);
   }
