@@ -9,7 +9,7 @@ import dgram from 'node:dgram';
 import { networkInterfaces } from 'node:os';
 import { WebSocketServer, WebSocket } from 'ws';
 import { decodeOscPacket } from '../src/signal/osc-decode.js';
-import { SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT } from '../src/signal/signal-osc.js';
+import { SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT, STATION_NAMES } from '../src/signal/signal-osc.js';
 
 const OSC_PORT = Number(process.env.STAGE_OSC_PORT || SIGNAL_OSC_UDP_PORT);
 const WS_PORT = Number(process.env.STAGE_OSC_WS_PORT || SIGNAL_OSC_WS_PORT);
@@ -32,6 +32,14 @@ function lanAddresses() {
 
 const wss = new WebSocketServer({ port: WS_PORT, host: '0.0.0.0' });
 const udp = dgram.createSocket('udp4');
+const stationClients = new Map(STATION_NAMES.map((station) => [station, new Set()]));
+
+function stationStatus() {
+  return {
+    type: 'stationStatus',
+    stations: Object.fromEntries(STATION_NAMES.map((station) => [station, stationClients.get(station).size > 0])),
+  };
+}
 
 function broadcast(message) {
   const data = JSON.stringify(message);
@@ -43,6 +51,8 @@ function broadcast(message) {
 wss.on('connection', (socket) => {
   console.log('stage/signal page connected');
   socket.send(JSON.stringify({ type: 'hello', message: 'stage relay ready' }));
+  socket.send(JSON.stringify(stationStatus()));
+  let registeredStation = null;
   socket.on('message', (data) => {
     let message;
     try {
@@ -51,8 +61,32 @@ wss.on('connection', (socket) => {
       return;
     }
     if (!message || typeof message.type !== 'string' || message.type === 'hello') return;
+    if (message.type === 'station') {
+      if (!stationClients.has(message.station) || (registeredStation && registeredStation !== message.station)) {
+        socket.send(JSON.stringify({ type: 'error', message: 'Invalid station registration' }));
+        return;
+      }
+      if (!registeredStation) {
+        registeredStation = message.station;
+        stationClients.get(registeredStation).add(socket);
+        broadcast({ type: 'station', station: registeredStation, connected: true });
+        broadcast(stationStatus());
+      }
+      return;
+    }
+    if (message.type === 'stationStatus') return;
     broadcast(message);
     console.log('Stage signal', message);
+  });
+  socket.on('close', () => {
+    if (!registeredStation) return;
+    stationClients.get(registeredStation).delete(socket);
+    broadcast({
+      type: 'station',
+      station: registeredStation,
+      connected: stationClients.get(registeredStation).size > 0,
+    });
+    broadcast(stationStatus());
   });
   socket.on('error', (error) => console.error('WebSocket client error:', error));
 });

@@ -16,6 +16,23 @@ function oscString(text) {
   return Buffer.concat([raw, Buffer.alloc(pad)]);
 }
 
+function nextMessage(socket, predicate) {
+  return new Promise((resolvePromise, reject) => {
+    const timer = setTimeout(() => {
+      socket.off('message', onMessage);
+      reject(new Error('Timed out waiting for WebSocket message'));
+    }, 5000);
+    function onMessage(data) {
+      const message = JSON.parse(data.toString());
+      if (!predicate(message)) return;
+      clearTimeout(timer);
+      socket.off('message', onMessage);
+      resolvePromise(message);
+    }
+    socket.on('message', onMessage);
+  });
+}
+
 test('maps each signal option onto the same stage message as its button', () => {
   assert.deepEqual(signalActionFromOsc('/signal/demo'), signalControl('demo'));
   assert.deepEqual(signalActionFromOsc('/signal/eat', [1]), {
@@ -152,6 +169,42 @@ test('relays OSC input and stage signals through the shared WebSocket server', a
     socket.send(JSON.stringify(stageSignal));
     const [stageData] = await stageIncoming;
     assert.deepEqual(JSON.parse(stageData.toString()), stageSignal);
+
+    const station = new WebSocket(`ws://127.0.0.1:${wsPort}`);
+    const initialStatus = nextMessage(station, (message) => message.type === 'stationStatus');
+    await once(station, 'open');
+    assert.deepEqual((await initialStatus).stations, {
+      DVC: false, ESS: false, FDA: false, MMPA: false, MSA: false,
+    });
+    const connected = nextMessage(socket, (message) => message.type === 'stationStatus' && message.stations.DVC);
+    const stationSignal = nextMessage(socket, (message) => message.type === 'station' && message.station === 'DVC');
+    station.send(JSON.stringify({ type: 'station', station: 'DVC' }));
+    await connected;
+    assert.deepEqual(await stationSignal, { type: 'station', station: 'DVC', connected: true });
+
+    const secondStation = new WebSocket(`ws://127.0.0.1:${wsPort}`);
+    const lateStatus = nextMessage(secondStation, (message) => message.type === 'stationStatus');
+    await once(secondStation, 'open');
+    assert.equal((await lateStatus).stations.DVC, true);
+    const duplicateConnected = nextMessage(socket, (message) => message.type === 'stationStatus' && message.stations.DVC);
+    secondStation.send(JSON.stringify({ type: 'station', station: 'DVC' }));
+    await duplicateConnected;
+
+    const firstClosed = nextMessage(socket, (message) => message.type === 'stationStatus');
+    station.close();
+    assert.equal((await firstClosed).stations.DVC, true);
+    const lastClosed = nextMessage(socket, (message) => message.type === 'stationStatus');
+    const disconnectedSignal = nextMessage(socket, (message) => message.type === 'station' && message.station === 'DVC' && !message.connected);
+    secondStation.close();
+    assert.equal((await lastClosed).stations.DVC, false);
+    assert.deepEqual(await disconnectedSignal, { type: 'station', station: 'DVC', connected: false });
+
+    const invalid = new WebSocket(`ws://127.0.0.1:${wsPort}`);
+    await once(invalid, 'open');
+    const invalidReply = nextMessage(invalid, (message) => message.type === 'error');
+    invalid.send(JSON.stringify({ type: 'station', station: 'unknown' }));
+    assert.equal((await invalidReply).message, 'Invalid station registration');
+    invalid.close();
     socket.close();
   } finally {
     if (child.exitCode === null) child.kill();

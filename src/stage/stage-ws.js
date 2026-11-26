@@ -27,7 +27,7 @@ export function createSignalId(cryptoApi = globalThis.crypto) {
 
 /**
  * @typedef {{
- *   type: 'catEat' | 'catSweep' | 'restartAll' | 'admit' | 'scratch' | 'prop' | 'uniform' | 'spriteScale' | 'camera' | 'hud' | 'fps' | 'backgroundEffects',
+ *   type: 'catEat' | 'catSweep' | 'restartAll' | 'admit' | 'scratch' | 'prop' | 'station' | 'uniform' | 'spriteScale' | 'camera' | 'hud' | 'fps' | 'backgroundEffects',
  *   id?: string,
  *   raw?: string,
  *   kind?: string,
@@ -40,6 +40,10 @@ export function createSignalId(cryptoApi = globalThis.crypto) {
 
 export function isStageSignal(message) {
   if (!message || typeof message.type !== 'string') return false;
+  if (message.type === 'station') {
+    return ['DVC', 'ESS', 'FDA', 'MMPA', 'MSA'].includes(message.station)
+      && (message.connected === undefined || typeof message.connected === 'boolean');
+  }
   if (message.type === 'catEat' || message.type === 'catSweep' || message.type === 'restartAll') return true;
   if (message.type === 'admit' || message.type === 'scratch' || message.type === 'uniform' || message.type === 'hud'
     || message.type === 'fps' || message.type === 'backgroundEffects') return true;
@@ -51,12 +55,14 @@ export function isStageSignal(message) {
 
 /**
  * @param {(msg: StageWsMessage) => void} onMessage
- * @param {{ url?: string, onStatus?: (text: string) => void }} [options]
+ * @param {{ url?: string, onStatus?: (text: string) => void, onStationStatus?: (stations: object | null) => void }} [options]
  */
 export function connectStageWebSocket(onMessage, options = {}) {
   const url = options.url ?? resolveStageWsUrl();
   let socket = null;
   let closed = false;
+  let reconnectTimer = null;
+  let retry = 1000;
   const pending = [];
   const recentSignals = new Set();
   let channel = null;
@@ -78,6 +84,10 @@ export function connectStageWebSocket(onMessage, options = {}) {
       return;
     }
     if (msg?.type === 'hello') return;
+    if (msg?.type === 'stationStatus') {
+      options.onStationStatus?.(msg.stations);
+      return;
+    }
     if (!isStageSignal(msg)) {
       options.onStatus?.(`Unknown message type: ${msg?.type ?? '?'}`);
       return;
@@ -101,13 +111,19 @@ export function connectStageWebSocket(onMessage, options = {}) {
       return;
     }
     socket.addEventListener('open', () => {
+      retry = 1000;
       options.onStatus?.(`WebSocket connected (${url})`);
       while (pending.length && socket?.readyState === WebSocket.OPEN) socket.send(pending.shift());
     });
     socket.addEventListener('message', (event) => dispatch(event.data));
     socket.addEventListener('close', () => {
       options.onStatus?.('WebSocket closed — same-browser stage tabs still receive signals');
+      options.onStationStatus?.(null);
       socket = null;
+      if (!closed) {
+        reconnectTimer = setTimeout(connect, retry);
+        retry = Math.min(retry * 2, 8000);
+      }
     });
     socket.addEventListener('error', () => {
       options.onStatus?.('WebSocket error — same-browser stage tabs still receive signals');
@@ -140,6 +156,7 @@ export function connectStageWebSocket(onMessage, options = {}) {
     send,
     close() {
       closed = true;
+      clearTimeout(reconnectTimer);
       window.removeEventListener('message', onWindowMessage);
       channel?.close();
       socket?.close();

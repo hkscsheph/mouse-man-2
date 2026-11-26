@@ -5,6 +5,7 @@ export const SCALE_STEP = 0.1;
 // PC-中央Server already uses UDP 9000 (Central) and UDP 9001 (OscForward).
 export const SIGNAL_OSC_UDP_PORT = 9020;
 export const SIGNAL_OSC_WS_PORT = 9021;
+export const STATION_NAMES = ['DVC', 'ESS', 'FDA', 'MMPA', 'MSA'];
 
 const PROP_LABELS = {
   figure: 'Figure',

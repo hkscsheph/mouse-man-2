@@ -117,6 +117,8 @@ The stage requests a high-performance WebGL device when available. Hardware acce
 
 The stage keeps its keyboard controls and also follows `?mode=signal`. That page scans QR codes and sends every show event. Same-browser stage tabs hear the signal even when the WebSocket server is down. A running `npm run stage:osc` relays stage messages and OSC-triggered actions to connected clients through the shared WebSocket. Received signals and stage key presses are logged in the stage console.
 
+The signal page shows red/green connection dots for DVC, ESS, FDA, MMPA, and MSA. Each station connects to the same stage WebSocket and registers once with `{"type":"station","station":"DVC"}`, substituting its own uppercase name. The relay broadcasts `{"type":"station","station":"DVC","connected":true}` on registration and the same message with `connected:false` when its last socket closes. The signal page updates that station's dot on each message. A station stays connected while at least one registered socket is open. Status is unknown when the signal page cannot reach the relay; it reconnects automatically.
+
 | Signal | Action |
 | --- | --- |
 | Scanned QR or pasted id | Admit that participant |

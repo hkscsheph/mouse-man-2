@@ -1,5 +1,5 @@
 import { createFallbackQrScanner, qrFrameReady } from './stage/stage-qr-scanner.js';
-import { resolveSignalOscUrl, SIGNAL_OSC_ROUTES, SIGNAL_OSC_UDP_PORT, signalActionFromOsc, signalControl } from './signal/signal-osc.js';
+import { resolveSignalOscUrl, SIGNAL_OSC_ROUTES, SIGNAL_OSC_UDP_PORT, STATION_NAMES, signalActionFromOsc, signalControl } from './signal/signal-osc.js';
 import { connectStageSignals } from './stage/stage-ws.js';
 
 document.title = 'Stage Signals';
@@ -19,6 +19,12 @@ root.innerHTML = `
   <h1>Stage signals</h1>
   <p id="signal-status" role="status" aria-live="polite">Starting camera…</p>
   <p id="signal-ws" role="status">Connecting to the stage…</p>
+  <section aria-labelledby="signal-stations-heading">
+    <h2 id="signal-stations-heading">Stations</h2>
+    <ul id="signal-stations" aria-live="polite">
+      ${STATION_NAMES.map((name) => `<li data-station="${name}" data-state="unknown" aria-label="${name}: Unknown">${name}</li>`).join('')}
+    </ul>
+  </section>
   <p id="signal-keys">Keys match the stage: <kbd>A</kbd> focuses the id field, <kbd>D</kbd> demo guest, <kbd>E</kbd> eat, <kbd>Q</kbd> scratch, <kbd>1</kbd>–<kbd>5</kbd> props, <kbd>U</kbd> uniforms, <kbd>+</kbd>/<kbd>-</kbd> size, arrows move the camera, <kbd>F</kbd> toggles background effects, <kbd>H</kbd> cycles FPS (30/45/60), <kbd>T</kbd> toggles the stage HUD.</p>
   <details id="signal-osc-panel">
     <summary>OSC</summary>
@@ -95,6 +101,14 @@ const admitInput = root.querySelector('#signal-id');
 const SOURCE_KEY = 'signal-camera-source';
 const URL_KEY = 'signal-camera-url';
 
+function updateStation(name, connected) {
+  if (!STATION_NAMES.includes(name)) return;
+  const item = root.querySelector(`[data-station="${name}"]`);
+  const state = connected === true ? 'connected' : connected === false ? 'disconnected' : 'unknown';
+  item.dataset.state = state;
+  item.setAttribute('aria-label', `${name}: ${state}`);
+}
+
 function setStatus(text) {
   statusEl.textContent = text;
 }
@@ -105,8 +119,16 @@ function scanStamp(date = new Date()) {
 }
 
 const signals = connectStageSignals({
+  onMessage(message) {
+    if (message.type === 'station') updateStation(message.station, message.connected);
+  },
   onStatus(text) {
     if (wsEl) wsEl.textContent = text;
+  },
+  onStationStatus(stations) {
+    for (const name of STATION_NAMES) {
+      updateStation(name, stations?.[name]);
+    }
   },
 });
 

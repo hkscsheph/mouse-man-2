@@ -259,6 +259,39 @@ body.signal-mode #share {
   margin: 0 0 8px;
 }
 
+#signal-stations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+#signal-stations li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+}
+
+#signal-stations li::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #999;
+  content: "";
+}
+
+#signal-stations li[data-state="connected"]::before {
+  background: #20c45a;
+}
+
+#signal-stations li[data-state="disconnected"]::before {
+  background: #e33b32;
+}
+
 #signal-keys {
   margin: 0 0 12px;
 }
