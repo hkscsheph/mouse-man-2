@@ -351,11 +351,24 @@ export function createRegistrationPhoto(canvas, { onChange } = {}) {
   window.addEventListener('resize', draw);
 
   return {
-    addPortrait(portrait) {
+    addPortrait(portrait, id = null) {
       if (participants.length >= FACE_SLOTS.length || !loadedAssets.has(backgrounds[background].template)) return false;
-      participants.push({ tuned: tunePortrait(portrait) });
+      participants.push({ id, tuned: tunePortrait(portrait) });
       draw();
       return true;
+    },
+    removePortrait(id) {
+      const index = participants.findIndex((participant) => participant.id === id);
+      if (index < 0) return false;
+      participants.splice(index, 1);
+      draw();
+      onChange?.();
+      return true;
+    },
+    clearPortraits() {
+      participants.length = 0;
+      draw();
+      onChange?.();
     },
     fillAllPortraits(portrait) {
       if (!loadedAssets.has(backgrounds[background].template)) return false;

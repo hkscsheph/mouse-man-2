@@ -24,6 +24,8 @@
 
 報到使用男生班剪影，不依臉判斷性別。剪影來自 `polygons_boy.json`。`P` 開關印表機模式。開啟時，每次報到成功會印一張：第一行是「竄 」加上本機時間 `yyyymmdd hhMM` 再加上「 🐈」，第二行是全寬 QR，第三行是 🐭🐁🪤🐀🐹🧀。印表機要能從 `npm run dev` 連到 `192.168.0.191:9100`。老鼠 json 與學生卡 png 都放在同一個資料夾 `.dev-data/transfer/`（可用 `TRANSFER_DIR` 改位置）。印出的 QR 由訊號頁的鏡頭或 IP 攝影機掃到後，主舞台用該資料夾裡的 json 還原那隻老鼠。
 
+在 `?mode=reg` 按 `Ctrl+Z` 可刪除最近一次報到的老鼠；按 `Ctrl+C` 並確認後可清除 `.dev-data` 裡的老鼠資料檔，不會刪除其他檔案。
+
 | 按鍵 | 動作 |
 | --- | --- |
 | `Q` | 擷取這一位並建立 QR |
@@ -90,6 +92,8 @@ Uniform mode uses textured, short-sleeved shirts with the school badge on the le
 When using registration on a remote device over HTTP, Chrome may block webcam access. On that device, open `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, add the site's origin (for example, `http://192.168.1.20:5173`, without a path) under **Insecure origins treated as secure**, set it to **Enabled**, and relaunch Chrome. This weakens security; use HTTPS for regular or production use.
 
 Registration starts with the black-cat teacher alone in the class scene. Each capture adds one student from the boys' class-photo template and replaces the student's face with the captured portrait. Face appearance is not used to infer gender. Student silhouettes are clipped to the manual polygon annotations in `polygons_boy.json`. Press **Q** to capture, **A** to place the current webcam face into all 30 silhouette slots (visual demo; no per-slot QR), and **T** to toggle the registration panel and webcam thumbnail. Press **P** to toggle printer mode. While it is on, each successful registration prints a slip on the LAN printer (`192.168.0.191:9100`, override with `PRINTER_HOST`): line 1 is `竄 ` plus the local time as `yyyymmdd hhMM` plus ` 🐈`, line 2 is a full-width QR code, and line 3 is 🐭🐁🪤🐀🐹🧀. The dev server must be running so the page can reach that port. The existing mouse-saving and printable QR-card flow is preserved. Each successful capture writes `<id>.json` (portrait plus mouse traits, face patches, and tuning) and `<id>.png` (the front-facing student card) into one folder, `.dev-data/transfer/` (override with `TRANSFER_DIR`, including a network share). The printed QR is scanned by `?mode=signal` with the webcam or an IP camera. `?mode=stage` then admits that mouse from the JSON in that folder. Point `?mode=trans` at the same dev server, or at a server using that same folder, to show those mice.
+
+In registration mode, **Ctrl+Z** removes the most recently captured participant and its saved files. **Ctrl+C** asks for confirmation, then removes all mouse JSON/PNG files from the local transfer and legacy mouse folders while preserving unrelated files.
 
 ## Transfer display (`?mode=trans`)
 

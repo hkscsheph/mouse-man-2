@@ -227,6 +227,13 @@ export function createCrowd(scene, { uniformMode = false } = {}) {
     getLive() {
       return live;
     },
+    removeById(id) {
+      const actor = actors.find((item) => item.mesh.userData.mouseId === id);
+      if (!actor) return false;
+      removeActor(actor);
+      notifyFront();
+      return true;
+    },
     spawnLive(canvases, options = {}) {
       if (live?.locked && !options.replaceLocked) {
         return live;

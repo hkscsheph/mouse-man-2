@@ -58,6 +58,19 @@ export async function publishTransferRecord(record) {
   }
 }
 
+export async function deleteTransferRecord(id) {
+  const response = await fetch(transferApiUrl(`id=${encodeURIComponent(id)}`), {
+    method: 'DELETE',
+  });
+  if (!response.ok) throw new Error(`transfer delete ${response.status}`);
+}
+
+export async function clearTransferRecords() {
+  const response = await fetch(transferApiUrl(), { method: 'DELETE' });
+  if (!response.ok) throw new Error(`transfer clear ${response.status}`);
+  return response.json();
+}
+
 export async function listTransferRecords() {
   const response = await fetch(transferApiUrl());
   if (!response.ok) throw new Error(`transfer list ${response.status}`);

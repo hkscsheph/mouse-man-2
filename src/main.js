@@ -22,7 +22,12 @@ import {
 import { printRegistrationSlip, printerStatusText } from './registration-print.js';
 import { renderShareQr } from './qr.js';
 import { createRegistrationPhoto } from './registration.js';
-import { publishTransferPhoto, publishTransferRecord } from './transfer-folder.js';
+import {
+  clearTransferRecords,
+  deleteTransferRecord,
+  publishTransferPhoto,
+  publishTransferRecord,
+} from './transfer-folder.js';
 import { renderStudentCard } from './student-card.js';
 import { stageUniformColor } from './stage/stage-photo.js';
 import { createScene } from './scene.js';
@@ -91,6 +96,7 @@ let dragDistance = 0;
 let latestFace = null;
 let registrationBusy = false;
 let registrationMessage = '';
+const registeredMouseIds = [];
 let registrationHudVisible = true;
 let printerMode = false;
 let printerReachable = null;
@@ -366,6 +372,7 @@ async function registerParticipant() {
     const qrUrl = shareUrlForId(id, colorToHex(actor.mesh.userData.traits.fur));
     const card = document.createElement('article');
     card.className = 'registration-card';
+    card.dataset.mouseId = id;
     const label = document.createElement('p');
     label.textContent = `Participant ${registrationPhoto.count + 1}`;
     const qrCanvas = document.createElement('canvas');
@@ -379,10 +386,11 @@ async function registerParticipant() {
       registrationMessage = 'Participant saved, but QR generation failed.';
       return;
     }
-    if (!registrationPhoto.addPortrait(portrait)) {
+    if (!registrationPhoto.addPortrait(portrait, id)) {
       registrationMessage = 'The class photo is full.';
       return;
     }
+    registeredMouseIds.push(id);
     registrationCards.prepend(card);
     registrationCount.textContent = `${registrationPhoto.count} participant${registrationPhoto.count === 1 ? '' : 's'} registered`;
     const snapshot = actor.transferSnapshot;
@@ -431,6 +439,83 @@ async function registerParticipant() {
   } catch (error) {
     console.error(error);
     registrationMessage = 'Could not register this participant. Please try again.';
+  } finally {
+    registrationBusy = false;
+    updateRegistrationControls(latestFace);
+  }
+}
+
+async function undoLastRegistration() {
+  if (!registrationMode) return;
+  if (registrationBusy || saving) {
+    registrationMessage = 'Wait for the current save to finish before undoing.';
+    updateRegistrationControls(latestFace);
+    return;
+  }
+  const id = registeredMouseIds[registeredMouseIds.length - 1];
+  if (!id) {
+    registrationMessage = 'There is no registered mouse to undo.';
+    updateRegistrationControls(latestFace);
+    return;
+  }
+
+  registrationBusy = true;
+  registrationMessage = 'Removing the last participant…';
+  updateRegistrationControls(latestFace);
+  try {
+    await deleteTransferRecord(id);
+    registeredMouseIds.pop();
+    const live = crowd.getLive();
+    const removedLiveMouse = live?.mesh.userData.mouseId === id;
+    crowd.removeById(id);
+    registrationPhoto.removePortrait(id);
+    const card = [...registrationCards.children].find((item) => item.dataset.mouseId === id);
+    card?.remove();
+    registrationCount.textContent = `${registrationPhoto.count} participant${registrationPhoto.count === 1 ? '' : 's'} registered`;
+    if (removedLiveMouse) {
+      setIdle();
+      resetFaceTracking();
+      latestFace = null;
+    }
+    registrationMessage = 'Undid the last participant.';
+    await showShareForActor(crowd.getLive());
+  } catch (error) {
+    console.error(error);
+    registrationMessage = 'Could not undo the last participant.';
+  } finally {
+    registrationBusy = false;
+    updateRegistrationControls(latestFace);
+  }
+}
+
+async function clearAllRegisteredMice() {
+  if (!registrationMode) return;
+  if (registrationBusy || saving) {
+    registrationMessage = 'Wait for the current save to finish before clearing mice.';
+    updateRegistrationControls(latestFace);
+    return;
+  }
+  if (!window.confirm('Delete all saved mice from the local data folder? This cannot be undone.')) return;
+
+  registrationBusy = true;
+  registrationMessage = 'Clearing saved mice…';
+  updateRegistrationControls(latestFace);
+  try {
+    await clearTransferRecords();
+    registeredMouseIds.length = 0;
+    registrationPhoto.clearPortraits();
+    registrationCards.replaceChildren();
+    registrationCount.textContent = '0 participants registered';
+    crowd.clear();
+    setIdle();
+    resetFaceTracking();
+    latestFace = null;
+    clearShareQuery();
+    await showShareForActor(null);
+    registrationMessage = 'Cleared all saved mice from the local data folder.';
+  } catch (error) {
+    console.error(error);
+    registrationMessage = 'Could not clear the saved mice.';
   } finally {
     registrationBusy = false;
     updateRegistrationControls(latestFace);
@@ -821,11 +906,26 @@ view.addEventListener('click', (event) => {
 window.addEventListener('keydown', (event) => {
   if (event.repeat) return;
   const target = event.target;
+  const editing = target instanceof HTMLElement
+    && (target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName));
+  if (registrationMode && event.ctrlKey && !event.altKey && !event.metaKey && !editing) {
+    const key = event.key.toLowerCase();
+    if (key === 'z') {
+      event.preventDefault();
+      void undoLastRegistration();
+      return;
+    }
+    if (key === 'c') {
+      event.preventDefault();
+      void clearAllRegisteredMice();
+      return;
+    }
+  }
   if (
     event.altKey ||
     event.ctrlKey ||
     event.metaKey ||
-    (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)))
+    editing
   ) return;
   if (registrationMode && event.key.toLowerCase() === 'q') {
     event.preventDefault();

@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import net from 'node:net';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { removeStoredMice } from './src/local-transfer-store.js';
 
 const ffmpegPath = createRequire(import.meta.url)('ffmpeg-static');
 const legacyMouseStore = resolve(fileURLToPath(new URL('.', import.meta.url)), '.dev-data', 'mice');
@@ -91,7 +92,7 @@ function sendJson(res, status, body) {
   res.setHeader('content-type', 'application/json; charset=utf-8');
   res.setHeader('cache-control', 'no-store');
   res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
+  res.setHeader('access-control-allow-methods', 'GET,POST,DELETE,OPTIONS');
   res.setHeader('access-control-allow-headers', 'content-type');
   if (status === 204) {
     res.end();
@@ -299,6 +300,32 @@ async function localTransferPhotoApi(req, res) {
 async function localTransferApi(req, res) {
   if (req.method === 'OPTIONS') {
     sendJson(res, 204, {});
+    return;
+  }
+
+  if (req.method === 'DELETE') {
+    const origin = req.headers.origin;
+    if (origin && new URL(origin).host !== req.headers.host) {
+      sendJson(res, 403, { error: 'cross-origin delete is not allowed' });
+      return;
+    }
+    const id = new URL(req.url, 'http://localhost').searchParams.get('id');
+    const stores = [localTransferStore, legacyMouseStore];
+    if (id && !validMouseId.test(id)) {
+      sendJson(res, 400, { error: 'invalid id' });
+      return;
+    }
+    try {
+      const removed = await removeStoredMice(stores, id);
+      if (id && !removed.has(id.toLowerCase())) {
+        sendJson(res, 404, { error: 'not found' });
+        return;
+      }
+      sendJson(res, 200, id ? { id } : { deleted: removed.size });
+    } catch (error) {
+      console.error('local transfer delete failed', error);
+      sendJson(res, 500, { error: 'storage delete failed' });
+    }
     return;
   }
 
