@@ -8,11 +8,11 @@ export const SIGNAL_OSC_WS_PORT = 9021;
 export const STATION_NAMES = ['DVC', 'ESS', 'FDA', 'MMPA', 'MSA'];
 
 const PROP_LABELS = {
-  figure: 'Figure',
-  drawing: 'Drawing',
-  box: 'Gift',
-  poster: 'Poster',
-  note: 'Note',
+  figure: 'Pose',
+  drawing: 'Draw',
+  box: 'Build',
+  poster: 'Film',
+  note: 'Song',
 };
 
 const PROP_ALIASES = {
@@ -44,11 +44,11 @@ export const SIGNAL_OSC_ROUTES = [
   ['/signal/sweep', 'Clear the stage'],
   ['/signal/scratch', 'Scratch zoom'],
   ['/signal/restart', 'Restart'],
-  ['/signal/prop/figure', 'Figure'],
-  ['/signal/prop/drawing', 'Drawing'],
-  ['/signal/prop/box', 'Gift'],
-  ['/signal/prop/poster', 'Poster'],
-  ['/signal/prop/note', 'Note'],
+  ['/signal/prop/figure', 'Pose'],
+  ['/signal/prop/drawing', 'Draw'],
+  ['/signal/prop/box', 'Build'],
+  ['/signal/prop/poster', 'Film'],
+  ['/signal/prop/note', 'Song'],
   ['/signal/uniform', 'Uniforms'],
   ['/signal/larger', 'Larger cat'],
   ['/signal/smaller', 'Smaller cat'],

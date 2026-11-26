@@ -64,11 +64,11 @@ root.innerHTML = `
   <section>
     <h2>Bring on</h2>
     <div class="signal-actions">
-      <button type="button" data-prop="figure">Figure [1]</button>
-      <button type="button" data-prop="drawing">Drawing [2]</button>
-      <button type="button" data-prop="box">Gift [3]</button>
-      <button type="button" data-prop="poster">Poster [4]</button>
-      <button type="button" data-prop="note">Note [5]</button>
+      <button type="button" data-prop="figure">Pose [1]</button>
+      <button type="button" data-prop="drawing">Draw [2]</button>
+      <button type="button" data-prop="box">Build [3]</button>
+      <button type="button" data-prop="poster">Film [4]</button>
+      <button type="button" data-prop="note">Song [5]</button>
     </div>
   </section>
   <section>

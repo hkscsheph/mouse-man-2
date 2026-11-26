@@ -79,7 +79,11 @@ test('maps each signal option onto the same stage message as its button', () => 
 test('button vectors keep the on-screen camera step', () => {
   assert.deepEqual(signalControl('camera', '0,0,1').payload.move, [0, 0, CAMERA_NUDGE]);
   assert.equal(signalControl('camera', '0,0,1').label, 'Camera up');
-  assert.equal(signalControl('prop', 'poster').label, 'Poster');
+  assert.equal(signalControl('prop', 'figure').label, 'Pose');
+  assert.equal(signalControl('prop', 'drawing').label, 'Draw');
+  assert.equal(signalControl('prop', 'box').label, 'Build');
+  assert.equal(signalControl('prop', 'poster').label, 'Film');
+  assert.equal(signalControl('prop', 'note').label, 'Song');
   assert.equal(signalControl('admit', '  '), null);
   assert.deepEqual(signalControl('fps'), {
     op: 'send',
