@@ -66,6 +66,43 @@ export const SIGNAL_OSC_ROUTES = [
   ['/signal/hud', 'Stage HUD'],
 ];
 
+export function stageSignalToOsc(message) {
+  if (!message || typeof message.type !== 'string') return null;
+  switch (message.type) {
+    case 'admit':
+      return typeof message.raw === 'string' && message.raw.trim()
+        ? { address: '/signal/admit', args: [message.raw] }
+        : { address: '/signal/demo', args: [1] };
+    case 'catEat':
+      return { address: '/signal/eat', args: [typeof message.id === 'string' ? message.id : 1] };
+    case 'catSweep':
+      return { address: '/signal/sweep', args: [1] };
+    case 'scratch':
+      return { address: '/signal/scratch', args: [1] };
+    case 'restartAll':
+      return { address: '/signal/restart', args: [1] };
+    case 'prop':
+      return PROP_LABELS[message.kind]
+        ? { address: `/signal/prop/${message.kind}`, args: [1] }
+        : null;
+    case 'uniform':
+      return { address: '/signal/uniform', args: [1] };
+    case 'spriteScale':
+      return Number.isFinite(message.delta) && message.delta !== 0
+        ? { address: '/signal/scale', args: [message.delta] }
+        : null;
+    case 'camera':
+      return Array.isArray(message.move) && message.move.length >= 3
+        && message.move.slice(0, 3).every(Number.isFinite)
+        ? { address: '/signal/camera/move', args: message.move.slice(0, 3) }
+        : null;
+    case 'hud':
+      return { address: '/signal/hud', args: [1] };
+    default:
+      return null;
+  }
+}
+
 function sendAction(payload, label) {
   return { op: 'send', payload, label };
 }

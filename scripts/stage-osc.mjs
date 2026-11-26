@@ -9,13 +9,17 @@ import dgram from 'node:dgram';
 import { networkInterfaces } from 'node:os';
 import { WebSocketServer, WebSocket } from 'ws';
 import { decodeOscPacket } from '../src/signal/osc-decode.js';
-import { SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT, STATION_NAMES } from '../src/signal/signal-osc.js';
+import { encodeOscMessage } from '../src/signal/osc-encode.js';
+import { SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT, STATION_NAMES, stageSignalToOsc } from '../src/signal/signal-osc.js';
 
 const OSC_PORT = Number(process.env.STAGE_OSC_PORT || SIGNAL_OSC_UDP_PORT);
 const WS_PORT = Number(process.env.STAGE_OSC_WS_PORT || SIGNAL_OSC_WS_PORT);
+const OSC_OUT_HOST = process.env.STAGE_OSC_OUT_HOST || '127.0.0.1';
+const OSC_OUT_PORT = Number(process.env.STAGE_OSC_OUT_PORT || 9022);
 
-if (!Number.isInteger(OSC_PORT) || !Number.isInteger(WS_PORT) || OSC_PORT < 1 || WS_PORT < 1) {
-  console.error('STAGE_OSC_PORT and STAGE_OSC_WS_PORT must be port numbers');
+if (![OSC_PORT, WS_PORT, OSC_OUT_PORT].every((port) => Number.isInteger(port) && port > 0 && port <= 65535)
+  || !OSC_OUT_HOST.trim()) {
+  console.error('STAGE_OSC_PORT, STAGE_OSC_WS_PORT, and STAGE_OSC_OUT_PORT must be valid ports; STAGE_OSC_OUT_HOST must not be empty');
   process.exit(1);
 }
 
@@ -75,6 +79,12 @@ wss.on('connection', (socket) => {
       return;
     }
     if (message.type === 'stationStatus') return;
+    const oscMessage = stageSignalToOsc(message);
+    if (oscMessage) {
+      udp.send(encodeOscMessage(oscMessage.address, oscMessage.args), OSC_OUT_PORT, OSC_OUT_HOST, (error) => {
+        if (error) console.error(`OSC output failed (${OSC_OUT_HOST}:${OSC_OUT_PORT}):`, error);
+      });
+    }
     broadcast(message);
     console.log('Stage signal', message);
   });
@@ -98,6 +108,7 @@ function startUdp() {
   udp.bind(OSC_PORT, '0.0.0.0', () => {
     const lans = lanAddresses();
     console.log(`OSC listening on udp://0.0.0.0:${OSC_PORT}`);
+    console.log(`WebSocket signals are sent as OSC to udp://${OSC_OUT_HOST}:${OSC_OUT_PORT}`);
     console.log(`Stage/signal pages connect to ws://localhost:${WS_PORT}`);
     if (lans.length) console.log(`Other devices can send OSC to ${lans.join(', ')} port ${OSC_PORT}`);
     if (lans.length) console.log(`Other devices can connect to ws://${lans.join(`:${WS_PORT}, ws://`)}:${WS_PORT}`);

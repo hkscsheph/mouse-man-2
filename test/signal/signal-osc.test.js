@@ -6,7 +6,9 @@ import test from 'node:test';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
-import { CAMERA_NUDGE, resolveSignalOscUrl, SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT, signalActionFromOsc, signalControl } from '../../src/signal/signal-osc.js';
+import { CAMERA_NUDGE, resolveSignalOscUrl, SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT, signalActionFromOsc, signalControl, stageSignalToOsc } from '../../src/signal/signal-osc.js';
+import { decodeOscPacket } from '../../src/signal/osc-decode.js';
+import { encodeOscMessage } from '../../src/signal/osc-encode.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -97,6 +99,31 @@ test('button vectors keep the on-screen camera step', () => {
   });
 });
 
+test('maps stage WebSocket signals to the documented OSC routes', () => {
+  const cases = [
+    [{ type: 'admit', raw: 'mouse-42' }, { address: '/signal/admit', args: ['mouse-42'] }],
+    [{ type: 'admit' }, { address: '/signal/demo', args: [1] }],
+    [{ type: 'catEat', id: 'mouse-42' }, { address: '/signal/eat', args: ['mouse-42'] }],
+    [{ type: 'catSweep' }, { address: '/signal/sweep', args: [1] }],
+    [{ type: 'scratch' }, { address: '/signal/scratch', args: [1] }],
+    [{ type: 'restartAll' }, { address: '/signal/restart', args: [1] }],
+    [{ type: 'prop', kind: 'drawing' }, { address: '/signal/prop/drawing', args: [1] }],
+    [{ type: 'uniform' }, { address: '/signal/uniform', args: [1] }],
+    [{ type: 'spriteScale', delta: 0.1 }, { address: '/signal/scale', args: [0.1] }],
+    [{ type: 'camera', move: [0.125, -0.125, 0] }, { address: '/signal/camera/move', args: [0.125, -0.125, 0] }],
+    [{ type: 'hud' }, { address: '/signal/hud', args: [1] }],
+  ];
+  for (const [stageMessage, expected] of cases) assert.deepEqual(stageSignalToOsc(stageMessage), expected);
+  assert.equal(stageSignalToOsc({ type: 'fps' }), null);
+  assert.equal(stageSignalToOsc({ type: 'station', station: 'DVC' }), null);
+  assert.deepEqual(decodeOscPacket(encodeOscMessage('/signal/prop/drawing', [1])), [
+    { address: '/signal/prop/drawing', args: [1] },
+  ]);
+  assert.deepEqual(decodeOscPacket(encodeOscMessage('/signal/admit', ['mouse-42'])), [
+    { address: '/signal/admit', args: ['mouse-42'] },
+  ]);
+});
+
 test('resolves the signal page OSC socket', () => {
   assert.equal(SIGNAL_OSC_UDP_PORT, 9020);
   assert.equal(SIGNAL_OSC_WS_PORT, 9021);
@@ -110,12 +137,20 @@ test('resolves the signal page OSC socket', () => {
 test('relays OSC input and stage signals through the shared WebSocket server', async () => {
   const oscPort = 20000 + Math.floor(Math.random() * 10000);
   const wsPort = oscPort + 10000;
+  const oscOutPort = oscPort + 30000;
+  const outputReceiver = dgram.createSocket('udp4');
+  await new Promise((resolvePromise, reject) => {
+    outputReceiver.once('error', reject);
+    outputReceiver.bind(oscOutPort, '127.0.0.1', resolvePromise);
+  });
   const child = spawn(process.execPath, ['scripts/stage-osc.mjs'], {
     cwd: root,
     env: {
       ...process.env,
       STAGE_OSC_PORT: String(oscPort),
       STAGE_OSC_WS_PORT: String(wsPort),
+      STAGE_OSC_OUT_HOST: '127.0.0.1',
+      STAGE_OSC_OUT_PORT: String(oscOutPort),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -170,9 +205,17 @@ test('relays OSC input and stage signals through the shared WebSocket server', a
     assert.equal(oscMessage.address, '/signal/scratch');
     const stageSignal = { type: 'catEat', signalId: 'test-signal' };
     const stageIncoming = once(socket, 'message');
+    const oscOutput = new Promise((resolvePromise, reject) => {
+      const timer = setTimeout(() => reject(new Error('Timed out waiting for outbound OSC')), 5000);
+      outputReceiver.once('message', (packet) => {
+        clearTimeout(timer);
+        resolvePromise(decodeOscPacket(packet));
+      });
+    });
     socket.send(JSON.stringify(stageSignal));
     const [stageData] = await stageIncoming;
     assert.deepEqual(JSON.parse(stageData.toString()), stageSignal);
+    assert.deepEqual(await oscOutput, [{ address: '/signal/eat', args: [1] }]);
 
     const station = new WebSocket(`ws://127.0.0.1:${wsPort}`);
     const initialStatus = nextMessage(station, (message) => message.type === 'stationStatus');
@@ -212,5 +255,6 @@ test('relays OSC input and stage signals through the shared WebSocket server', a
     socket.close();
   } finally {
     if (child.exitCode === null) child.kill();
+    outputReceiver.close();
   }
 });
