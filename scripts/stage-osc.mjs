@@ -10,12 +10,12 @@ import { networkInterfaces } from 'node:os';
 import { WebSocketServer, WebSocket } from 'ws';
 import { decodeOscPacket } from '../src/signal/osc-decode.js';
 import { encodeOscMessage } from '../src/signal/osc-encode.js';
-import { SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT, STATION_NAMES, stageSignalToOsc } from '../src/signal/signal-osc.js';
+import { SIGNAL_OSC_UDP_PORT, SIGNAL_OSC_WS_PORT, STATION_NAMES, stageSignalOscPackets } from '../src/signal/signal-osc.js';
 
 const OSC_PORT = Number(process.env.STAGE_OSC_PORT || SIGNAL_OSC_UDP_PORT);
 const WS_PORT = Number(process.env.STAGE_OSC_WS_PORT || SIGNAL_OSC_WS_PORT);
 const OSC_OUT_HOST = process.env.STAGE_OSC_OUT_HOST || '127.0.0.1';
-const OSC_OUT_PORT = Number(process.env.STAGE_OSC_OUT_PORT || 9022);
+const OSC_OUT_PORT = Number(process.env.STAGE_OSC_OUT_PORT || 9040);
 
 if (![OSC_PORT, WS_PORT, OSC_OUT_PORT].every((port) => Number.isInteger(port) && port > 0 && port <= 65535)
   || !OSC_OUT_HOST.trim()) {
@@ -36,6 +36,20 @@ function lanAddresses() {
 
 const wss = new WebSocketServer({ port: WS_PORT, host: '0.0.0.0' });
 const udp = dgram.createSocket('udp4');
+const oscOut = dgram.createSocket('udp4');
+
+function sendOsc(address, args) {
+  let packet;
+  try {
+    packet = encodeOscMessage(address, args);
+  } catch (error) {
+    console.error(`OSC output failed (${OSC_OUT_HOST}:${OSC_OUT_PORT}):`, error);
+    return;
+  }
+  oscOut.send(packet, OSC_OUT_PORT, OSC_OUT_HOST, (error) => {
+    if (error) console.error(`OSC output failed (${OSC_OUT_HOST}:${OSC_OUT_PORT}):`, error);
+  });
+}
 const stationClients = new Map(STATION_NAMES.map((station) => [station, new Set()]));
 
 function stationStatus() {
@@ -79,11 +93,8 @@ wss.on('connection', (socket) => {
       return;
     }
     if (message.type === 'stationStatus') return;
-    const oscMessage = stageSignalToOsc(message);
-    if (oscMessage) {
-      udp.send(encodeOscMessage(oscMessage.address, oscMessage.args), OSC_OUT_PORT, OSC_OUT_HOST, (error) => {
-        if (error) console.error(`OSC output failed (${OSC_OUT_HOST}:${OSC_OUT_PORT}):`, error);
-      });
+    for (const oscMessage of stageSignalOscPackets(message)) {
+      sendOsc(oscMessage.address, oscMessage.args);
     }
     broadcast(message);
     console.log('Stage signal', message);
@@ -137,10 +148,14 @@ udp.on('message', (packet, remote) => {
   }
 });
 
-udp.on('error', (error) => {
+function onUdpError(error) {
+  if (error?.code === 'ECONNRESET') return;
   console.error(error);
   process.exit(1);
-});
+}
+
+udp.on('error', onUdpError);
+oscOut.on('error', onUdpError);
 
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => {

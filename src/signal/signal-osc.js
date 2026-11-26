@@ -66,6 +66,16 @@ export const SIGNAL_OSC_ROUTES = [
   ['/signal/hud', 'Stage HUD'],
 ];
 
+/** Button presses are followed by 0 so the next press is a new edge. */
+export function stageSignalOscPackets(message) {
+  const oscMessage = stageSignalToOsc(message);
+  if (!oscMessage) return [];
+  if (oscMessage.args.length === 1 && oscMessage.args[0] === 1) {
+    return [oscMessage, { address: oscMessage.address, args: [0] }];
+  }
+  return [oscMessage];
+}
+
 export function stageSignalToOsc(message) {
   if (!message || typeof message.type !== 'string') return null;
   switch (message.type) {
