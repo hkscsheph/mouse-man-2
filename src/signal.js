@@ -121,6 +121,7 @@ function scanStamp(date = new Date()) {
 const signals = connectStageSignals({
   onMessage(message) {
     if (message.type === 'station') updateStation(message.station, message.connected);
+    if (message.type === 'prop' && message.kind === 'box') lightBox();
   },
   onStatus(text) {
     if (wsEl) wsEl.textContent = text;
@@ -473,10 +474,24 @@ if (queryCam || (localStorage.getItem(SOURCE_KEY) === 'ipcam' && ipcamInput.valu
 const oscMap = root.querySelector('#signal-osc-map');
 for (const [address, text] of SIGNAL_OSC_ROUTES) {
   const item = document.createElement('li');
+  item.dataset.address = address;
   const code = document.createElement('code');
   code.textContent = address;
   item.append(code, ` — ${text}`);
   oscMap.append(item);
+}
+
+let boxLitTimer = 0;
+function lightBox() {
+  const nodes = [
+    root.querySelector('[data-prop="box"]'),
+    root.querySelector('[data-address="/signal/prop/box"]'),
+  ];
+  for (const el of nodes) if (el) el.dataset.lit = 'on';
+  window.clearTimeout(boxLitTimer);
+  boxLitTimer = window.setTimeout(() => {
+    for (const el of nodes) if (el) delete el.dataset.lit;
+  }, 900);
 }
 
 function connectSignalOsc() {

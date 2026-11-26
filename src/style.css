@@ -382,6 +382,35 @@ body.signal-mode #share {
   outline: 2px solid #f5e9cd;
 }
 
+#signal-root button[data-prop="box"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#signal-root button[data-prop="box"]::before,
+#signal-osc-map li[data-address="/signal/prop/box"]::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #6d6458;
+  content: "";
+  flex: 0 0 auto;
+}
+
+#signal-osc-map li[data-address="/signal/prop/box"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+}
+
+#signal-root button[data-prop="box"][data-lit="on"]::before,
+#signal-osc-map li[data-address="/signal/prop/box"][data-lit="on"]::before {
+  background: #20c45a;
+  box-shadow: 0 0 8px #20c45a;
+}
+
 body.transfer-mode {
   background: #cbb896;
   overflow: hidden;
