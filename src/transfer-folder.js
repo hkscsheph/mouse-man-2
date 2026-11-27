@@ -83,8 +83,8 @@ export async function fetchTransferRecord(id) {
   const response = await fetch(transferApiUrl(`id=${encodeURIComponent(id)}`));
   if (!response.ok) throw new Error(`transfer read ${response.status}`);
   const record = await response.json();
-  if (!record?.snapshot?.traits || !record.snapshot.patches) {
-    throw new Error('transfer record is missing mouse data');
+  if (!record?.snapshot?.traits || !record.snapshot.patches || !record.portrait) {
+    throw new Error('transfer record is missing mouse appearance data');
   }
   return record;
 }

@@ -25,6 +25,8 @@ import { createRegistrationPhoto } from './registration.js';
 import {
   clearTransferRecords,
   deleteTransferRecord,
+  fetchTransferRecord,
+  listTransferRecords,
   publishTransferPhoto,
   publishTransferRecord,
 } from './transfer-folder.js';
@@ -97,6 +99,10 @@ let latestFace = null;
 let registrationBusy = false;
 let registrationMessage = '';
 const registeredMouseIds = [];
+const sharedRegistrationRecords = new Map();
+const visibleRegistrationIds = [];
+let registrationSyncing = false;
+let registrationSyncFailed = false;
 let registrationHudVisible = true;
 let printerMode = false;
 let printerReachable = null;
@@ -236,6 +242,10 @@ function updateRegistrationControls(face = latestFace) {
     registrationStatus.textContent = registrationMessage;
     return;
   }
+  if (registrationSyncFailed) {
+    registrationStatus.textContent = 'Could not synchronize participants. Check the shared folder connection.';
+    return;
+  }
   if (registrationPhoto.count >= registrationPhoto.capacity) {
     registrationStatus.textContent = 'All class photo places are registered.';
   } else if (faceReady) {
@@ -340,6 +350,98 @@ function fillAllRegistrationSlots() {
   updateRegistrationControls(face);
 }
 
+function loadRegistrationPortrait(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener('load', () => resolve(image), { once: true });
+    image.addEventListener('error', () => reject(new Error('Could not load a shared participant portrait')), { once: true });
+    image.src = dataUrl;
+  });
+}
+
+async function syncRegistrationCards(records) {
+  const existing = new Map(
+    [...registrationCards.children].map((card) => [card.dataset.mouseId, card]),
+  );
+  const orderedCards = [];
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    let card = existing.get(record.id);
+    if (!card) {
+      card = document.createElement('article');
+      card.className = 'registration-card';
+      card.dataset.mouseId = record.id;
+      const qrCanvas = document.createElement('canvas');
+      qrCanvas.width = 132;
+      qrCanvas.height = 132;
+      card.append(document.createElement('p'), qrCanvas);
+      try {
+        await renderShareQr(qrCanvas, shareUrlForId(record.id, record.snapshot.traits.fur));
+      } catch (error) {
+        console.error('shared participant QR generation failed', record.id, error);
+      }
+    }
+    card.querySelector('p').textContent = `Participant ${index + 1}`;
+    orderedCards.push(card);
+  }
+  if (!registrationBusy) registrationCards.replaceChildren(...orderedCards.reverse());
+}
+
+async function syncRegistrationAppearance() {
+  if (
+    !registrationMode ||
+    registrationSyncing ||
+    registrationBusy ||
+    !registrationPhoto.ready
+  ) return;
+  registrationSyncing = true;
+  try {
+    const entries = (await listTransferRecords()).slice(0, registrationPhoto.capacity);
+    const records = [];
+    for (const entry of entries) {
+      let record = sharedRegistrationRecords.get(entry.id);
+      if (!record) {
+        const stored = await fetchTransferRecord(entry.id);
+        record = {
+          ...stored,
+          portraitImage: await loadRegistrationPortrait(stored.portrait),
+        };
+      }
+      records.push(record);
+    }
+    if (registrationBusy) return;
+
+    sharedRegistrationRecords.clear();
+    for (const record of records) sharedRegistrationRecords.set(record.id, record);
+    const ids = records.map((record) => record.id);
+    const rosterChanged = ids.length !== visibleRegistrationIds.length
+      || ids.some((id, index) => id !== visibleRegistrationIds[index]);
+    if (!rosterChanged) {
+      registrationSyncFailed = false;
+      updateRegistrationControls(latestFace);
+      return;
+    }
+    if (!registrationPhoto.syncPortraits(records.map((record) => ({
+      id: record.id,
+      portrait: record.portraitImage,
+    })))) return;
+
+    registeredMouseIds.splice(0, registeredMouseIds.length, ...ids);
+    registrationCount.textContent = `${ids.length} participant${ids.length === 1 ? '' : 's'} registered`;
+    await syncRegistrationCards(records);
+    if (registrationBusy) return;
+    visibleRegistrationIds.splice(0, visibleRegistrationIds.length, ...ids);
+    registrationSyncFailed = false;
+    updateRegistrationControls(latestFace);
+  } catch (error) {
+    if (!registrationSyncFailed) console.error('registration appearance sync failed', error);
+    registrationSyncFailed = true;
+    updateRegistrationControls(latestFace);
+  } finally {
+    registrationSyncing = false;
+  }
+}
+
 async function registerParticipant() {
   if (!registrationMode || registrationBusy) return;
   const actor = crowd.getLive();
@@ -391,6 +493,7 @@ async function registerParticipant() {
       return;
     }
     registeredMouseIds.push(id);
+    sharedRegistrationRecords.delete(id);
     registrationCards.prepend(card);
     registrationCount.textContent = `${registrationPhoto.count} participant${registrationPhoto.count === 1 ? '' : 's'} registered`;
     const snapshot = actor.transferSnapshot;
@@ -442,6 +545,7 @@ async function registerParticipant() {
   } finally {
     registrationBusy = false;
     updateRegistrationControls(latestFace);
+    void syncRegistrationAppearance();
   }
 }
 
@@ -465,6 +569,9 @@ async function undoLastRegistration() {
   try {
     await deleteTransferRecord(id);
     registeredMouseIds.pop();
+    sharedRegistrationRecords.delete(id);
+    const visibleIndex = visibleRegistrationIds.indexOf(id);
+    if (visibleIndex >= 0) visibleRegistrationIds.splice(visibleIndex, 1);
     const live = crowd.getLive();
     const removedLiveMouse = live?.mesh.userData.mouseId === id;
     crowd.removeById(id);
@@ -485,6 +592,7 @@ async function undoLastRegistration() {
   } finally {
     registrationBusy = false;
     updateRegistrationControls(latestFace);
+    void syncRegistrationAppearance();
   }
 }
 
@@ -503,6 +611,8 @@ async function clearAllRegisteredMice() {
   try {
     await clearTransferRecords();
     registeredMouseIds.length = 0;
+    sharedRegistrationRecords.clear();
+    visibleRegistrationIds.length = 0;
     registrationPhoto.clearPortraits();
     registrationCards.replaceChildren();
     registrationCount.textContent = '0 participants registered';
@@ -519,6 +629,7 @@ async function clearAllRegisteredMice() {
   } finally {
     registrationBusy = false;
     updateRegistrationControls(latestFace);
+    void syncRegistrationAppearance();
   }
 }
 
@@ -1056,6 +1167,12 @@ function startRandomMode() {
   crowd.spawnWanderers(stageCanvases(Math.random() * 360, false), 12);
   sharePanel.hidden = true;
   hideGate();
+}
+
+if (registrationMode) {
+  void syncRegistrationAppearance();
+  const registrationSyncTimer = window.setInterval(() => void syncRegistrationAppearance(), 1500);
+  window.addEventListener('pagehide', () => window.clearInterval(registrationSyncTimer), { once: true });
 }
 
 if (new URLSearchParams(location.search).has('stage')) {

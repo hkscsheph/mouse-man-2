@@ -370,6 +370,20 @@ export function createRegistrationPhoto(canvas, { onChange } = {}) {
       draw();
       onChange?.();
     },
+    syncPortraits(items) {
+      if (!loadedAssets.has(backgrounds[background].template)) return false;
+      const current = new Map(
+        participants.filter((participant) => participant.id).map((participant) => [participant.id, participant]),
+      );
+      participants.length = 0;
+      for (const item of items.slice(0, FACE_SLOTS.length)) {
+        const participant = current.get(item.id);
+        participants.push(participant || { id: item.id, tuned: tunePortrait(item.portrait) });
+      }
+      draw();
+      onChange?.();
+      return true;
+    },
     fillAllPortraits(portrait) {
       if (!loadedAssets.has(backgrounds[background].template)) return false;
       const tuned = tunePortrait(portrait);

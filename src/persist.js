@@ -29,10 +29,14 @@ export function newMouseId() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Local time as yymmddHHmmss, used as the registration id and filename. */
-export function timestampId(date = new Date()) {
+/** Timestamp plus random suffix, used as a collision-resistant registration id and filename. */
+export function timestampId(date = new Date(), cryptoApi = globalThis.crypto) {
   const pad = (value) => String(value).padStart(2, '0');
-  return `${pad(date.getFullYear() % 100)}${pad(date.getMonth() + 1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+  const timestamp = `${pad(date.getFullYear() % 100)}${pad(date.getMonth() + 1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+  const suffix = typeof cryptoApi?.randomUUID === 'function'
+    ? cryptoApi.randomUUID().replace(/-/g, '').slice(0, 8)
+    : Math.random().toString(36).slice(2, 10).padEnd(8, '0');
+  return `${timestamp}${suffix}`;
 }
 
 export function colorToHex(color) {
