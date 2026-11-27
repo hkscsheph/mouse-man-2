@@ -13,11 +13,11 @@ const PROP_LABELS = {
   box: 'Build',
   poster: 'Film',
   note: 'Song',
-  pose: 'Correct pose',
 };
 
 const PROP_ALIASES = {
   ...Object.fromEntries(Object.keys(PROP_LABELS).map((kind) => [kind, kind])),
+  pose: 'figure',
   gift: 'box',
   1: 'figure',
   2: 'drawing',
@@ -50,7 +50,7 @@ export const SIGNAL_OSC_ROUTES = [
   ['/signal/prop/box', 'Build'],
   ['/signal/prop/poster', 'Film'],
   ['/signal/prop/note', 'Song'],
-  ['/signal/prop/pose', 'Correct pose'],
+  ['/signal/prop/pose', 'Pose'],
   ['/signal/uniform', 'Uniforms'],
   ['/signal/larger', 'Larger cat'],
   ['/signal/smaller', 'Smaller cat'],
@@ -93,10 +93,12 @@ export function stageSignalToOsc(message) {
       return { address: '/signal/scratch', args: [1] };
     case 'restartAll':
       return { address: '/signal/restart', args: [1] };
-    case 'prop':
-      return PROP_LABELS[message.kind]
-        ? { address: `/signal/prop/${message.kind}`, args: [1] }
+    case 'prop': {
+      const kind = PROP_ALIASES[message.kind];
+      return kind && PROP_LABELS[kind]
+        ? { address: `/signal/prop/${kind}`, args: [1] }
         : null;
+    }
     case 'uniform':
       return { address: '/signal/uniform', args: [1] };
     case 'spriteScale':

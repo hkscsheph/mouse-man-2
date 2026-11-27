@@ -377,9 +377,9 @@ function handleStageMessage(message) {
     return;
   }
   if (message?.type === 'prop') {
-    if (message.kind === 'pose') return;
-    const result = pixel.requestProp(message.kind);
-    if (result === 'started') setStatus(propStatus[message.kind]);
+    const kind = message.kind === 'pose' ? 'figure' : message.kind;
+    const result = pixel.requestProp(kind);
+    if (result === 'started') setStatus(propStatus[kind]);
     else if (result === 'placed') setStatus('Background item added immediately.');
     else if (result === 'queued') setStatus('Queued. The cat will bring it in next.');
     else setStatus('The cat is busy');

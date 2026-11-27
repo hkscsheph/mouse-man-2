@@ -382,53 +382,17 @@ body.signal-mode #share {
   outline: 2px solid #f5e9cd;
 }
 
-#signal-root button[data-prop="box"] {
+#signal-root button[data-prop="box"],
+#signal-root button[data-prop="figure"] {
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
 
 #signal-root button[data-prop="box"]::before,
-#signal-osc-map li[data-address="/signal/prop/box"]::before {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #6d6458;
-  content: "";
-  flex: 0 0 auto;
-}
-
-#signal-osc-map li[data-address="/signal/prop/box"] {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  list-style: none;
-}
-
-#signal-root button[data-prop="box"][data-lit="on"]::before,
-#signal-osc-map li[data-address="/signal/prop/box"][data-lit="on"]::before {
-  background: #20c45a;
-  box-shadow: 0 0 8px #20c45a;
-}
-
-#signal-pose-lights {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 0;
-  list-style: none;
-}
-
-#signal-pose-lights li {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 9px;
-  border: 1px solid currentColor;
-  border-radius: 6px;
-}
-
-#signal-pose-lights li::before,
+#signal-root button[data-prop="figure"]::before,
+#signal-osc-map li[data-address="/signal/prop/box"]::before,
+#signal-osc-map li[data-address="/signal/prop/figure"]::before,
 #signal-osc-map li[data-address="/signal/prop/pose"]::before {
   width: 10px;
   height: 10px;
@@ -438,6 +402,8 @@ body.signal-mode #share {
   flex: 0 0 auto;
 }
 
+#signal-osc-map li[data-address="/signal/prop/box"],
+#signal-osc-map li[data-address="/signal/prop/figure"],
 #signal-osc-map li[data-address="/signal/prop/pose"] {
   display: flex;
   align-items: center;
@@ -445,7 +411,10 @@ body.signal-mode #share {
   list-style: none;
 }
 
-#signal-pose-lights li[data-lit="on"]::before,
+#signal-root button[data-prop="box"][data-lit="on"]::before,
+#signal-root button[data-prop="figure"][data-lit="on"]::before,
+#signal-osc-map li[data-address="/signal/prop/box"][data-lit="on"]::before,
+#signal-osc-map li[data-address="/signal/prop/figure"][data-lit="on"]::before,
 #signal-osc-map li[data-address="/signal/prop/pose"][data-lit="on"]::before {
   background: #20c45a;
   box-shadow: 0 0 8px #20c45a;
