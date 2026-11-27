@@ -936,12 +936,17 @@ tuneToggle.addEventListener('click', () => {
 
 registrationCapture.addEventListener('click', registerParticipant);
 registrationPrint.addEventListener('click', () => window.print());
-registrationBackground.addEventListener('click', () => {
-  const background = registrationPhoto.background === 'canteen' ? 'br_class' : 'canteen';
+function cycleRegistrationBackground() {
+  const backgrounds = ['canteen', 'br_class', 'entrance'];
+  const labels = { canteen: 'Canteen', br_class: 'br_class', entrance: 'Entrance' };
+  const currentIndex = backgrounds.indexOf(registrationPhoto.background);
+  const background = backgrounds[(currentIndex + 1) % backgrounds.length];
   registrationPhoto.setBackground(background);
-  registrationBackground.textContent = `Background: ${background === 'canteen' ? 'Canteen' : 'br_class'}`;
-  registrationBackground.setAttribute('aria-label', `Switch to ${background === 'canteen' ? 'br_class' : 'Canteen'} background`);
-});
+  const nextBackground = backgrounds[(currentIndex + 2) % backgrounds.length];
+  registrationBackground.textContent = `Background: ${labels[background]}`;
+  registrationBackground.setAttribute('aria-label', `Switch to ${labels[nextBackground]} background`);
+}
+registrationBackground.addEventListener('click', cycleRegistrationBackground);
 if (registrationMode) {
   registrationCount.textContent = `0 participants registered`;
   updateRegistrationControls(null);
@@ -1038,6 +1043,11 @@ window.addEventListener('keydown', (event) => {
     event.metaKey ||
     editing
   ) return;
+  if (registrationMode && event.key.toLowerCase() === 'b') {
+    event.preventDefault();
+    cycleRegistrationBackground();
+    return;
+  }
   if (registrationMode && event.key.toLowerCase() === 'q') {
     event.preventDefault();
     void registerParticipant();

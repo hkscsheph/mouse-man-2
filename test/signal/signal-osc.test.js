@@ -118,6 +118,11 @@ test('button vectors keep the on-screen camera step', () => {
     payload: { type: 'backgroundEffects' },
     label: 'Background effects',
   });
+  assert.deepEqual(signalControl('stageBackground'), {
+    op: 'send',
+    payload: { type: 'stageBackground' },
+    label: 'Stage background',
+  });
 });
 
 test('maps stage WebSocket signals to the documented OSC routes', () => {

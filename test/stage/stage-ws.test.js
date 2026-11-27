@@ -19,6 +19,7 @@ test('creates signal IDs when the crypto API is unavailable', () => {
 test('accepts FPS and background effect controls as stage signals', () => {
   assert.equal(isStageSignal({ type: 'fps' }), true);
   assert.equal(isStageSignal({ type: 'backgroundEffects' }), true);
+  assert.equal(isStageSignal({ type: 'stageBackground' }), true);
   assert.equal(isStageSignal({ type: 'prop', kind: 'pose' }), true);
   assert.equal(isStageSignal({ type: 'station', station: 'DVC', connected: true }), true);
   assert.equal(isStageSignal({ type: 'station', station: 'UNKNOWN', connected: true }), false);

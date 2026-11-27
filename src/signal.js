@@ -25,7 +25,7 @@ root.innerHTML = `
       ${STATION_NAMES.map((name) => `<li data-station="${name}" data-state="unknown" aria-label="${name}: Unknown">${name}</li>`).join('')}
     </ul>
   </section>
-  <p id="signal-keys">Keys match the stage: <kbd>A</kbd> focuses the id field, <kbd>D</kbd> demo guest, <kbd>E</kbd> eat, <kbd>Q</kbd> scratch, <kbd>1</kbd>–<kbd>5</kbd> props, <kbd>U</kbd> uniforms, <kbd>+</kbd>/<kbd>-</kbd> size, arrows move the camera, <kbd>F</kbd> toggles background effects, <kbd>H</kbd> cycles FPS (30/45/60), <kbd>T</kbd> toggles the stage HUD.</p>
+  <p id="signal-keys">Keys match the stage: <kbd>A</kbd> focuses the id field, <kbd>B</kbd> cycles the stage background, <kbd>D</kbd> demo guest, <kbd>E</kbd> eat, <kbd>Q</kbd> scratch, <kbd>1</kbd>–<kbd>5</kbd> props, <kbd>U</kbd> uniforms, <kbd>+</kbd>/<kbd>-</kbd> size, arrows move the camera, <kbd>F</kbd> toggles background effects, <kbd>H</kbd> cycles FPS (30/45/60), <kbd>T</kbd> toggles the stage HUD.</p>
   <details id="signal-osc-panel">
     <summary>OSC</summary>
     <p id="signal-osc" role="status">OSC offline</p>
@@ -75,6 +75,7 @@ root.innerHTML = `
     <h2>View</h2>
     <div class="signal-actions">
       <button type="button" data-signal="uniform">Uniforms [U]</button>
+      <button type="button" data-signal="stageBackground">Stage background [B]</button>
       <button type="button" data-signal="larger">Larger cat [+]</button>
       <button type="button" data-signal="smaller">Smaller cat [-]</button>
       <button type="button" data-move="-1,0,0">Camera left [←]</button>
@@ -223,7 +224,10 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   const key = event.key.toLowerCase();
-  if (key === 't') {
+  if (key === 'b' && !event.altKey && !event.ctrlKey && !event.metaKey) {
+    event.preventDefault();
+    applyAction(signalControl('stageBackground'));
+  } else if (key === 't') {
     event.preventDefault();
     applyAction(signalControl('hud'));
   } else if (key === 'u') {

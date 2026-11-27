@@ -34,7 +34,13 @@ let measuredFps = null;
 const photoBackground = document.createElement('div');
 photoBackground.id = 'stage-photo-background';
 photoBackground.setAttribute('aria-hidden', 'true');
-photoBackground.style.backgroundImage = `url("${import.meta.env.BASE_URL}canteen_mouseview.webp")`;
+const photoBackgrounds = [
+  { file: 'canteen_mouseview.webp', label: 'Canteen' },
+  { file: 'br_mouseview.webp', label: 'BR' },
+  { file: 'entrance_mouseview.webp', label: 'Entrance' },
+];
+let photoBackgroundIndex = 0;
+photoBackground.style.backgroundImage = `url("${import.meta.env.BASE_URL}${photoBackgrounds[photoBackgroundIndex].file}")`;
 document.body.prepend(photoBackground);
 
 const photoCanvas = document.createElement('canvas');
@@ -95,6 +101,13 @@ function setStatus(text, state = 'idle') {
     el.textContent = text;
     el.dataset.state = state;
   }
+}
+
+function cyclePhotoBackground() {
+  photoBackgroundIndex = (photoBackgroundIndex + 1) % photoBackgrounds.length;
+  const background = photoBackgrounds[photoBackgroundIndex];
+  photoBackground.style.backgroundImage = `url("${import.meta.env.BASE_URL}${background.file}")`;
+  return background.label;
 }
 
 function setWsStatus(text) {
@@ -374,6 +387,10 @@ function handleStageMessage(message) {
     pixel.setImmediateProps(immediateProps);
     document.querySelector('#stage-prop-mode').textContent = `Background effects: ${immediateProps ? 'immediate' : 'animated'} (F to toggle)`;
     setStatus(`Background effects ${immediateProps ? 'appear immediately' : 'are animated'}.`);
+    return;
+  }
+  if (message?.type === 'stageBackground') {
+    setStatus(`Stage background: ${cyclePhotoBackground()}`);
     return;
   }
   if (message?.type === 'prop') {
@@ -772,6 +789,11 @@ window.addEventListener('keydown', (event) => {
   if ((event.key === 'f' || event.key === 'F') && !isEditingControl && !event.ctrlKey && !event.metaKey && !event.altKey) {
     event.preventDefault();
     handleStageMessage({ type: 'backgroundEffects' });
+    return;
+  }
+  if ((event.key === 'b' || event.key === 'B') && !isEditingControl && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    event.preventDefault();
+    handleStageMessage({ type: 'stageBackground' });
     return;
   }
   if ((event.key === 't' || event.key === 'T') && !isEditingControl) {

@@ -137,6 +137,8 @@ export function signalControl(name, value) {
       return sendAction({ type: 'fps' }, 'FPS');
     case 'backgroundEffects':
       return sendAction({ type: 'backgroundEffects' }, 'Background effects');
+    case 'stageBackground':
+      return sendAction({ type: 'stageBackground' }, 'Stage background');
     case 'restart':
       return sendAction({ type: 'restartAll' }, 'Restart');
     case 'uniform':
