@@ -248,6 +248,7 @@ export function createRegistrationPhoto(canvas, { onChange } = {}) {
     canteen: { photo: new Image(), template: new Image(), error: '' },
     br_class: { photo: new Image(), template: new Image(), error: '' },
     entrance: { photo: new Image(), template: new Image(), error: '' },
+    roof: { photo: new Image(), template: new Image(), error: '' },
   };
   let background = 'canteen';
   const loadedAssets = new Set();
@@ -331,6 +332,8 @@ export function createRegistrationPhoto(canvas, { onChange } = {}) {
     ['br_class', 'template', 'br_class_boys.jpg', new URL('./br_class_boys.jpg', import.meta.url).href],
     ['entrance', 'photo', 'entrance_class_cat.png', new URL('./entrance_class_cat.png', import.meta.url).href],
     ['entrance', 'template', 'entrance_class.png', new URL('./entrance_class.png', import.meta.url).href],
+    ['roof', 'photo', 'roof_class_cat.png', new URL('./roof_class_cat.png', import.meta.url).href],
+    ['roof', 'template', 'roof_class.png', new URL('./roof_class.png', import.meta.url).href],
   ]) {
     const image = backgrounds[name][type];
     image.addEventListener('load', () => {

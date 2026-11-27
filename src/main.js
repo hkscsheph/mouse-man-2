@@ -937,8 +937,8 @@ tuneToggle.addEventListener('click', () => {
 registrationCapture.addEventListener('click', registerParticipant);
 registrationPrint.addEventListener('click', () => window.print());
 function cycleRegistrationBackground() {
-  const backgrounds = ['canteen', 'br_class', 'entrance'];
-  const labels = { canteen: 'Canteen', br_class: 'br_class', entrance: 'Entrance' };
+  const backgrounds = ['canteen', 'br_class', 'entrance', 'roof'];
+  const labels = { canteen: 'Canteen', br_class: 'br_class', entrance: 'Entrance', roof: 'Roof' };
   const currentIndex = backgrounds.indexOf(registrationPhoto.background);
   const background = backgrounds[(currentIndex + 1) % backgrounds.length];
   registrationPhoto.setBackground(background);

@@ -35,12 +35,13 @@ const photoBackground = document.createElement('div');
 photoBackground.id = 'stage-photo-background';
 photoBackground.setAttribute('aria-hidden', 'true');
 const photoBackgrounds = [
-  { file: 'canteen_mouseview.webp', label: 'Canteen' },
-  { file: 'br_mouseview.webp', label: 'BR' },
-  { file: 'entrance_mouseview.webp', label: 'Entrance' },
+  { url: `${import.meta.env.BASE_URL}canteen_mouseview.webp`, label: 'Canteen' },
+  { url: `${import.meta.env.BASE_URL}br_mouseview.webp`, label: 'BR' },
+  { url: `${import.meta.env.BASE_URL}entrance_mouseview.webp`, label: 'Entrance' },
+  { url: `${import.meta.env.BASE_URL}roof_mouseview.webp`, label: 'Roof' },
 ];
 let photoBackgroundIndex = 0;
-photoBackground.style.backgroundImage = `url("${import.meta.env.BASE_URL}${photoBackgrounds[photoBackgroundIndex].file}")`;
+photoBackground.style.backgroundImage = `url("${photoBackgrounds[photoBackgroundIndex].url}")`;
 document.body.prepend(photoBackground);
 
 const photoCanvas = document.createElement('canvas');
@@ -106,7 +107,7 @@ function setStatus(text, state = 'idle') {
 function cyclePhotoBackground() {
   photoBackgroundIndex = (photoBackgroundIndex + 1) % photoBackgrounds.length;
   const background = photoBackgrounds[photoBackgroundIndex];
-  photoBackground.style.backgroundImage = `url("${import.meta.env.BASE_URL}${background.file}")`;
+  photoBackground.style.backgroundImage = `url("${background.url}")`;
   return background.label;
 }
 
