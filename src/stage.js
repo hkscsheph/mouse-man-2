@@ -377,6 +377,7 @@ function handleStageMessage(message) {
     return;
   }
   if (message?.type === 'prop') {
+    if (message.kind === 'pose') return;
     const result = pixel.requestProp(message.kind);
     if (result === 'started') setStatus(propStatus[message.kind]);
     else if (result === 'placed') setStatus('Background item added immediately.');

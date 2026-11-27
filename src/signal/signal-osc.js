@@ -13,6 +13,7 @@ const PROP_LABELS = {
   box: 'Build',
   poster: 'Film',
   note: 'Song',
+  pose: 'Correct pose',
 };
 
 const PROP_ALIASES = {
@@ -49,6 +50,7 @@ export const SIGNAL_OSC_ROUTES = [
   ['/signal/prop/box', 'Build'],
   ['/signal/prop/poster', 'Film'],
   ['/signal/prop/note', 'Song'],
+  ['/signal/prop/pose', 'Correct pose'],
   ['/signal/uniform', 'Uniforms'],
   ['/signal/larger', 'Larger cat'],
   ['/signal/smaller', 'Smaller cat'],

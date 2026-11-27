@@ -25,6 +25,12 @@ root.innerHTML = `
       ${STATION_NAMES.map((name) => `<li data-station="${name}" data-state="unknown" aria-label="${name}: Unknown">${name}</li>`).join('')}
     </ul>
   </section>
+  <section aria-labelledby="signal-pose-heading">
+    <h2 id="signal-pose-heading">MMPA</h2>
+    <ul id="signal-pose-lights" aria-live="polite">
+      <li data-pose-light data-address="/signal/prop/pose" aria-label="Correct pose: off">Correct pose</li>
+    </ul>
+  </section>
   <p id="signal-keys">Keys match the stage: <kbd>A</kbd> focuses the id field, <kbd>D</kbd> demo guest, <kbd>E</kbd> eat, <kbd>Q</kbd> scratch, <kbd>1</kbd>–<kbd>5</kbd> props, <kbd>U</kbd> uniforms, <kbd>+</kbd>/<kbd>-</kbd> size, arrows move the camera, <kbd>F</kbd> toggles background effects, <kbd>H</kbd> cycles FPS (30/45/60), <kbd>T</kbd> toggles the stage HUD.</p>
   <details id="signal-osc-panel">
     <summary>OSC</summary>
@@ -122,6 +128,7 @@ const signals = connectStageSignals({
   onMessage(message) {
     if (message.type === 'station') updateStation(message.station, message.connected);
     if (message.type === 'prop' && message.kind === 'box') lightBox();
+    if (message.type === 'prop' && message.kind === 'pose') lightPose();
   },
   onStatus(text) {
     if (wsEl) wsEl.textContent = text;
@@ -491,6 +498,23 @@ function lightBox() {
   window.clearTimeout(boxLitTimer);
   boxLitTimer = window.setTimeout(() => {
     for (const el of nodes) if (el) delete el.dataset.lit;
+  }, 900);
+}
+
+let poseLitTimer = 0;
+function lightPose() {
+  const nodes = [...root.querySelectorAll('[data-address="/signal/prop/pose"]')];
+  for (const el of nodes) {
+    el.dataset.lit = 'on';
+    if (el.hasAttribute('data-pose-light')) el.setAttribute('aria-label', 'Correct pose: on');
+  }
+  window.clearTimeout(poseLitTimer);
+  poseLitTimer = window.setTimeout(() => {
+    for (const el of nodes) {
+      if (!el) continue;
+      delete el.dataset.lit;
+      if (el.hasAttribute('data-pose-light')) el.setAttribute('aria-label', 'Correct pose: off');
+    }
   }, 900);
 }
 

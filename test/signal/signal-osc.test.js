@@ -75,6 +75,7 @@ test('maps each signal option onto the same stage message as its button', () => 
   assert.equal(signalActionFromOsc('/signal/smaller', [0]), null);
   assert.deepEqual(signalActionFromOsc('/signal/hud'), signalControl('hud'));
   assert.deepEqual(signalActionFromOsc('/signal/prop/box', [1]), signalControl('prop', 'box'));
+  assert.deepEqual(signalActionFromOsc('/signal/prop/pose', [1]), signalControl('prop', 'pose'));
   assert.deepEqual(signalActionFromOsc('/signal/gift'), signalControl('prop', 'gift'));
   assert.deepEqual(signalActionFromOsc('/signal/3', [1]).payload, { type: 'prop', kind: 'box' });
   assert.deepEqual(signalActionFromOsc('/signal/camera/left', [1]), signalControl('camera', '-1,0,0'));
@@ -104,6 +105,8 @@ test('button vectors keep the on-screen camera step', () => {
   assert.equal(signalControl('prop', 'box').label, 'Build');
   assert.equal(signalControl('prop', 'poster').label, 'Film');
   assert.equal(signalControl('prop', 'note').label, 'Song');
+  assert.equal(signalControl('prop', 'pose').label, 'Correct pose');
+  assert.deepEqual(signalControl('prop', 'pose').payload, { type: 'prop', kind: 'pose' });
   assert.equal(signalControl('admit', '  '), null);
   assert.deepEqual(signalControl('fps'), {
     op: 'send',
@@ -126,6 +129,7 @@ test('maps stage WebSocket signals to the documented OSC routes', () => {
     [{ type: 'scratch' }, { address: '/signal/scratch', args: [1] }],
     [{ type: 'restartAll' }, { address: '/signal/restart', args: [1] }],
     [{ type: 'prop', kind: 'drawing' }, { address: '/signal/prop/drawing', args: [1] }],
+    [{ type: 'prop', kind: 'pose' }, { address: '/signal/prop/pose', args: [1] }],
     [{ type: 'uniform' }, { address: '/signal/uniform', args: [1] }],
     [{ type: 'spriteScale', delta: 0.1 }, { address: '/signal/scale', args: [0.1] }],
     [{ type: 'camera', move: [0.125, -0.125, 0] }, { address: '/signal/camera/move', args: [0.125, -0.125, 0] }],

@@ -15,7 +15,7 @@ export function resolveStageWsUrl() {
 
 export const STAGE_SIGNAL_CHANNEL = 'mouse-stage';
 
-const PROP_KINDS = new Set(['figure', 'drawing', 'box', 'poster', 'note']);
+const PROP_KINDS = new Set(['figure', 'drawing', 'box', 'poster', 'note', 'pose']);
 
 export function createSignalId(cryptoApi = globalThis.crypto) {
   if (typeof cryptoApi?.randomUUID === 'function') return cryptoApi.randomUUID();

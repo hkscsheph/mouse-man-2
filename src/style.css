@@ -411,6 +411,46 @@ body.signal-mode #share {
   box-shadow: 0 0 8px #20c45a;
 }
 
+#signal-pose-lights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+#signal-pose-lights li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 9px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+}
+
+#signal-pose-lights li::before,
+#signal-osc-map li[data-address="/signal/prop/pose"]::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #6d6458;
+  content: "";
+  flex: 0 0 auto;
+}
+
+#signal-osc-map li[data-address="/signal/prop/pose"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+}
+
+#signal-pose-lights li[data-lit="on"]::before,
+#signal-osc-map li[data-address="/signal/prop/pose"][data-lit="on"]::before {
+  background: #20c45a;
+  box-shadow: 0 0 8px #20c45a;
+}
+
 body.transfer-mode {
   background: #cbb896;
   overflow: hidden;
